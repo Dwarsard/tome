@@ -1,0 +1,13 @@
+{
+  "name": "Tome — Journal de lecture",
+  "short_name": "Tome",
+  "description": "Ta bibliothèque et ton journal de lecture : livres, BD, manga.",
+  "lang": "fr",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#12161a",
+  "theme_color": "#12161a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
