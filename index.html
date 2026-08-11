@@ -1475,9 +1475,11 @@ function seriesCardHTML(it){
 }
 // ===== Sélection multiple =====
 function enterSelect(){ if(!ui.selectMode){ ui.selectMode = true; document.body.classList.add('selecting'); } }
+// une carte série ne représente QUE les tomes visibles sous le filtre courant
+function visibleSeriesBooks(name){ const k = name.trim().toLowerCase(); return filteredBooks().filter(b=>seriesKey(b)===k); }
 function reflectCard(cardEl){
   if(!cardEl) return;
-  if(cardEl.dataset.series){ cardEl.outerHTML = seriesCardHTML({name:cardEl.dataset.series.trim(), books:seriesBooks(cardEl.dataset.series)}); }
+  if(cardEl.dataset.series){ cardEl.outerHTML = seriesCardHTML({name:cardEl.dataset.series.trim(), books:visibleSeriesBooks(cardEl.dataset.series)}); }
   else if(cardEl.dataset.id){ const b = state.books.find(x=>x.id===cardEl.dataset.id); if(b) cardEl.outerHTML = bookCardHTML(b); }
 }
 function toggleId(id, cardEl){
@@ -1485,7 +1487,7 @@ function toggleId(id, cardEl){
   reflectCard(cardEl); updateBulkBar();
 }
 function toggleSeries(name, cardEl){
-  const ids = seriesBooks(name).map(b=>b.id);
+  const ids = visibleSeriesBooks(name).map(b=>b.id);
   const all = ids.length>0 && ids.every(x=>ui.selection.has(x));
   ids.forEach(x=> all ? ui.selection.delete(x) : ui.selection.add(x));
   reflectCard(cardEl); updateBulkBar();
@@ -1520,6 +1522,7 @@ $('#lib-grid').addEventListener('click', e => {
 // Appui long tactile → entrer en mode sélection
 let _lpTimer = null, _lpFired = false, _lpX = 0, _lpY = 0;
 $('#lib-grid').addEventListener('pointerdown', e => {
+  _lpFired = false; // repart propre à chaque geste (un appui long sans click ne bloque pas le tap suivant)
   if(e.pointerType!=='touch') return;
   const card = e.target.closest('.card'); if(!card) return;
   _lpX = e.clientX; _lpY = e.clientY;
@@ -2419,7 +2422,7 @@ function openSeries(name){
   const withVol = books.filter(b=>b.volume!=null);
   const maxVol = withVol.length ? Math.max(...withVol.map(b=>b.volume)) : 0;
   const complete = total && maxVol >= total;
-  const rec = seriesRec(name);
+  const rec = state.series[name.trim().toLowerCase()] || {rating:null, review:'', favorite:false, moods:[]};
   $('#list-head').textContent = `${name} — ${read}/${total||books.length} lus`;
   $('#list-body').innerHTML = `
     <div class="dblock" style="margin-bottom:16px">
@@ -2930,7 +2933,7 @@ function importCSV(text){
     const prev = JSON.stringify(state);
     let backedUp=false; try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp=true; }catch(_){}
     if(!backedUp && state.books.length) downloadJSON(prev, `tome-sauvegarde-avant-import-${today()}.json`);
-    state.books = []; state.lists = []; state.goals = {};
+    state.books = []; state.lists = []; state.goals = {}; state.series = {}; state.smartCollections = [];
   }
   const seen = new Set(state.books.map(titleKey));
   for(const {book, isbn} of parsed){
@@ -3218,6 +3221,8 @@ $$('.overlay').forEach(o => o.addEventListener('click', e => {
 }));
 document.addEventListener('keydown', e => {
   if(e.key!=='Escape') return;
+  const cov = $('#ov-cover');
+  if(cov.classList.contains('open')){ cov.classList.remove('open'); return; } // ferme d'abord le lightbox
   if($$('.overlay.open').length){ closeOverlays(); return; }
   if(ui.selectMode){ clearSelection(); renderLibrary(); }
 });
@@ -3276,8 +3281,11 @@ if('serviceWorker' in navigator){
       document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) reg.update().catch(()=>{}); });
     }catch(_){}
   });
+  let _hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-    if(_swRefreshing) return; _swRefreshing = true; location.reload();
+    if(_swRefreshing) return;
+    if(!_hadController){ _hadController = true; return; } // 1re prise de contrôle (clients.claim) : ne pas recharger
+    _swRefreshing = true; location.reload();
   });
 }
 if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
