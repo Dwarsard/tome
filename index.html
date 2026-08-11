@@ -1068,8 +1068,9 @@ function seriesBooks(name){
   return state.books.filter(b => seriesKey(b)===k);
 }
 function starsTxt(r){
-  if(!r) return '';
-  return '★'.repeat(Math.floor(r)) + (r%1 ? '½' : '');
+  r = Number(r); if(!r || Number.isNaN(r)) return '';
+  const n = Math.min(5, Math.max(0, Math.floor(r))); // borné (une note d'ami hors [0,5] ne casse pas le rendu)
+  return '★'.repeat(n) + (r%1 ? '½' : '');
 }
 function starInputHTML(rating, cls='st'){
   return [1,2,3,4,5].map(n=>{
@@ -3380,7 +3381,7 @@ document.addEventListener('keydown', e => {
   if(k==='a' || k==='n'){ e.preventDefault(); openSearch(); }
   else if(k==='/'){ e.preventDefault(); selectView('library'); $('#lib-q').focus(); }
   else if(k==='r'){ const b = lastReadingBook(); if(b){ e.preventDefault(); openDetail(b.id); } }
-  else if(k>='1' && k<='4'){ const btns=$$('#nav button'); if(btns[+k-1]){ e.preventDefault(); selectView(btns[+k-1].dataset.view); } }
+  else if(k>='1' && k<='5'){ const btns=$$('#nav button'); if(btns[+k-1]){ e.preventDefault(); selectView(btns[+k-1].dataset.view); } }
 });
 
 /* =============== Amis (Tome Social) =============== */
@@ -3401,6 +3402,11 @@ async function api(path, opts={}){
   catch(e){ throw new Error('offline'); }
   let data = {};
   try{ data = await res.json(); }catch(_){}
+  if(res.status===401 && social.me){ // session expirée en cours d'usage → retour propre à l'écran de connexion
+    try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
+    social.me=null; social.view=null;
+    if(ui.view==='friends') renderFriends();
+  }
   if(!res.ok) throw new Error(data.error || ('Erreur '+res.status));
   return data;
 }
@@ -3488,7 +3494,7 @@ async function renderFeed(){
           <div class="who">${esc(x.display_name)} <span style="color:var(--muted);font-weight:400">a lu</span></div>
           <div class="what">${esc(x.title)}${x.rating?` · ${starsTxt(x.rating)}`:''}</div>
         </div>
-        <div style="font-size:11px;color:var(--faint);white-space:nowrap">${x.read_date?fmtDate(x.read_date):''}</div>
+        <div style="font-size:11px;color:var(--faint);white-space:nowrap">${x.read_date?esc(fmtDate(x.read_date)):''}</div>
       </div>`).join('');
   }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
 }
@@ -3502,8 +3508,10 @@ async function renderFriendsList(){
     <div id="friend-lists"><p class="friends-empty">Chargement…</p></div>`;
   const doAdd = async ()=>{
     const u = $('#friend-username').value.trim(); if(!u) return;
+    const btn = $('#friend-add'); if(btn.disabled) return; btn.disabled = true;
     try{ const r = await api('/api/friends/request', {method:'POST', body:{username:u}}); toast(r.status==='accepted'?'Vous êtes maintenant amis ✓':'Demande envoyée ✓'); $('#friend-username').value=''; loadFriendLists(); }
     catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); }
+    finally{ btn.disabled = false; }
   };
   $('#friend-add').addEventListener('click', doAdd);
   $('#friend-username').addEventListener('keydown', e=>{ if(e.key==='Enter') doAdd(); });
@@ -3543,14 +3551,18 @@ async function renderMyShare(){
     <div id="share-status" style="font-size:13px;color:var(--muted);margin-top:12px"></div>`;
   let chosen = mode;
   $$('#share-mode button').forEach(btn=>btn.addEventListener('click', ()=>{ chosen=btn.dataset.mode; $$('#share-mode button').forEach(b=>b.classList.toggle('on', b===btn)); }));
-  $('#share-sync').addEventListener('click', async ()=>{
+  $('#share-sync').addEventListener('click', async (ev)=>{
+    const btn = ev.currentTarget; if(btn.disabled) return; btn.disabled = true;
     $('#share-status').textContent = 'Synchronisation…';
+    // le mode « notes seules » ne DOIT PAS envoyer les critiques (confidentialité garantie côté client)
+    const payload = chosen==='none' ? [] : (chosen==='ratings' ? shareable.map(b=>({...b, review:''})) : shareable);
     try{
-      const d = await api('/api/sync', {method:'POST', body:{shareMode:chosen, books:chosen==='none'?[]:shareable}});
+      const d = await api('/api/sync', {method:'POST', body:{shareMode:chosen, books:payload}});
       social.me.shareMode = d.shareMode;
       $('#share-status').textContent = d.shareMode==='none' ? 'Profil masqué. ✓' : `${d.count} titre(s) synchronisé(s) ✓`;
       toast('Profil mis à jour ✓');
     }catch(e){ $('#share-status').textContent = e.message==='offline'?'Serveur injoignable.':e.message; }
+    finally{ btn.disabled = false; }
   });
 }
 async function openProfile(username){
@@ -3591,9 +3603,9 @@ $('#friends-body').addEventListener('click', async e => {
     social.me=null; social.view=null; renderFriends(); return;
   }
   const acc = e.target.closest('[data-accept]');
-  if(acc){ try{ await api('/api/friends/accept', {method:'POST', body:{userId:acc.dataset.accept}}); toast('Ami ajouté ✓'); loadFriendLists(); }catch(e2){ toast(e2.message); } return; }
+  if(acc){ if(acc.disabled) return; acc.disabled=true; try{ await api('/api/friends/accept', {method:'POST', body:{userId:acc.dataset.accept}}); toast('Ami ajouté ✓'); loadFriendLists(); }catch(e2){ acc.disabled=false; toast(e2.message); } return; }
   const rem = e.target.closest('[data-remove]');
-  if(rem){ try{ await api('/api/friends/remove', {method:'POST', body:{userId:rem.dataset.remove}}); loadFriendLists(); }catch(e2){ toast(e2.message); } return; }
+  if(rem){ if(rem.disabled) return; rem.disabled=true; try{ await api('/api/friends/remove', {method:'POST', body:{userId:rem.dataset.remove}}); loadFriendLists(); }catch(e2){ rem.disabled=false; toast(e2.message); } return; }
   const prof = e.target.closest('[data-profile]');
   if(prof){ openProfile(prof.dataset.profile); return; }
 });
