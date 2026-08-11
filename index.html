@@ -754,7 +754,10 @@ function numIn(v, min, max){
   return n===null ? null : Math.min(max, Math.max(min, n));
 }
 function cleanTimestamp(v){
-  return (typeof v==='string' && !Number.isNaN(Date.parse(v))) ? v.slice(0,40) : new Date().toISOString();
+  // normalise en ISO pour que le tri « Ajout récent » compare des formats homogènes
+  // (les exports CSV donnent « AAAA/MM/JJ », le natif un ISO complet)
+  if(typeof v==='string'){ const t = Date.parse(v); if(!Number.isNaN(t)) return new Date(t).toISOString(); }
+  return new Date().toISOString();
 }
 // Les synopsis des API arrivent souvent avec du HTML (<p>, <b>…) : on n'en garde que le texte.
 // DOMParser ne charge aucune ressource et n'exécute aucun script.
@@ -766,6 +769,15 @@ function cleanSynopsis(v){
     try{ s = new DOMParser().parseFromString(s, 'text/html').body.textContent || ''; }catch(_){ }
   }
   return s.replace(/\s+/g,' ').trim().slice(0,5000);
+}
+// Nettoie une critique importée : retire le HTML mais PRÉSERVE les sauts de ligne
+function cleanReview(v){
+  let s = String(v||'');
+  if(/[<&]/.test(s)){
+    s = s.replace(/<\s*br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h[1-6])\s*>/gi, '\n');
+    try{ s = new DOMParser().parseFromString(s, 'text/html').body.textContent || s; }catch(_){ }
+  }
+  return s.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim().slice(0,20000);
 }
 
 /* =============== Normalisation & stockage =============== */
@@ -2486,10 +2498,18 @@ const GR_STATUS = {'read':'read', 'currently-reading':'reading', 'to-read':'wish
 const SG_STATUS = {'read':'read', 'currently-reading':'reading', 'to-read':'wishlist', 'did-not-finish':'abandoned'};
 const SG_MOOD = {adventurous:'entraînant', dark:'sombre', funny:'drôle', emotional:'émouvant', hopeful:'réconfortant', relaxing:'réconfortant', lighthearted:'réconfortant', tense:'tendu', mysterious:'tendu', challenging:'réflexif', informative:'réflexif', reflective:'réflexif', inspiring:'inspirant', sad:'mélancolique'};
 const SG_PACE = {slow:'lent', medium:'moyen', fast:'rapide'};
+// Détection de série pour l'import : suffixe « (Série, #N) » (Goodreads) ou mention « tome/vol N ».
+// N'utilise PAS l'heuristique du nombre nu de parseTome (« Catch-22 » ne doit pas devenir tome 22).
 function parenTome(title){
   const m = String(title).match(/\(([^)]+?)[,#\s]+#?(\d{1,4})\)\s*$/);
   if(m && m[1].trim()) return {series:m[1].trim(), volume:+m[2]};
-  return parseTome(title);
+  const m2 = String(title).match(/^(.*?)[\s,–—:-]*(?:tome|t\.|vol(?:ume)?\.?|#)\s*(\d{1,4})\b/i);
+  if(m2 && m2[1].trim()) return {series:m2[1].trim().replace(/[,–—:-]+$/,'').trim(), volume:+m2[2]};
+  return null;
+}
+// Retire le suffixe « (Série, #N) » du titre affiché quand la série a été extraite
+function stripSeriesSuffix(title){
+  return String(title).replace(/\s*\([^)]*[,#][^)]*\)\s*$/,'').trim() || String(title);
 }
 function rowToBook(get, source){
   const title = (get('Title')||'').trim();
@@ -2503,7 +2523,7 @@ function rowToBook(get, source){
     const shelf = String(get('Exclusive Shelf')||'').trim().toLowerCase();
     status = GR_STATUS[shelf] || (/abandon|dnf|gave-up/.test(shelf) ? 'abandoned' : 'wishlist');
     const mr = +get('My Rating'); rating = (mr>0) ? mr : null;
-    review = String(get('My Review')||'').replace(/<br\s*\/?>/gi, '\n');
+    review = cleanReview(get('My Review'));
     tags = String(get('Bookshelves')||'').split(',').map(s=>s.trim()).filter(Boolean);
     if(!GR_STATUS[shelf] && shelf) tags.push(shelf);
     const dr = csvDate(get('Date Read')) || csvDate(get('Date Added'));
@@ -2517,7 +2537,7 @@ function rowToBook(get, source){
     year = null; pages = null;
     status = SG_STATUS[String(get('Read Status')||'').trim().toLowerCase()] || 'wishlist';
     rating = numOrNull(get('Star Rating'));
-    review = String(get('Review')||'');
+    review = cleanReview(get('Review'));
     tags = String(get('Tags')||'').split(',').map(s=>s.trim()).filter(Boolean);
     moods = String(get('Moods')||'').split(',').map(m=>SG_MOOD[m.trim().toLowerCase()]).filter(Boolean);
     pace = SG_PACE[String(get('Pace')||'').trim().toLowerCase()] || null;
@@ -2529,7 +2549,8 @@ function rowToBook(get, source){
     type = guessType([get('Tags'), get('Format'), title].join(' '), title);
   }
   const raw = {
-    title, authors, type, year, pages, cover:'', synopsis:'',
+    title: pt.series ? stripSeriesSuffix(title) : title,
+    authors, type, year, pages, cover:'', synopsis:'',
     status, rating, review, tags, moods, pace, readings,
     series: pt.series||'', volume: pt.volume ?? null,
   };
@@ -2547,7 +2568,14 @@ function queueCovers(pairs){
       const {id, isbn} = pairs[i++]; active++;
       const url = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false`;
       const img = new Image(); img.referrerPolicy = 'no-referrer';
-      const done = ok=>{ active--; if(ok){ const b = state.books.find(x=>x.id===id); if(b && !b.cover){ b.cover=url; dirty=true; got++; } } next(); };
+      let settled = false;
+      const done = ok=>{
+        if(settled) return; settled = true; clearTimeout(to);
+        active--;
+        if(ok){ const b = state.books.find(x=>x.id===id); if(b && !b.cover){ b.cover=url; dirty=true; got++; } }
+        next();
+      };
+      const to = setTimeout(()=>done(false), 8000); // libère le créneau si l'image ne répond jamais
       img.onload = ()=>done(img.naturalWidth>1);
       img.onerror = ()=>done(false);
       img.src = url;
@@ -2570,8 +2598,8 @@ function importCSV(text){
   }
   if(!parsed.length){ toast('Aucun livre exploitable dans ce fichier'); return; }
   const replace = confirm(`${parsed.length} livre(s) trouvé(s) dans ton export ${source==='goodreads'?'Goodreads':'StoryGraph'}.\n\nOK = FUSIONNER avec ta bibliothèque (recommandé).\nAnnuler = tout REMPLACER.`);
-  // dédup par titre+auteur (les livres existants n'ont pas d'ISBN persisté) ET par ISBN dans le lot
-  const titleKey = b => (b.title+'|'+((b.authors||[])[0]||'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
+  // dédup par titre+auteur+tome (les livres existants n'ont pas d'ISBN persisté) ET par ISBN dans le lot
+  const titleKey = b => (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
   const pairs = [];
   let added=0, skipped=0;
   if(replace===false){
