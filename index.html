@@ -171,6 +171,34 @@ h2.section{font-size:13px; text-transform:uppercase; letter-spacing:.12em; color
 .qk button:hover{color:var(--green)}
 .qk button.on{color:var(--orange)}
 .count-note{color:var(--faint); font-size:13px; margin-bottom:12px}
+/* Sélection multiple */
+.selbox{position:absolute; top:6px; left:6px; width:26px; height:26px; border-radius:50%; background:var(--chip-bg); border:2px solid var(--border-hover); display:none; align-items:center; justify-content:center; z-index:4; color:var(--green); font-weight:800; font-size:14px}
+body.selecting .selbox{display:flex}
+body.selecting .card:hover .qk{opacity:0}
+.selbox.on{background:var(--green); color:var(--on-green); border-color:var(--green)}
+.card.selected .cover{outline:2px solid var(--green); outline-offset:2px}
+.card.series[data-indet="1"] .selbox{background:var(--accent-soft)}
+.bulkbar{position:sticky; bottom:0; z-index:40; display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--header-bg); backdrop-filter:blur(10px); border-top:1px solid var(--border-hover); padding:10px 14px; margin:0 -16px -90px; box-shadow:0 -6px 20px rgba(0,0,0,.25)}
+.bulkbar b{white-space:nowrap; font-variant-numeric:tabular-nums}
+.bulkbar .bb-actions{display:flex; gap:6px; flex-wrap:wrap; margin-left:auto}
+.bulkbar .bb-actions button{padding:6px 11px; border-radius:8px; font-size:13px; font-weight:600; border:1px solid var(--border); background:var(--surface)}
+.bulkbar .bb-actions button:hover{background:var(--surface2); border-color:var(--border-hover)}
+.bulkbar .bb-actions button.danger{color:var(--red); border-color:color-mix(in srgb, var(--red) 35%, var(--border))}
+/* Collections intelligentes */
+.smart-chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px}
+.smart-chips:empty{display:none}
+.smart-chips .chip{display:inline-flex; align-items:center; gap:6px}
+.smart-chips .chip .sc-del{color:var(--faint); font-weight:700}
+.smart-chips .chip .sc-del:hover{color:var(--red)}
+/* Bandeau mise à jour PWA */
+#update-bar{position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:210; display:none; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--green) 40%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:14px; max-width:calc(100vw - 28px)}
+#update-bar.show{display:flex}
+/* Badge hors-ligne */
+#offline-badge{color:var(--orange); font-size:12px; font-weight:700; align-self:center; white-space:nowrap}
+/* Lightbox couverture */
+#ov-cover{background:rgba(5,8,11,.9); align-items:center; padding:20px}
+#ov-cover img{max-width:92vw; max-height:92vh; border-radius:var(--r-sm); box-shadow:var(--sh-3); animation:pop .16s ease}
+.detail .dcover .cover.zoomable{cursor:zoom-in}
 
 /* ---------- Journal ---------- */
 .goal-line{
@@ -513,6 +541,7 @@ body:has(.overlay.open) .fab{display:none}
       <button data-view="stats">Stats</button>
     </nav>
     <div class="header-actions">
+      <span id="offline-badge" hidden>⚡ Hors ligne</span>
       <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden>▶</button>
       <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème">◐</button>
       <button class="btn primary" id="btn-open-search">＋ <span class="lbl-txt">Ajouter</span></button>
@@ -550,11 +579,15 @@ body:has(.overlay.open) .fab{display:none}
         <option value="author">Auteur A→Z</option>
         <option value="year">Année de parution</option>
       </select>
+      <button class="btn small" id="lib-savefilter" title="Enregistrer les filtres actuels comme collection">＋ Filtre</button>
+      <button class="btn small" id="lib-select" title="Sélectionner plusieurs titres">☑ Sélection</button>
     </div>
+    <div class="chips smart-chips" id="smart-chips"></div>
     <div class="now-strip" id="now-reading" hidden></div>
     <div class="count-note" id="lib-count"></div>
     <div class="grid" id="lib-grid"></div>
     <div id="lib-empty"></div>
+    <div class="bulkbar" id="bulk-bar" hidden></div>
   </section>
 
   <!-- ======== JOURNAL ======== -->
@@ -587,7 +620,16 @@ body:has(.overlay.open) .fab{display:none}
     <div class="panel"><h4>Rythme mois par mois</h4><div class="rating-histo" id="month-bars"></div></div>
     <div class="stat-cols">
       <div class="panel"><h4>Notes attribuées</h4><div class="rating-histo" id="histo"></div></div>
-      <div class="panel"><h4>Par type</h4><div id="type-bars"></div></div>
+      <div class="panel">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px">
+          <h4 style="margin:0">Par type</h4>
+          <div class="seg-mini" id="type-metric" style="margin-left:auto">
+            <button id="type-metric-count" class="on">Titres</button>
+            <button id="type-metric-pages">Pages</button>
+          </div>
+        </div>
+        <div id="type-bars"></div>
+      </div>
     </div>
     <div class="stat-cols">
       <div class="panel"><h4>Genres les plus lus</h4><div id="tag-bars"></div></div>
@@ -595,8 +637,9 @@ body:has(.overlay.open) .fab{display:none}
     </div>
     <div class="stat-cols">
       <div class="panel"><h4>Lectures par année</h4><div id="year-bars"></div></div>
-      <div class="panel"><h4>Auteurs les plus lus</h4><div id="author-bars"></div></div>
+      <div class="panel"><h4>Note moyenne par année</h4><div id="yearrate-bars"></div></div>
     </div>
+    <div class="panel"><h4>Auteurs les plus lus</h4><div id="author-bars"></div></div>
     <div class="panel">
       <h4>Mes données</h4>
       <p style="font-size:13.5px; color:var(--muted); margin-bottom:12px">
@@ -700,6 +743,12 @@ body:has(.overlay.open) .fab{display:none}
   </div>
 </div>
 
+<!-- ======== LIGHTBOX COUVERTURE ======== -->
+<div class="overlay" id="ov-cover"><img alt="Couverture" referrerpolicy="no-referrer"></div>
+
+<!-- ======== BANDEAU MISE À JOUR PWA ======== -->
+<div id="update-bar" role="status"><span>✨ Nouvelle version disponible</span><button class="btn small primary" id="update-reload">Recharger</button></div>
+
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -741,7 +790,9 @@ function toast(msg, opts){
 }
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const MAX_BOOKS = 20000, MAX_LISTS = 500, MAX_READINGS = 2000, MAX_BOOKIDS = 20000;
+const MAX_BOOKS = 20000, MAX_LISTS = 500, MAX_READINGS = 2000, MAX_BOOKIDS = 20000, MAX_SMART = 100;
+const SMART_STATUS = ['all','read','reading','wishlist','abandoned','fav','loan'];
+const SORT_KEYS = ['added','rating','title','author','year'];
 function isValidDate(d){ return typeof d==='string' && DATE_RE.test(d) && !Number.isNaN(new Date(d+'T12:00:00').getTime()); }
 function cleanCover(v){
   if(typeof v!=='string') return '';
@@ -850,7 +901,38 @@ function normalizeData(d){
       changes: (d.meta && Number.isFinite(+d.meta.changes)) ? Math.max(0, Math.round(+d.meta.changes)) : 0,
       lastExport: (d.meta && typeof d.meta.lastExport==='string' && isValidDate(d.meta.lastExport)) ? d.meta.lastExport : null,
     },
+    // Notes/critiques au niveau série : { [seriesKey]: {rating, review, favorite, moods} }
+    series: {},
+    // Collections intelligentes (filtres sauvegardés « vivants »)
+    smartCollections: (Array.isArray(d.smartCollections) ? d.smartCollections : [])
+      .filter(c => c && typeof c.name==='string' && c.name.trim())
+      .slice(0, MAX_SMART)
+      .map(c => { const f = (c.f && typeof c.f==='object') ? c.f : {}; return {
+        id: ID_RE.test(String(c.id||'')) ? String(c.id) : uid(),
+        name: String(c.name).slice(0,80),
+        f: {
+          status: SMART_STATUS.includes(f.status) ? f.status : 'all',
+          types: Array.isArray(f.types) ? [...new Set(f.types.filter(t=>['livre','bd','manga'].includes(t)))] : [],
+          tag: typeof f.tag==='string' ? f.tag.slice(0,60) : '',
+          q: typeof f.q==='string' ? f.q.slice(0,120) : '',
+          sort: SORT_KEYS.includes(f.sort) ? f.sort : 'added',
+        },
+      }; }),
   };
+  // series : validé + clés normalisées, entrées vides ignorées
+  if(d.series && typeof d.series==='object' && !Array.isArray(d.series)){
+    for(const [rawK, v] of Object.entries(d.series)){
+      const k = String(rawK).trim().toLowerCase();
+      if(!k || !v || typeof v!=='object') continue;
+      const rec = {
+        rating: cleanRating(v.rating),
+        review: typeof v.review==='string' ? v.review.slice(0,20000) : '',
+        favorite: !!v.favorite,
+        moods: Array.isArray(v.moods) ? [...new Set(v.moods.filter(m=>MOODS.includes(m)))] : [],
+      };
+      if(rec.rating!=null || rec.review || rec.favorite || rec.moods.length) out.series[k] = rec;
+    }
+  }
   // unicité des id (fichiers importés bricolés) : le premier gagne, les doublons sont ré-identifiés
   const seenB = new Set();
   for(const b of out.books){
@@ -861,9 +943,14 @@ function normalizeData(d){
   }
   const seenL = new Set();
   for(const l of out.lists){ if(seenL.has(l.id)) l.id = uid(); seenL.add(l.id); }
+  const seenSC = new Set();
+  for(const c of out.smartCollections){ if(seenSC.has(c.id)) c.id = uid(); seenSC.add(c.id); }
   // purge des références fantômes ou dupliquées dans les listes
   const okIds = new Set(out.books.map(b=>b.id));
   for(const l of out.lists) l.bookIds = [...new Set(l.bookIds)].filter(id=>okIds.has(id));
+  // purge des notes de série orphelines (plus aucun tome correspondant)
+  const okSeries = new Set(out.books.map(seriesKey).filter(Boolean));
+  for(const k of Object.keys(out.series)) if(!okSeries.has(k)) delete out.series[k];
   return out;
 }
 function load(){
@@ -884,7 +971,7 @@ function load(){
       notice = '⚠ Données illisibles — copie de secours conservée. Va dans Stats › Mes données pour la récupérer.';
     }
   }
-  return {data:{books:[], lists:[], goals:{}, meta:{changes:0, lastExport:null}}, migrated:false, notice, corrupted};
+  return {data:{books:[], lists:[], goals:{}, meta:{changes:0, lastExport:null}, series:{}, smartCollections:[]}, migrated:false, notice, corrupted};
 }
 const _loaded = load();
 const state = _loaded.data;
@@ -908,16 +995,18 @@ function save(skipCount){
 
 const ui = {
   view:'library', status:'all', types:new Set(), q:'', tag:'', sort:'added', groupSeries:true,
-  defaultStatus:'wishlist',
+  defaultStatus:'wishlist', typeMetric:'count',
+  selectMode:false, selection:new Set(),   // transitoires : jamais persistés ni sérialisés
   editId:null, detailId:null, listId:null, listMode:'list', seriesName:'', recapYear:new Date().getFullYear(),
   searchFromResult:null, heatYear:new Date().getFullYear(), lastFocus:null,
 };
+function clearSelection(){ ui.selection.clear(); ui.selectMode = false; document.body.classList.remove('selecting'); }
 // Persistance des préférences d'affichage (filtres, tri, onglet)
 function persistUI(){
   try{
     localStorage.setItem(UI_KEY, JSON.stringify({
       status:ui.status, types:[...ui.types], tag:ui.tag, sort:ui.sort,
-      groupSeries:ui.groupSeries, view:ui.view, defaultStatus:ui.defaultStatus,
+      groupSeries:ui.groupSeries, view:ui.view, defaultStatus:ui.defaultStatus, typeMetric:ui.typeMetric,
     }));
   }catch(_){}
 }
@@ -1275,6 +1364,8 @@ function renderLibrary(){
     $('#empty-reset').addEventListener('click', resetFilters);
   }else emptyBox.innerHTML = '';
   grid.innerHTML = items.map(it => it.kind==='series' ? seriesCardHTML(it) : bookCardHTML(it.book)).join('');
+  renderSmartChips();
+  updateBulkBar();
 }
 function resetFilters(){
   ui.status='all'; ui.types.clear(); ui.tag=''; ui.q='';
@@ -1291,10 +1382,12 @@ function recommendations(){
   // 1) tome suivant à lire des séries que j'aime (note ≥ 4)
   const bySeries = new Map();
   for(const b of state.books){ const k=seriesKey(b); if(k){ if(!bySeries.has(k)) bySeries.set(k,[]); bySeries.get(k).push(b); } }
-  for(const [,books] of bySeries){
+  for(const [k,books] of bySeries){
     const rated = books.filter(b=>b.rating);
     const avg = rated.length ? rated.reduce((s,b)=>s+b.rating,0)/rated.length : 0;
-    if(avg < 4) continue;
+    const rec = state.series[k];
+    const score = (rec && rec.rating!=null) ? rec.rating : avg;
+    if(score < 4) continue;
     const next = books.filter(eligible).sort((a,b)=>(a.volume??1e9)-(b.volume??1e9));
     if(next[0]) add(next[0], 'la suite d\'une série que tu aimes');
   }
@@ -1331,10 +1424,12 @@ function bookCardHTML(b){
   if(b.loan) ribbon = `<span class="ribbon loan">📤 prêté</span>`;
   else if(b.status==='reading') ribbon = `<span class="ribbon reading">${pct!==null ? pct+' %' : 'En cours'}${pct!==null?`<i class="rp" style="width:${pct}%"></i>`:''}</span>`;
   else if(b.status!=='read') ribbon = `<span class="ribbon ${esc(b.status)}">${STATUS_LABEL[b.status]}</span>`;
+  const sel = ui.selection.has(b.id);
   return `
-    <div class="card" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}${b.authors.length?', '+esc(authorsStr(b)):''}">
+    <div class="card${sel?' selected':''}" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}${b.authors.length?', '+esc(authorsStr(b)):''}">
       <div class="cover">
         <span class="badge ${esc(b.type)}">${TYPE_LABEL[b.type]||''}</span>
+        <button class="selbox${sel?' on':''}" data-select="${esc(b.id)}" role="checkbox" aria-checked="${sel}" aria-label="Sélectionner">${sel?'✓':''}</button>
         <span class="qk">
           ${b.status!=='read' ? `<button data-quick="read" data-id="${esc(b.id)}" title="Marquer lu" aria-label="Marquer lu">✓</button>` : ''}
           <button data-quick="fav" data-id="${esc(b.id)}" class="${b.favorite?'on':''}" title="Favori" aria-label="Favori">♥</button>
@@ -1357,21 +1452,54 @@ function seriesCardHTML(it){
   const rep = withCover[0] || it.books[it.books.length-1];
   const ratings = it.books.filter(b=>b.rating);
   const avg = ratings.length ? ratings.reduce((s,b)=>s+b.rating,0)/ratings.length : null;
+  const rec = state.series[it.name.trim().toLowerCase()];
+  const shown = (rec && rec.rating!=null) ? rec.rating : avg;
+  const fav = (rec && rec.favorite) || it.books.some(b=>b.favorite);
   const done = total && read >= total;
+  const ids = it.books.map(b=>b.id);
+  const nSel = ids.filter(id=>ui.selection.has(id)).length;
+  const allSel = nSel===ids.length && nSel>0, someSel = nSel>0 && nSel<ids.length;
   return `
-    <div class="card series" data-series="${esc(it.name)}" role="button" tabindex="0" aria-label="Série ${esc(it.name)}, ${read} lus sur ${total||it.books.length}">
+    <div class="card series${allSel?' selected':''}" ${someSel?'data-indet="1"':''} data-series="${esc(it.name)}" role="button" tabindex="0" aria-label="Série ${esc(it.name)}, ${read} lus sur ${total||it.books.length}">
       <div class="cover">
         <span class="badge ${esc(rep.type)}">${TYPE_LABEL[rep.type]||''}</span>
+        <button class="selbox${allSel?' on':''}" data-select-series="${esc(it.name)}" role="checkbox" aria-checked="${allSel}" aria-label="Sélectionner la série">${allSel?'✓':(someSel?'–':'')}</button>
         ${coverHTML(rep)}
         <span class="ribbon serie ${done?'done':''}">${esc(it.name)} · ${read}/${total||it.books.length}${done?' ✓':''}</span>
       </div>
       <div class="under">
-        ${avg ? `<span class="stars">${starsTxt(Math.round(avg*2)/2)}</span>` : ''}
-        ${it.books.some(b=>b.favorite) ? `<span class="fav">♥</span>` : ''}
+        ${shown ? `<span class="stars">${starsTxt(Math.round(shown*2)/2)}</span>` : ''}
+        ${fav ? `<span class="fav">♥</span>` : ''}
       </div>
     </div>`;
 }
+// ===== Sélection multiple =====
+function enterSelect(){ if(!ui.selectMode){ ui.selectMode = true; document.body.classList.add('selecting'); } }
+function reflectCard(cardEl){
+  if(!cardEl) return;
+  if(cardEl.dataset.series){ cardEl.outerHTML = seriesCardHTML({name:cardEl.dataset.series.trim(), books:seriesBooks(cardEl.dataset.series)}); }
+  else if(cardEl.dataset.id){ const b = state.books.find(x=>x.id===cardEl.dataset.id); if(b) cardEl.outerHTML = bookCardHTML(b); }
+}
+function toggleId(id, cardEl){
+  ui.selection.has(id) ? ui.selection.delete(id) : ui.selection.add(id);
+  reflectCard(cardEl); updateBulkBar();
+}
+function toggleSeries(name, cardEl){
+  const ids = seriesBooks(name).map(b=>b.id);
+  const all = ids.length>0 && ids.every(x=>ui.selection.has(x));
+  ids.forEach(x=> all ? ui.selection.delete(x) : ui.selection.add(x));
+  reflectCard(cardEl); updateBulkBar();
+}
 $('#lib-grid').addEventListener('click', e => {
+  if(_lpFired){ _lpFired = false; e.preventDefault(); return; }
+  const box = e.target.closest('[data-select]');
+  if(box){ enterSelect(); toggleId(box.dataset.select, box.closest('.card')); return; }
+  const sbox = e.target.closest('[data-select-series]');
+  if(sbox){ enterSelect(); toggleSeries(sbox.dataset.selectSeries, sbox.closest('.card')); return; }
+  if(ui.selectMode){
+    const c = e.target.closest('.card');
+    if(c){ c.dataset.series ? toggleSeries(c.dataset.series, c) : toggleId(c.dataset.id, c); return; }
+  }
   const qk = e.target.closest('[data-quick]');
   if(qk){
     const b = state.books.find(x=>x.id===qk.dataset.id); if(!b) return;
@@ -1379,7 +1507,6 @@ $('#lib-grid').addEventListener('click', e => {
     if(kind==='fav'){ b.favorite = !b.favorite; }
     else if(kind==='read'){ markRead(b); }
     save();
-    // rendu ciblé si la mutation ne change pas le jeu filtré ; sinon re-render complet
     const stillMatches = !((ui.status==='fav' && kind==='fav' && !b.favorite) || (ui.status==='reading' && kind==='read') || (ui.status==='wishlist' && kind==='read') || (ui.status==='abandoned' && kind==='read'));
     if(stillMatches && !seriesKey(b) && patchCard(b.id)){ renderNowReading(); renderDiscover(); }
     else renderLibrary();
@@ -1390,6 +1517,24 @@ $('#lib-grid').addEventListener('click', e => {
   const card = e.target.closest('.card');
   if(card && card.dataset.id) openDetail(card.dataset.id);
 });
+// Appui long tactile → entrer en mode sélection
+let _lpTimer = null, _lpFired = false, _lpX = 0, _lpY = 0;
+$('#lib-grid').addEventListener('pointerdown', e => {
+  if(e.pointerType!=='touch') return;
+  const card = e.target.closest('.card'); if(!card) return;
+  _lpX = e.clientX; _lpY = e.clientY;
+  clearTimeout(_lpTimer);
+  _lpTimer = setTimeout(()=>{
+    enterSelect();
+    card.dataset.series ? toggleSeries(card.dataset.series, card) : toggleId(card.dataset.id, card);
+    _lpFired = true;
+    if(navigator.vibrate) try{ navigator.vibrate(15); }catch(_){}
+  }, 450);
+});
+$('#lib-grid').addEventListener('pointermove', e => {
+  if(_lpTimer && (Math.abs(e.clientX-_lpX)>10 || Math.abs(e.clientY-_lpY)>10)){ clearTimeout(_lpTimer); _lpTimer=null; }
+});
+['pointerup','pointercancel','pointerleave'].forEach(ev=>$('#lib-grid').addEventListener(ev, ()=>{ clearTimeout(_lpTimer); _lpTimer=null; }));
 // Navigation clavier entre les couvertures (flèches)
 $('#lib-grid').addEventListener('keydown', e => {
   if(!['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Home','End'].includes(e.key)) return;
@@ -1408,6 +1553,131 @@ $('#lib-grid').addEventListener('keydown', e => {
   else if(e.key==='Home') n = 0;
   else if(e.key==='End') n = cards.length-1;
   cards[n].focus();
+});
+
+/* =============== Actions en masse =============== */
+function selectedBooks(){ return [...ui.selection].map(id=>state.books.find(b=>b.id===id)).filter(Boolean); }
+function updateBulkBar(){
+  const bar = $('#bulk-bar'), n = ui.selection.size;
+  bar.hidden = n===0;
+  $('#lib-select').classList.toggle('active', ui.selectMode);
+  if(!n) return;
+  bar.innerHTML = `<b>${n} sélectionné${n>1?'s':''}</b>
+    <div class="bb-actions">
+      ${[['type','Type'],['status','Statut'],['tag','Tag'],['fav','♥'],['list','+ Liste'],['del','Supprimer']]
+        .map(([k,l])=>`<button data-bulk="${k}"${k==='del'?' class="danger"':''}>${l}</button>`).join('')}
+      <button data-bulk="exit" title="Quitter la sélection">✕</button>
+    </div>`;
+}
+$('#lib-select').addEventListener('click', ()=>{
+  if(ui.selectMode){ clearSelection(); }
+  else { ui.selectMode = true; document.body.classList.add('selecting'); }
+  renderLibrary();
+});
+// applique une mutation à tous les sélectionnés, avec annulation
+function applyBulk(mut, label){
+  const books = selectedBooks(); if(!books.length) return;
+  const snap = books.map(b=>({ id:b.id, prev:mut.snapshot(b) }));
+  books.forEach(b=>mut.apply(b));
+  invalidateCache();
+  clearSelection(); save(); renderLibrary();
+  toast(label+' ✓', {label:'Annuler', onAction:()=>{
+    snap.forEach(s=>{ const b = state.books.find(x=>x.id===s.id); if(b) mut.restore(b, s.prev); });
+    save(); renderLibrary();
+  }});
+}
+function bulkDelete(){
+  const books = selectedBooks(); if(!books.length) return;
+  if(!confirm(`Supprimer ${books.length} titre(s) de ta bibliothèque ?`)) return;
+  const snaps = books.map(b=>({ b, idx:state.books.indexOf(b), memberOf:state.lists.filter(l=>l.bookIds.includes(b.id)).map(l=>l.id) })).sort((a,c)=>a.idx-c.idx);
+  const del = new Set(books.map(b=>b.id));
+  state.books = state.books.filter(b=>!del.has(b.id));
+  state.lists.forEach(l=> l.bookIds = l.bookIds.filter(id=>!del.has(id)));
+  clearSelection(); save(); render();
+  toast(`${snaps.length} supprimé(s)`, {label:'Annuler', onAction:()=>{
+    snaps.forEach(s=>{ state.books.splice(Math.min(s.idx, state.books.length), 0, s.b); s.memberOf.forEach(id=>{ const l = state.lists.find(x=>x.id===id); if(l && !l.bookIds.includes(s.b.id)) l.bookIds.push(s.b.id); }); });
+    save(); render();
+  }});
+}
+function onBulk(action){
+  const n = ui.selection.size; if(!n && action!=='exit') return;
+  if(action==='exit'){ clearSelection(); renderLibrary(); return; }
+  if(action==='del'){ bulkDelete(); return; }
+  if(action==='type'){
+    const v = (window.prompt('Type pour ces titres : tape livre, bd ou manga')||'').trim().toLowerCase();
+    if(!['livre','bd','manga'].includes(v)) return;
+    applyBulk({ snapshot:b=>b.type, apply:b=>b.type=v, restore:(b,p)=>b.type=p }, `Type → ${TYPE_LABEL[v]}`);
+    return;
+  }
+  if(action==='status'){
+    const v = (window.prompt('Statut : à lire, en cours, lu, abandonné')||'').trim().toLowerCase();
+    const map = {'à lire':'wishlist','a lire':'wishlist','en cours':'reading','lu':'read','lus':'read','abandonné':'abandoned','abandonne':'abandoned'};
+    const s = map[v]; if(!s) return;
+    applyBulk({
+      snapshot:b=>({status:b.status, readings:b.readings.slice()}),
+      apply:b=>{ b.status=s; if(s==='read'){ b.readings=b.readings||[]; if(!b.readings.length) b.readings.push({id:uid(), date:today(), rating:null}); } },
+      restore:(b,p)=>{ b.status=p.status; b.readings=p.readings; },
+    }, `Statut → ${STATUS_LABEL[s]}`);
+    return;
+  }
+  if(action==='tag'){
+    const t = (window.prompt('Tag à ajouter à la sélection :')||'').trim().slice(0,60);
+    if(!t) return;
+    applyBulk({
+      snapshot:b=>b.tags.slice(),
+      apply:b=>{ if(!b.tags.includes(t) && b.tags.length<20) b.tags=[...new Set([...b.tags, t])]; },
+      restore:(b,p)=>b.tags=p,
+    }, `Tag « ${t} » ajouté`);
+    return;
+  }
+  if(action==='fav'){
+    const on = confirm('OK = mettre en favori · Annuler = retirer des favoris');
+    applyBulk({ snapshot:b=>b.favorite, apply:b=>b.favorite=on, restore:(b,p)=>b.favorite=p }, on?'Ajoutés aux favoris':'Retirés des favoris');
+    return;
+  }
+  if(action==='list'){
+    if(!state.lists.length){ toast('Crée d\'abord une liste (onglet Listes)'); return; }
+    const names = state.lists.map((l,i)=>`${i+1}. ${l.name}`).join('\n');
+    const pick = window.prompt('Ajouter à quelle liste ? (numéro)\n'+names);
+    const idx = parseInt(pick,10)-1;
+    const l = state.lists[idx]; if(!l) return;
+    const books = selectedBooks(); const added = [];
+    books.forEach(b=>{ if(!l.bookIds.includes(b.id) && l.bookIds.length<MAX_BOOKIDS){ l.bookIds.push(b.id); added.push(b.id); } });
+    clearSelection(); save(); renderLibrary();
+    toast(`${added.length} ajouté(s) à « ${l.name} »`, {label:'Annuler', onAction:()=>{ l.bookIds = l.bookIds.filter(id=>!added.includes(id)); save(); }});
+    return;
+  }
+}
+$('#bulk-bar').addEventListener('click', e => {
+  const b = e.target.closest('[data-bulk]'); if(b) onBulk(b.dataset.bulk);
+});
+
+/* =============== Collections intelligentes (filtres sauvegardés) =============== */
+function renderSmartChips(){
+  const box = $('#smart-chips'); if(!box) return;
+  box.innerHTML = state.smartCollections.map(c=>
+    `<button class="chip" data-sc="${esc(c.id)}">${esc(c.name)} <span class="sc-del" data-sc-del="${esc(c.id)}" aria-label="Supprimer le filtre">✕</span></button>`).join('');
+}
+$('#lib-savefilter').addEventListener('click', ()=>{
+  const name = prompt('Nom de ce filtre enregistré ? (ex : « Mangas en cours », « SF notés 4+ »)');
+  if(!name || !name.trim()) return;
+  state.smartCollections.push({id:uid(), name:name.trim().slice(0,80), f:{status:ui.status, types:[...ui.types], tag:ui.tag, q:ui.q, sort:ui.sort}});
+  if(state.smartCollections.length>MAX_SMART) state.smartCollections = state.smartCollections.slice(-MAX_SMART);
+  save(); renderSmartChips(); toast('Filtre enregistré ✓');
+});
+function applySmart(c){
+  ui.status=c.f.status; ui.types=new Set(c.f.types); ui.tag=c.f.tag; ui.q=c.f.q; ui.sort=c.f.sort;
+  $('#lib-q').value=c.f.q; $('#lib-sort').value=c.f.sort;
+  $$('#status-chips .chip').forEach(x=>{ const on=x.dataset.status===c.f.status; x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
+  $$('#type-chips .chip[data-type]').forEach(x=>{ const on=ui.types.has(x.dataset.type); x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
+  persistUI(); renderLibrary();
+  $('#lib-tag').value = c.f.tag;
+}
+$('#smart-chips').addEventListener('click', e => {
+  const del = e.target.closest('[data-sc-del]');
+  if(del){ e.stopPropagation(); state.smartCollections = state.smartCollections.filter(c=>c.id!==del.dataset.scDel); save(); renderSmartChips(); return; }
+  const chip = e.target.closest('[data-sc]');
+  if(chip){ const c = state.smartCollections.find(x=>x.id===chip.dataset.sc); if(c) applySmart(c); }
 });
 
 /* =============== Journal =============== */
@@ -1776,7 +2046,7 @@ function openDetail(id, opts={}){
   const readings = (b.readings||[]).slice().sort((a,c)=>c.date.localeCompare(a.date));
 
   $('#detail-body').innerHTML = `
-    <div class="dcover"><div class="cover">${coverHTML(b)}</div></div>
+    <div class="dcover"><div class="cover${b.cover?' zoomable':''}"${b.cover?' data-zoom="1"':''}>${coverHTML(b)}</div></div>
     <div class="dmain">
       <h3 class="dt">${esc(fullTitle(b))}</h3>
       <div class="da">${esc(authorsStr(b))}</div>
@@ -1893,6 +2163,7 @@ function openDetail(id, opts={}){
 $('#detail-body').addEventListener('click', e => {
   const b = state.books.find(x=>x.id===ui.detailId); if(!b) return;
 
+  if(e.target.closest('[data-zoom]') && b.cover){ openCover(b.cover); return; }
   const sbtn = e.target.closest('#d-status button[data-s]');
   if(sbtn){
     const s = sbtn.dataset.s;
@@ -2148,8 +2419,18 @@ function openSeries(name){
   const withVol = books.filter(b=>b.volume!=null);
   const maxVol = withVol.length ? Math.max(...withVol.map(b=>b.volume)) : 0;
   const complete = total && maxVol >= total;
+  const rec = seriesRec(name);
   $('#list-head').textContent = `${name} — ${read}/${total||books.length} lus`;
   $('#list-body').innerHTML = `
+    <div class="dblock" style="margin-bottom:16px">
+      <label>Ma note de la série</label>
+      <div class="rate-row" style="margin-bottom:10px">
+        <div class="star-input" id="s-stars" tabindex="0" role="slider" aria-label="Note de la série" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${rec.rating||0}">${starInputHTML(rec.rating||0)}</div>
+        ${rec.rating ? `<button class="clear-rate" id="s-clear">effacer</button>` : ''}
+        <button class="heart ${rec.favorite?'on':''}" id="s-fav" title="Série favorite" aria-pressed="${rec.favorite}">♥</button>
+      </div>
+      <textarea id="s-review" rows="2" placeholder="Ton avis sur la série dans son ensemble…">${esc(rec.review||'')}</textarea>
+    </div>
     ${books.map(b=>`
       <div class="tome-row" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, ${STATUS_LABEL[b.status]}">
         <div class="mini">${coverHTML(b, true)}</div>
@@ -2163,9 +2444,21 @@ function openSeries(name){
     </div>`;
   openOverlay('#ov-list');
 }
+function seriesRec(name){
+  const k = name.trim().toLowerCase();
+  return state.series[k] || (state.series[k] = {rating:null, review:'', favorite:false, moods:[]});
+}
+function pruneSeriesRec(name){
+  const k = name.trim().toLowerCase(); const r = state.series[k];
+  if(r && r.rating==null && !r.review && !r.favorite && !(r.moods||[]).length) delete state.series[k];
+}
 // Un seul écouteur délégué pour le panneau liste/série, résolu via ui.listId / ui.seriesName.
 $('#list-body').addEventListener('click', e => {
   if(ui.listMode==='series'){
+    const st = e.target.closest('#s-stars .st');
+    if(st){ const n=+st.dataset.n; seriesRec(ui.seriesName).rating = halfFromClick(st, e.clientX) ? n-0.5 : n; save(); openSeries(ui.seriesName); renderLibrary(); return; }
+    if(e.target.closest('#s-clear')){ seriesRec(ui.seriesName).rating = null; pruneSeriesRec(ui.seriesName); save(); openSeries(ui.seriesName); renderLibrary(); return; }
+    if(e.target.closest('#s-fav')){ const r=seriesRec(ui.seriesName); r.favorite=!r.favorite; pruneSeriesRec(ui.seriesName); save(); openSeries(ui.seriesName); renderLibrary(); return; }
     if(e.target.closest('#s-next')){ addNextTome(ui.seriesName); return; }
     const row = e.target.closest('.tome-row');
     if(row){ closeOverlays(); openDetail(row.dataset.id); }
@@ -2207,6 +2500,14 @@ $('#list-body').addEventListener('click', e => {
   if(rm){ l.bookIds = l.bookIds.filter(x=>x!==rm.dataset.rm); save(); openList(l.id); renderLists(); return; }
   const item = e.target.closest('.ld-item');
   if(item){ closeOverlays(); openDetail(item.dataset.id); }
+});
+// critique de série : sauvegarde au blur (comme la fiche), sans ré-ouvrir à chaque frappe
+$('#list-body').addEventListener('change', e => {
+  if(ui.listMode==='series' && e.target.id==='s-review'){
+    seriesRec(ui.seriesName).review = e.target.value.trim();
+    pruneSeriesRec(ui.seriesName); save(); renderLibrary();
+    toast('Critique de série enregistrée ✓');
+  }
 });
 
 /* =============== Stats =============== */
@@ -2282,15 +2583,20 @@ function renderStats(){
     </div>`;
   }).join('');
 
-  // Par type
-  const byType = {livre:0, bd:0, manga:0};
-  read.forEach(b=>{ if(byType[b.type]!=null) byType[b.type]++; });
+  // Par type (bascule titres ↔ pages)
+  const byTypeCount = {livre:0, bd:0, manga:0}, byTypePages = {livre:0, bd:0, manga:0};
+  read.forEach(b=>{ if(byTypeCount[b.type]!=null){ byTypeCount[b.type]++; byTypePages[b.type]+=b.pages||0; } });
+  const totalPages = byTypePages.livre + byTypePages.bd + byTypePages.manga;
+  const metric = (ui.typeMetric==='pages' && totalPages>0) ? 'pages' : 'count';
+  const byType = metric==='pages' ? byTypePages : byTypeCount;
   const tmax = Math.max(...Object.values(byType), 1);
   const tcolor = {livre:'var(--blue)', bd:'var(--orange)', manga:'var(--pink)'};
+  $('#type-metric-count').classList.toggle('on', metric==='count');
+  $('#type-metric-pages').classList.toggle('on', metric==='pages');
   $('#type-bars').innerHTML = Object.entries(byType).map(([t,n])=>`
     <div class="hbar"><span class="lbl">${TYPE_LABEL[t]}${t==='livre'?'s':''}</span>
     <div class="track"><div class="fill" style="width:${n/tmax*100}%; background:${tcolor[t]}"></div></div>
-    <span class="val">${n}</span></div>`).join('');
+    <span class="val">${metric==='pages'?n.toLocaleString('fr-FR'):n}</span></div>`).join('');
 
   // Par année
   const byYear = {};
@@ -2301,6 +2607,18 @@ function renderStats(){
     <div class="hbar"><span class="lbl">${y}</span>
     <div class="track"><div class="fill" style="width:${byYear[y]/ymax*100}%"></div></div>
     <span class="val">${byYear[y]}</span></div>`).join('') || '<p style="font-size:13px;color:var(--faint)">Aucune lecture datée pour l\'instant.</p>';
+
+  // Note moyenne par année (livres distincts notés, lus cette année-là)
+  const yearRate = {};
+  years.forEach(y=>{
+    const books = [...new Set(readings.filter(e=>e.date.startsWith(y)).map(e=>e.b))].filter(b=>b.rating);
+    if(books.length) yearRate[y] = books.reduce((s,b)=>s+b.rating,0)/books.length;
+  });
+  const yrKeys = Object.keys(yearRate).sort();
+  $('#yearrate-bars').innerHTML = yrKeys.map(y=>`
+    <div class="hbar"><span class="lbl">${y}</span>
+    <div class="track"><div class="fill" style="width:${yearRate[y]/5*100}%; background:var(--star)"></div></div>
+    <span class="val">${yearRate[y].toFixed(1).replace('.',',')}★</span></div>`).join('') || '<p style="font-size:13px;color:var(--faint)">Note tes lectures datées pour voir cette courbe.</p>';
 
   // Top auteurs
   const byAuthor = {};
@@ -2369,6 +2687,11 @@ $('#heat-years').addEventListener('click', e => {
   const c = e.target.closest('[data-hy]'); if(!c) return;
   ui.heatYear = +c.dataset.hy;
   renderStats();
+});
+$('#type-metric').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  ui.typeMetric = b.id==='type-metric-pages' ? 'pages' : 'count';
+  persistUI(); renderStats();
 });
 $('#goal-panel').addEventListener('click', e=>{
   if(e.target.closest('#recap-btn')){ showRecap(new Date().getFullYear()); return; }
@@ -2651,7 +2974,7 @@ $('#import-file').addEventListener('change', e => {
         downloadJSON(prev, `tome-sauvegarde-avant-import-${today()}.json`);
         toast('Stockage plein : ancienne bibliothèque téléchargée en secours');
       }
-      state.books = clean.books; state.lists = clean.lists; state.goals = clean.goals; state.meta = clean.meta;
+      state.books = clean.books; state.lists = clean.lists; state.goals = clean.goals; state.meta = clean.meta; state.series = clean.series||{}; state.smartCollections = clean.smartCollections||[];
       if(save()){ render(); toast('Import réussi ✓'); }
       else { render(); toast('⚠ Importé mais non sauvegardé (stockage plein) — exporte pour sécuriser'); }
     }catch(err){ toast('Fichier invalide ou vide'); }
@@ -2666,7 +2989,7 @@ $('#btn-restore').addEventListener('click', ()=>{
     try{
       const clean = normalizeData(JSON.parse(backup));
       if(!confirm(`Restaurer la sauvegarde d'avant-import (${clean.books.length} ouvrage(s), ${clean.lists.length} liste(s)) ? Tes données actuelles seront remplacées.`)) return;
-      state.books = clean.books; state.lists = clean.lists; state.goals = clean.goals; state.meta = clean.meta;
+      state.books = clean.books; state.lists = clean.lists; state.goals = clean.goals; state.meta = clean.meta; state.series = clean.series||{}; state.smartCollections = clean.smartCollections||[];
       save(); render(); toast('Sauvegarde restaurée ✓');
     }catch(_){ toast('Sauvegarde illisible'); }
   }else if(corrupt){
@@ -2883,10 +3206,21 @@ function closeOverlays(restore=true){
   if(restore && ui.lastFocus && document.contains(ui.lastFocus)){ try{ ui.lastFocus.focus(); }catch(_){} }
   if(_dirtyBg){ _dirtyBg=false; render(); } // rattrape le rendu de fond différé pendant la modale
 }
+function openCover(url){
+  const ov = $('#ov-cover');
+  ov.querySelector('img').src = url;
+  ov.classList.add('open');
+}
+$('#ov-cover').addEventListener('click', ()=>$('#ov-cover').classList.remove('open'));
 $$('.overlay').forEach(o => o.addEventListener('click', e => {
+  if(o.id==='ov-cover') return; // fermé par son propre handler (clic n'importe où)
   if(e.target === o || e.target.closest('[data-close]')) closeOverlays();
 }));
-document.addEventListener('keydown', e => { if(e.key==='Escape' && $$('.overlay.open').length) closeOverlays(); });
+document.addEventListener('keydown', e => {
+  if(e.key!=='Escape') return;
+  if($$('.overlay.open').length){ closeOverlays(); return; }
+  if(ui.selectMode){ clearSelection(); renderLibrary(); }
+});
 // Navigation par hash entre les onglets et deep-link #book/<id>
 window.addEventListener('popstate', ()=>applyHashView());
 window.addEventListener('hashchange', ()=>applyHashView());
@@ -2916,10 +3250,43 @@ $('#btn-install').addEventListener('click', async ()=>{
   installEvt = null;
   $('#btn-install').hidden = true;
 });
+/* =============== Mise à jour PWA + hors-ligne =============== */
+let _swRefreshing = false;
+function showUpdateBar(reg){
+  const bar = $('#update-bar');
+  bar.classList.add('show');
+  $('#update-reload').onclick = ()=>{
+    if(reg.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
+    else location.reload();
+  };
+}
 if('serviceWorker' in navigator){
-  addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  addEventListener('load', async ()=>{
+    try{
+      const reg = await navigator.serviceWorker.register('sw.js');
+      // un nouveau worker installé alors qu'un ancien contrôle déjà la page = mise à jour dispo
+      reg.addEventListener('updatefound', ()=>{
+        const w = reg.installing; if(!w) return;
+        w.addEventListener('statechange', ()=>{
+          if(w.state==='installed' && navigator.serviceWorker.controller) showUpdateBar(reg);
+        });
+      });
+      if(reg.waiting && navigator.serviceWorker.controller) showUpdateBar(reg);
+      // capter les MAJ pendant une session PWA longue
+      document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) reg.update().catch(()=>{}); });
+    }catch(_){}
+  });
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(_swRefreshing) return; _swRefreshing = true; location.reload();
+  });
 }
 if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+
+// Badge hors-ligne
+function updateOnline(){ $('#offline-badge').hidden = navigator.onLine; }
+window.addEventListener('online', updateOnline);
+window.addEventListener('offline', updateOnline);
+updateOnline();
 
 // Multi-fenêtres (PWA + onglet, ou onglet dupliqué) : une autre instance a écrit → recharger pour ne pas écraser
 let _reloadWarned = false;
@@ -2931,7 +3298,7 @@ window.addEventListener('storage', e => {
   }
   try{
     const fresh = normalizeData(JSON.parse(e.newValue));
-    state.books = fresh.books; state.lists = fresh.lists; state.goals = fresh.goals; state.meta = fresh.meta;
+    state.books = fresh.books; state.lists = fresh.lists; state.goals = fresh.goals; state.meta = fresh.meta; state.series = fresh.series||{}; state.smartCollections = fresh.smartCollections||[];
     invalidateCache(); render();
   }catch(_){ }
 });
@@ -2976,6 +3343,7 @@ document.addEventListener('keydown', e => {
     if(['added','rating','title','author','year'].includes(saved.sort)) ui.sort = saved.sort;
     if(typeof saved.groupSeries==='boolean') ui.groupSeries = saved.groupSeries;
     if(['wishlist','reading','read'].includes(saved.defaultStatus)) ui.defaultStatus = saved.defaultStatus;
+    if(['count','pages'].includes(saved.typeMetric)) ui.typeMetric = saved.typeMetric;
     if(['library','journal','lists','stats'].includes(saved.view)) ui.view = saved.view;
   }
   // refléter dans le DOM
@@ -3049,6 +3417,16 @@ if(location.search.includes('selftest')){
   assert('SG moods mapped', sgBook.book.moods.includes('sombre') && sgBook.book.moods.includes('émouvant'));
   assert('SG pace medium → moyen', sgBook.book.pace==='moyen');
   assert('SG reading date', sgBook.book.readings[0] && sgBook.book.readings[0].date==='2026-04-10');
+  // v6 : collections intelligentes + notes de série
+  const scd = normalizeData({smartCollections:[{id:'S', name:'x', f:{status:'zz', types:['livre','bad'], sort:'nope'}}]});
+  assert('smart status default', scd.smartCollections[0].f.status==='all');
+  assert('smart types filtered', eq(scd.smartCollections[0].f.types, ['livre']));
+  assert('smart sort default', scd.smartCollections[0].f.sort==='added');
+  const srd = normalizeData({ books:[{id:'b1', title:'Berserk', series:'Berserk', volume:1}], series:{ 'berserk':{rating:3.7, review:'top'}, 'orpheline':{rating:5} } });
+  assert('series rating cleaned', srd.series['berserk'] && srd.series['berserk'].rating===3.5);
+  assert('series orphan purged', !srd.series['orpheline']);
+  const sre = normalizeData({ books:[], series:{ 'x':{rating:null, review:'', favorite:false, moods:[]} } });
+  assert('series empty entry dropped', !sre.series['x']);
   console.log(`Tome selftest — ${pass} ✓ / ${fail} ✗`);
   toast(`Selftest : ${pass} ✓ / ${fail} ✗`);
 }

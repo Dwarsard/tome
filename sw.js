@@ -1,10 +1,17 @@
-/* Service worker de Tome — cache l'app pour l'usage hors ligne. */
-const CACHE = 'tome-v1';
+/* Service worker de Tome — cache l'app pour l'usage hors ligne.
+   Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
+   qui affiche le bandeau « Nouvelle version — Recharger ». */
+const CACHE = 'tome-v2';
 const CACHE_PREFIX = 'tome-';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // NE PAS skipWaiting ici : le nouveau worker reste en attente jusqu'à ce que
+  // l'utilisateur clique « Recharger » (message SKIP_WAITING ci-dessous).
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+});
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 self.addEventListener('activate', e => {
   e.waitUntil(
