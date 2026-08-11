@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://www.googleapis.com https://openlibrary.org; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://www.googleapis.com https://openlibrary.org http://localhost:8787 https://*.workers.dev; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#12161a" id="meta-theme">
@@ -484,6 +484,41 @@ body.selecting .card:hover .qk{opacity:0}
 .demo-banner .db-x{margin-left:auto}
 /* FAB mobile */
 .fab{display:none}
+/* ---------- Amis ---------- */
+.auth-card{max-width:400px; margin:20px auto; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-md); padding:22px}
+.auth-card h3{font-size:18px; margin-bottom:4px}
+.auth-card p.sub{font-size:13.5px; color:var(--muted); margin-bottom:16px}
+.auth-card label{display:block; font-size:12px; font-weight:700; color:var(--muted); margin:10px 0 4px; text-transform:uppercase; letter-spacing:.06em}
+.auth-card .switch{margin-top:14px; font-size:13.5px; color:var(--muted); text-align:center}
+.auth-card .switch a{color:var(--green); font-weight:600; cursor:pointer}
+.auth-err{color:var(--red); font-size:13px; margin-top:10px; min-height:16px}
+.friends-sub{display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border)}
+.friends-sub button{padding:8px 14px; font-weight:600; font-size:14px; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px}
+.friends-sub button.on{color:var(--text); border-bottom-color:var(--green)}
+.me-bar{display:flex; align-items:center; gap:10px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-md); padding:10px 14px; margin-bottom:16px; flex-wrap:wrap}
+.me-bar .avatar{width:34px; height:34px; border-radius:50%; background:var(--accent-soft); color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0}
+.me-bar b{font-size:14px}
+.me-bar .muted{color:var(--muted); font-size:12.5px}
+.me-bar .spacer{flex:1}
+.frow{display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg2); border:1px solid transparent; border-radius:var(--r-md); margin-bottom:8px}
+.frow:hover{border-color:var(--border-hover)}
+.frow .avatar{width:38px; height:38px; border-radius:50%; background:var(--accent-soft); color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0}
+.frow .fi{flex:1; min-width:0}
+.frow .fi b{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.frow .fi span{font-size:12.5px; color:var(--muted)}
+.frow .fa{display:flex; gap:6px; flex-shrink:0}
+.frow.clickable{cursor:pointer}
+.add-friend{display:flex; gap:8px; margin-bottom:18px}
+.feed-item{display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg2); border:1px solid transparent; border-radius:var(--r-md); margin-bottom:8px}
+.feed-item .mini{width:34px; height:51px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
+.feed-item .mini img{width:100%; height:100%; object-fit:cover}
+.feed-item .fx{flex:1; min-width:0}
+.feed-item .fx .who{font-weight:700; font-size:13.5px}
+.feed-item .fx .what{font-size:13px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.friends-empty{color:var(--muted); font-size:14px; text-align:center; padding:24px 0}
+.profile-head{display:flex; align-items:center; gap:14px; margin-bottom:18px}
+.profile-head .avatar{width:56px; height:56px; border-radius:50%; background:var(--accent-soft); color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:22px}
+.common-badge{display:inline-block; background:var(--accent-soft); color:var(--green); font-size:12px; font-weight:700; padding:3px 10px; border-radius:999px}
 
 /* Toast */
 #toast{
@@ -539,6 +574,7 @@ body:has(.overlay.open) .fab{display:none}
       <button data-view="journal">Journal</button>
       <button data-view="lists">Listes</button>
       <button data-view="stats">Stats</button>
+      <button data-view="friends">Amis</button>
     </nav>
     <div class="header-actions">
       <span id="offline-badge" hidden>⚡ Hors ligne</span>
@@ -658,6 +694,12 @@ body:has(.overlay.open) .fab{display:none}
         <input type="file" id="import-csv-file" accept=".csv,text/csv" hidden aria-label="Fichier CSV">
       </div>
     </div>
+  </section>
+
+  <!-- ======== AMIS ======== -->
+  <section class="view" id="view-friends">
+    <h2 class="section">Amis</h2>
+    <div id="friends-body"></div>
   </section>
 </main>
 
@@ -1130,6 +1172,7 @@ function render(){
   else if(ui.view==='journal') renderJournal();
   else if(ui.view==='lists') renderLists();
   else if(ui.view==='stats') renderStats();
+  else if(ui.view==='friends') renderFriends();
 }
 // Rendu du fond différé quand une modale est ouverte (inutile de repeindre une vue cachée)
 let _rafRender = 0;
@@ -3238,7 +3281,7 @@ function applyHashView(hash){
     if(state.books.some(b=>b.id===id)){ selectView('library'); openDetail(id); }
     return;
   }
-  if(['library','journal','lists','stats'].includes(h) && h!==ui.view) selectView(h);
+  if(['library','journal','lists','stats','friends'].includes(h) && h!==ui.view) selectView(h);
 }
 
 /* =============== PWA =============== */
@@ -3340,6 +3383,221 @@ document.addEventListener('keydown', e => {
   else if(k>='1' && k<='4'){ const btns=$$('#nav button'); if(btns[+k-1]){ e.preventDefault(); selectView(btns[+k-1].dataset.view); } }
 });
 
+/* =============== Amis (Tome Social) =============== */
+// API : localhost en dev, Worker Cloudflare en prod (à mettre à jour après déploiement).
+const API_BASE = (location.hostname==='localhost' || location.hostname==='127.0.0.1')
+  ? 'http://localhost:8787'
+  : 'https://tome-social.dwarsard.workers.dev';
+const SOC_TOKEN = 'tome-social-token';
+const social = { me:null, tab:'feed', view:null, profile:null };
+function socToken(){ try{ return localStorage.getItem(SOC_TOKEN)||''; }catch(_){ return ''; } }
+async function api(path, opts={}){
+  const headers = Object.assign({}, opts.headers);
+  const tk = socToken();
+  if(tk) headers['Authorization'] = 'Bearer '+tk;
+  if(opts.body){ headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(opts.body); }
+  let res;
+  try{ res = await fetch(API_BASE+path, {...opts, headers}); }
+  catch(e){ throw new Error('offline'); }
+  let data = {};
+  try{ data = await res.json(); }catch(_){}
+  if(!res.ok) throw new Error(data.error || ('Erreur '+res.status));
+  return data;
+}
+const initials = s => (String(s||'?').trim()[0]||'?').toUpperCase();
+// sous-ensemble partageable de la bibliothèque
+function shareableBooks(){
+  return state.books.map(b=>{
+    const key = (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
+    const lastRead = (b.readings||[]).map(r=>r.date).sort().pop() || '';
+    return {
+      key, title:fullTitle(b), authors:authorsStr(b), type:b.type, series:b.series||'', volume:b.volume,
+      cover:b.cover||'', rating:b.rating, review:b.review||'', status:b.status, readDate:lastRead,
+    };
+  }).filter(b=>b.status==='read' || b.rating || b.readDate); // on ne partage pas la pile « à lire » vierge
+}
+async function socRefresh(){
+  if(!socToken()){ social.me=null; return; }
+  try{ const d = await api('/api/me'); social.me = d.user; }
+  catch(e){ if(/401|Non authentifié/.test(e.message)){ try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; } }
+}
+function renderFriends(){
+  const box = $('#friends-body');
+  if(!social.me){ renderAuth(box); return; }
+  if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
+  box.innerHTML = `
+    <div class="me-bar">
+      <div class="avatar">${esc(initials(social.me.displayName))}</div>
+      <div><b>${esc(social.me.displayName)}</b><div class="muted">@${esc(social.me.username)}</div></div>
+      <span class="spacer"></span>
+      <button class="btn small" id="soc-logout">Se déconnecter</button>
+    </div>
+    <div class="friends-sub">
+      <button data-tab="feed" class="${social.tab==='feed'?'on':''}">Fil</button>
+      <button data-tab="friends" class="${social.tab==='friends'?'on':''}">Mes amis</button>
+      <button data-tab="me" class="${social.tab==='me'?'on':''}">Mon partage</button>
+    </div>
+    <div id="soc-tab"></div>`;
+  if(social.tab==='feed') renderFeed();
+  else if(social.tab==='friends') renderFriendsList();
+  else renderMyShare();
+}
+function renderAuth(box, mode='login', errMsg=''){
+  box.innerHTML = `
+    <div class="auth-card">
+      <h3>${mode==='login'?'Se connecter':'Créer un compte'}</h3>
+      <p class="sub">Retrouve tes amis, compare vos lectures et suis leurs coups de cœur. Ta bibliothèque privée reste sur ton appareil ; seul ce que tu choisis de partager est synchronisé.</p>
+      <label for="soc-user">Pseudo</label>
+      <input id="soc-user" autocomplete="username" placeholder="ex : lucas_bd">
+      ${mode==='signup'?`<label for="soc-name">Nom affiché</label><input id="soc-name" placeholder="ex : Lucas">`:''}
+      <label for="soc-pass">Mot de passe</label>
+      <input id="soc-pass" type="password" autocomplete="${mode==='login'?'current-password':'new-password'}" placeholder="8 caractères minimum">
+      <div class="auth-err">${esc(errMsg)}</div>
+      <button class="btn primary" id="soc-submit" style="width:100%; justify-content:center">${mode==='login'?'Connexion':'Créer mon compte'}</button>
+      <div class="switch">${mode==='login'
+        ? `Pas encore de compte ? <a data-auth="signup">Créer un compte</a>`
+        : `Déjà inscrit ? <a data-auth="login">Se connecter</a>`}</div>
+    </div>`;
+  const submit = async ()=>{
+    const username = $('#soc-user').value.trim();
+    const password = $('#soc-pass').value;
+    const displayName = mode==='signup' ? ($('#soc-name').value.trim()||username) : '';
+    if(!username || !password){ renderAuth(box, mode, 'Remplis le pseudo et le mot de passe.'); return; }
+    $('#soc-submit').textContent = '…'; $('#soc-submit').disabled = true;
+    try{
+      const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body:{username, password, displayName}});
+      localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tab='feed'; social.view=null;
+      renderFriends();
+    }catch(e){
+      renderAuth(box, mode, e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message);
+    }
+  };
+  $('#soc-submit').addEventListener('click', submit);
+  $('#soc-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+  $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>renderAuth(box, a.dataset.auth)));
+}
+async function renderFeed(){
+  const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
+  try{
+    const d = await api('/api/feed');
+    if(!d.feed.length){ el.innerHTML = `<p class="friends-empty">Rien pour l'instant. Ajoute des amis et invite-les à partager leurs lectures.</p>`; return; }
+    el.innerHTML = d.feed.map(x=>`
+      <div class="feed-item">
+        <div class="mini">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
+        <div class="fx">
+          <div class="who">${esc(x.display_name)} <span style="color:var(--muted);font-weight:400">a lu</span></div>
+          <div class="what">${esc(x.title)}${x.rating?` · ${starsTxt(x.rating)}`:''}</div>
+        </div>
+        <div style="font-size:11px;color:var(--faint);white-space:nowrap">${x.read_date?fmtDate(x.read_date):''}</div>
+      </div>`).join('');
+  }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
+}
+async function renderFriendsList(){
+  const el = $('#soc-tab');
+  el.innerHTML = `
+    <div class="add-friend">
+      <input id="friend-username" placeholder="Ajouter par pseudo…" aria-label="Pseudo à ajouter">
+      <button class="btn primary" id="friend-add">Ajouter</button>
+    </div>
+    <div id="friend-lists"><p class="friends-empty">Chargement…</p></div>`;
+  const doAdd = async ()=>{
+    const u = $('#friend-username').value.trim(); if(!u) return;
+    try{ const r = await api('/api/friends/request', {method:'POST', body:{username:u}}); toast(r.status==='accepted'?'Vous êtes maintenant amis ✓':'Demande envoyée ✓'); $('#friend-username').value=''; loadFriendLists(); }
+    catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); }
+  };
+  $('#friend-add').addEventListener('click', doAdd);
+  $('#friend-username').addEventListener('keydown', e=>{ if(e.key==='Enter') doAdd(); });
+  loadFriendLists();
+}
+async function loadFriendLists(){
+  const el = $('#friend-lists');
+  try{
+    const d = await api('/api/friends');
+    const person = (p, actions)=>`<div class="frow"><div class="avatar">${esc(initials(p.displayName))}</div>
+      <div class="fi clickable" data-profile="${esc(p.username)}"><b>${esc(p.displayName)}</b><span>@${esc(p.username)}</span></div>
+      <div class="fa">${actions}</div></div>`;
+    let html = '';
+    if(d.incoming.length){ html += `<h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:8px 0">Demandes reçues</h4>`;
+      html += d.incoming.map(p=>person(p, `<button class="btn small primary" data-accept="${esc(p.id)}">Accepter</button><button class="btn small" data-remove="${esc(p.id)}">Refuser</button>`)).join(''); }
+    html += `<h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 8px">Amis (${d.friends.length})</h4>`;
+    html += d.friends.length ? d.friends.map(p=>person(p, `<button class="btn small" data-remove="${esc(p.id)}">Retirer</button>`)).join('')
+      : `<p class="friends-empty">Aucun ami pour l'instant.</p>`;
+    if(d.outgoing.length){ html += `<h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 8px">Demandes envoyées</h4>`;
+      html += d.outgoing.map(p=>person(p, `<span style="font-size:12px;color:var(--faint)">en attente</span><button class="btn small" data-remove="${esc(p.id)}">Annuler</button>`)).join(''); }
+    el.innerHTML = html;
+  }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
+}
+async function renderMyShare(){
+  const el = $('#soc-tab');
+  const mode = social.me.shareMode || 'all';
+  const shareable = shareableBooks();
+  el.innerHTML = `
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">Choisis ce que tes amis peuvent voir, puis synchronise. ${shareable.length} titre(s) partageables (lus ou notés).</p>
+    <div class="seg" id="share-mode" style="margin-bottom:14px">
+      <button data-mode="all" class="${mode==='all'?'on':''}">Tout</button>
+      <button data-mode="ratings" class="${mode==='ratings'?'on':''}">Notes seules</button>
+      <button data-mode="none" class="${mode==='none'?'on':''}">Rien</button>
+    </div>
+    <p style="font-size:12.5px;color:var(--faint);margin-bottom:16px">« Tout » : titres, notes, critiques, dates. « Notes seules » : sans tes critiques. « Rien » : profil masqué.</p>
+    <button class="btn primary" id="share-sync">↻ Synchroniser mon profil</button>
+    <div id="share-status" style="font-size:13px;color:var(--muted);margin-top:12px"></div>`;
+  let chosen = mode;
+  $$('#share-mode button').forEach(btn=>btn.addEventListener('click', ()=>{ chosen=btn.dataset.mode; $$('#share-mode button').forEach(b=>b.classList.toggle('on', b===btn)); }));
+  $('#share-sync').addEventListener('click', async ()=>{
+    $('#share-status').textContent = 'Synchronisation…';
+    try{
+      const d = await api('/api/sync', {method:'POST', body:{shareMode:chosen, books:chosen==='none'?[]:shareable}});
+      social.me.shareMode = d.shareMode;
+      $('#share-status').textContent = d.shareMode==='none' ? 'Profil masqué. ✓' : `${d.count} titre(s) synchronisé(s) ✓`;
+      toast('Profil mis à jour ✓');
+    }catch(e){ $('#share-status').textContent = e.message==='offline'?'Serveur injoignable.':e.message; }
+  });
+}
+async function openProfile(username){
+  try{
+    const d = await api('/api/users/'+encodeURIComponent(username));
+    social.profile = d; social.view = 'profile'; renderFriends();
+  }catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); }
+}
+function renderProfile(box, d){
+  const mine = new Set(shareableBooks().map(b=>b.key));
+  const shelf = d.shelf || [];
+  const common = shelf.filter(b=>mine.has(b.book_key)).length;
+  box.innerHTML = `
+    <button class="btn small" id="prof-back" style="margin-bottom:14px">← Retour</button>
+    <div class="profile-head">
+      <div class="avatar">${esc(initials(d.user.displayName))}</div>
+      <div><h3 style="font-size:20px">${esc(d.user.displayName)}</h3><div class="muted" style="color:var(--muted)">@${esc(d.user.username)}</div></div>
+    </div>
+    ${d.areFriends ? (shelf.length ? `
+      <p style="margin-bottom:14px">${shelf.length} titre(s) partagé(s)${common?` · <span class="common-badge">${common} en commun</span>`:''}</p>
+      <div class="grid">${shelf.map(b=>`
+        <div class="card"><div class="cover">
+          <span class="badge ${esc(b.type)}">${TYPE_LABEL[b.type]||''}</span>
+          ${b.cover?`<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph" style="background:linear-gradient(160deg,hsl(${({livre:205,bd:28,manga:340}[b.type]??150)},32%,26%),hsl(${({livre:205,bd:28,manga:340}[b.type]??150)},38%,13%))"><div class="ph-t">${esc(b.title)}</div><div class="ph-a">${esc(b.authors)}</div></div>`}
+          ${mine.has(b.book_key)?`<span class="ribbon done">✓ toi aussi</span>`:''}
+        </div><div class="under">${b.rating?`<span class="stars">${starsTxt(b.rating)}</span>`:''}</div></div>`).join('')}</div>`
+      : `<p class="friends-empty">${esc(d.user.displayName)} ne partage rien pour le moment.</p>`)
+    : `<p class="friends-empty">Vous n'êtes pas encore amis — sa bibliothèque est privée.</p>`}`;
+  $('#prof-back').addEventListener('click', ()=>{ social.view=null; social.profile=null; social.tab='friends'; renderFriends(); });
+}
+// écouteur délégué unique pour toute la vue Amis
+$('#friends-body').addEventListener('click', async e => {
+  const sub = e.target.closest('.friends-sub button');
+  if(sub){ social.tab = sub.dataset.tab; renderFriends(); return; }
+  if(e.target.closest('#soc-logout')){
+    try{ await api('/api/logout', {method:'POST'}); }catch(_){}
+    try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
+    social.me=null; social.view=null; renderFriends(); return;
+  }
+  const acc = e.target.closest('[data-accept]');
+  if(acc){ try{ await api('/api/friends/accept', {method:'POST', body:{userId:acc.dataset.accept}}); toast('Ami ajouté ✓'); loadFriendLists(); }catch(e2){ toast(e2.message); } return; }
+  const rem = e.target.closest('[data-remove]');
+  if(rem){ try{ await api('/api/friends/remove', {method:'POST', body:{userId:rem.dataset.remove}}); loadFriendLists(); }catch(e2){ toast(e2.message); } return; }
+  const prof = e.target.closest('[data-profile]');
+  if(prof){ openProfile(prof.dataset.profile); return; }
+});
+
 /* =============== Restauration des préférences d'affichage =============== */
 (function restoreUI(){
   let saved = null;
@@ -3352,7 +3610,7 @@ document.addEventListener('keydown', e => {
     if(typeof saved.groupSeries==='boolean') ui.groupSeries = saved.groupSeries;
     if(['wishlist','reading','read'].includes(saved.defaultStatus)) ui.defaultStatus = saved.defaultStatus;
     if(['count','pages'].includes(saved.typeMetric)) ui.typeMetric = saved.typeMetric;
-    if(['library','journal','lists','stats'].includes(saved.view)) ui.view = saved.view;
+    if(['library','journal','lists','stats','friends'].includes(saved.view)) ui.view = saved.view;
   }
   // refléter dans le DOM
   $$('#status-chips .chip').forEach(x=>{ const on=x.dataset.status===ui.status; x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
@@ -3365,7 +3623,7 @@ document.addEventListener('keydown', e => {
 // vue initiale : hash > préférence sauvegardée (capturer le hash AVANT que selectView ne le remplace)
 const _initHash = location.hash;
 const _hash = _initHash.slice(1);
-if(['library','journal','lists','stats'].includes(_hash)) ui.view = _hash;
+if(['library','journal','lists','stats','friends'].includes(_hash)) ui.view = _hash;
 selectView(ui.view);
 refreshResume();
 const _origRender = render;
@@ -3373,6 +3631,8 @@ render = function(){ _origRender(); refreshResume(); };
 if(_initHash.startsWith('#book/')) applyHashView(_initHash);
 if(_loaded.migrated) save(true); // fige la migration depuis l'ancienne clé, sans compter comme une modification
 if(_loaded.notice) setTimeout(()=>toast(_loaded.notice), 600);
+// restaure la session sociale si un token existe, et rafraîchit la vue Amis si elle est ouverte
+if(socToken()) socRefresh().then(()=>{ if(ui.view==='friends') renderFriends(); });
 
 /* =============== Tests de fumée (?selftest) — coût nul en usage normal =============== */
 if(location.search.includes('selftest')){
