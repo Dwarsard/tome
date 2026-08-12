@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://www.googleapis.com https://openlibrary.org http://localhost:8787 https://*.workers.dev; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://www.googleapis.com https://openlibrary.org http://localhost:8787; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#12161a" id="meta-theme">
@@ -3385,10 +3385,10 @@ document.addEventListener('keydown', e => {
 });
 
 /* =============== Amis (Tome Social) =============== */
-// API : localhost en dev, Worker Cloudflare en prod (à mettre à jour après déploiement).
-const API_BASE = (location.hostname==='localhost' || location.hostname==='127.0.0.1')
-  ? 'http://localhost:8787'
-  : 'https://tome-social.dwarsard.workers.dev';
+// API servie par la même origine (Worker Tome-Social + assets statiques) : chemin relatif.
+// Exception : launcher de dev `tome` (port 8791) sans API → Worker séparé sur 8787
+// (`npx wrangler dev` dans Tome-Social sert app + API sur 8787, même origine).
+const API_BASE = (location.port==='8791') ? 'http://localhost:8787' : '';
 const SOC_TOKEN = 'tome-social-token';
 const social = { me:null, tab:'feed', view:null, profile:null };
 function socToken(){ try{ return localStorage.getItem(SOC_TOKEN)||''; }catch(_){ return ''; } }

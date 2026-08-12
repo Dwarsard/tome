@@ -1,7 +1,7 @@
 /* Service worker de Tome — cache l'app pour l'usage hors ligne.
    Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
    qui affiche le bandeau « Nouvelle version — Recharger ». */
-const CACHE = 'tome-v2';
+const CACHE = 'tome-v3';
 const CACHE_PREFIX = 'tome-';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
@@ -25,6 +25,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  // l'API (même origine en prod) ne doit JAMAIS passer par le cache : données privées et volatiles
+  if (url.pathname.startsWith('/api/')) return;
   // réseau d'abord (pour récupérer les mises à jour), cache en secours hors ligne
   e.respondWith(
     fetch(e.request)

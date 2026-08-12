@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-y", "serve", "-l", "8791", "."],
       "port": 8791
+    },
+    {
+      "name": "tome-social",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "wrangler", "dev", "--cwd", "../Tome-Social", "--port", "8787", "--local"],
+      "port": 8787
     }
   ]
 }
