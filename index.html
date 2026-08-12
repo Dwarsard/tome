@@ -17,7 +17,7 @@
 :root{
   --bg:#12161a; --bg2:#181f26; --surface:#1c242d; --surface2:#242e39;
   --border:#2b3642; --border-hover:#3d4c5c; --text:#e8eef4; --muted:#8fa1b3; --faint:#7e8fa0;
-  --green:#2fc775; --on-green:#04140a; --blue:#40bcf4; --orange:#ff8000; --pink:#ff5c8a;
+  --green:#2fc775; --green-strong:#2fc775; --on-green:#04140a; --blue:#40bcf4; --orange:#ff8000; --pink:#ff5c8a;
   --red:#ff5c5c; --star:#f5c14e; --star-off:#39485a;
   --accent-soft:color-mix(in srgb, var(--green) 15%, transparent);
   --header-bg:rgba(18,22,26,.9); --chip-bg:rgba(10,13,16,.82); --chip-text:#e8eef4;
@@ -29,8 +29,8 @@
 }
 :root[data-theme="light"]{
   --bg:#f4f1e8; --bg2:#fbf9f1; --surface:#ffffff; --surface2:#ece7d9;
-  --border:#dcd5c4; --border-hover:#c3b6a0; --text:#202b35; --muted:#5b6a77; --faint:#8b95a1;
-  --green:#0c9d55; --on-green:#ffffff; --star:#c98a12; --star-off:#cfc8b6;
+  --border:#dcd5c4; --border-hover:#c3b6a0; --text:#202b35; --muted:#556270; --faint:#5f6b78;
+  --green:#0c9d55; --green-strong:#0a7d41; --on-green:#ffffff; --star:#b5790e; --star-off:#cfc8b6;
   --accent-soft:color-mix(in srgb, var(--green) 12%, transparent);
   --header-bg:rgba(244,241,232,.9); --chip-bg:rgba(255,255,255,.92); --chip-text:#202b35;
   --overlay-dim:rgba(60,55,40,.45);
@@ -45,10 +45,11 @@ body{
   font-size:15px; line-height:1.5; min-height:100vh;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
   text-rendering:optimizeLegibility; font-feature-settings:'kern','liga'; letter-spacing:-.006em;
+  overscroll-behavior-y:contain; /* évite le pull-to-refresh accidentel en PWA */
 }
 button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
 input,select,textarea{font:inherit; color:var(--text); background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; outline:none; width:100%}
-input:focus,select:focus,textarea:focus{border-color:var(--green)}
+input:focus,select:focus,textarea:focus{border-color:var(--green); box-shadow:0 0 0 3px var(--accent-soft)}
 ::placeholder{color:var(--faint)}
 ::selection{background:color-mix(in srgb, var(--green) 30%, transparent)}
 :focus-visible{outline:2px solid var(--green); outline-offset:2px}
@@ -64,6 +65,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--green)}
 header{
   position:sticky; top:0; z-index:50; background:var(--header-bg);
   backdrop-filter:blur(10px); border-bottom:1px solid var(--border);
+  padding-top:env(safe-area-inset-top); /* iOS installé : passe sous l'encoche */
 }
 .header-in{max-width:1060px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:14px}
 .brand{display:flex; align-items:center; gap:8px; font-weight:800; font-size:20px; letter-spacing:-.02em}
@@ -73,7 +75,7 @@ header{
 nav{display:flex; gap:2px; margin-left:6px}
 nav button{padding:7px 13px; border-radius:8px; color:var(--muted); font-weight:600; font-size:14px}
 nav button:hover{color:var(--text); background:var(--surface)}
-nav button.active{color:var(--text); background:var(--accent-soft)}
+nav button.active{color:var(--green); background:var(--accent-soft); font-weight:700}
 .header-actions{margin-left:auto; display:flex; gap:8px}
 .btn{
   display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:var(--r-sm);
@@ -81,13 +83,13 @@ nav button.active{color:var(--text); background:var(--accent-soft)}
 }
 .btn:hover{background:var(--surface2); border-color:var(--border-hover)}
 .btn:active{transform:translateY(1px)}
-.btn.primary{background:var(--green); border-color:var(--green); color:var(--on-green)}
-.btn.primary:hover{filter:brightness(1.08); border-color:var(--green); transform:translateY(-1px)}
+.btn.primary{background:var(--green-strong); border-color:var(--green-strong); color:var(--on-green)}
+.btn.primary:hover{filter:brightness(1.08); border-color:var(--green-strong); transform:translateY(-1px)}
 .btn.danger{color:var(--red); border-color:color-mix(in srgb, var(--red) 35%, var(--border))}
 .btn.small{padding:5px 10px; font-size:13px}
 .btn.icon{padding:8px 10px}
 
-main{max-width:1060px; margin:0 auto; padding:22px 16px 90px}
+main{max-width:1060px; margin:0 auto; padding:22px 16px 90px; padding-left:max(16px,env(safe-area-inset-left)); padding-right:max(16px,env(safe-area-inset-right))}
 .view{display:none}
 .view.active{display:block}
 h2.section{font-size:13px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:16px; font-weight:700}
@@ -114,7 +116,7 @@ h2.section{font-size:13px; text-transform:uppercase; letter-spacing:.12em; color
   flex:0 0 auto; display:flex; gap:10px; align-items:center; background:var(--bg2);
   border:1px solid var(--border); border-radius:10px; padding:8px 12px; cursor:pointer; max-width:280px;
 }
-.now-card:hover{border-color:#41505f}
+.now-card:hover{border-color:var(--border-hover); box-shadow:var(--sh-1)}
 .now-card .mini{width:36px; height:54px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
 .now-card .mini img{width:100%; height:100%; object-fit:cover}
 .now-card .ni{min-width:0}
@@ -178,7 +180,8 @@ body.selecting .card:hover .qk{opacity:0}
 .selbox.on{background:var(--green); color:var(--on-green); border-color:var(--green)}
 .card.selected .cover{outline:2px solid var(--green); outline-offset:2px}
 .card.series[data-indet="1"] .selbox{background:var(--accent-soft)}
-.bulkbar{position:sticky; bottom:0; z-index:40; display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--header-bg); backdrop-filter:blur(10px); border-top:1px solid var(--border-hover); padding:10px 14px; margin:0 -16px -90px; box-shadow:0 -6px 20px rgba(0,0,0,.25)}
+.bulkbar{position:sticky; bottom:0; z-index:40; display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--header-bg); backdrop-filter:blur(10px); border-top:1px solid var(--border-hover); padding:10px 14px calc(10px + env(safe-area-inset-bottom)); margin:0 -16px -90px; box-shadow:0 -6px 20px rgba(0,0,0,.25)}
+:root[data-theme="light"] .bulkbar{box-shadow:0 -6px 20px rgba(80,70,40,.16)}
 .bulkbar b{white-space:nowrap; font-variant-numeric:tabular-nums}
 .bulkbar .bb-actions{display:flex; gap:6px; flex-wrap:wrap; margin-left:auto}
 .bulkbar .bb-actions button{padding:6px 11px; border-radius:8px; font-size:13px; font-weight:600; border:1px solid var(--border); background:var(--surface)}
@@ -191,8 +194,12 @@ body.selecting .card:hover .qk{opacity:0}
 .smart-chips .chip .sc-del{color:var(--faint); font-weight:700}
 .smart-chips .chip .sc-del:hover{color:var(--red)}
 /* Bandeau mise à jour PWA */
-#update-bar{position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:210; display:none; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--green) 40%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:14px; max-width:calc(100vw - 28px)}
+#update-bar{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:210; display:none; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--green) 40%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:14px; max-width:calc(100vw - 28px)}
 #update-bar.show{display:flex}
+/* Bandeau d'échec de sauvegarde (stockage plein) — persistant tant que non résolu */
+#save-warning{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:220; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--red) 55%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:13.5px; max-width:calc(100vw - 28px)}
+#save-warning:not([hidden]){display:flex}
+#save-warning span{color:var(--text)}
 /* Badge hors-ligne */
 #offline-badge{color:var(--orange); font-size:12px; font-weight:700; align-self:center; white-space:nowrap}
 /* Lightbox couverture */
@@ -207,7 +214,7 @@ body.selecting .card:hover .qk{opacity:0}
 }
 .goal-line:hover{border-color:var(--border-hover)}
 .goal-line .track{flex:1; height:8px; background:var(--surface2); border-radius:4px; overflow:hidden}
-.goal-line .fill{height:100%; background:var(--green); border-radius:4px}
+.goal-line .fill{height:100%; background:var(--green); border-radius:4px; transition:width .5s cubic-bezier(.2,.7,.3,1)}
 .goal-line b{white-space:nowrap}
 .goal-line .pace{color:var(--muted); white-space:nowrap}
 .goal-line .pace.ahead{color:var(--green)} .goal-line .pace.behind{color:var(--orange)}
@@ -243,6 +250,7 @@ body.selecting .card:hover .qk{opacity:0}
   width:52px; height:78px; border-radius:4px; overflow:hidden; background:var(--surface2);
   border:1px solid var(--border); margin-right:-18px; box-shadow:2px 0 8px rgba(0,0,0,.4);
 }
+:root[data-theme="light"] .list-card .fan .mini{box-shadow:2px 0 8px rgba(80,70,40,.2)}
 .list-card .fan .mini img{width:100%; height:100%; object-fit:cover}
 .list-card .fan .empty-fan{display:flex; align-items:center; color:var(--faint); font-size:26px; padding-left:4px}
 .list-card h4{font-size:15px}
@@ -333,6 +341,17 @@ body.selecting .card:hover .qk{opacity:0}
 .modal-head .x:hover{color:var(--text); background:var(--surface2)}
 .modal-body{padding:20px}
 
+/* Modale générique (uiConfirm / uiPrompt / uiChoose) — au-dessus des autres overlays */
+.dialog-ov{position:fixed; inset:0; background:var(--overlay-dim); z-index:300; display:none; align-items:center; justify-content:center; padding:20px; overflow-y:auto}
+.dialog-ov.open{display:flex}
+.dialog-ov .modal{animation:pop .14s ease}
+#dialog-msg{color:var(--muted); font-size:14px; line-height:1.55; white-space:pre-line}
+#dialog-msg:empty{display:none}
+#dialog-input:not([hidden]){display:block; margin-top:14px}
+#dialog-actions{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:20px}
+#dialog-actions .btn{justify-content:center}
+@media(max-width:480px){ #dialog-actions{flex-direction:column-reverse} #dialog-actions .btn{width:100%} }
+
 /* Search modal */
 .search-results{margin-top:14px; max-height:52vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px}
 .sr{
@@ -383,7 +402,7 @@ body.selecting .card:hover .qk{opacity:0}
 .seg button.on{background:var(--accent-soft); color:var(--green)}
 /* Ambiances (moods) & prêt */
 .mood-chips{display:flex; flex-wrap:wrap; gap:6px}
-.mood{font-size:12.5px; padding:4px 11px; border-radius:999px; border:1px solid var(--border); color:var(--muted); background:var(--bg2); cursor:pointer; transition:all .12s}
+.mood{font-size:12.5px; padding:4px 11px; border-radius:999px; border:1px solid var(--border); color:var(--muted); background:var(--bg2); cursor:pointer; transition:background-color .12s ease, color .12s ease, border-color .12s ease}
 .mood:hover{color:var(--text); border-color:var(--border-hover)}
 .mood.on{background:var(--accent-soft); color:var(--green); border-color:color-mix(in srgb, var(--green) 45%, var(--border))}
 .loan-row{display:flex; align-items:center; gap:10px; font-size:13.5px; flex-wrap:wrap}
@@ -450,7 +469,7 @@ body.selecting .card:hover .qk{opacity:0}
   display:flex; align-items:center; gap:12px; padding:8px 10px; border-radius:10px;
   background:var(--bg2); border:1px solid transparent; margin-bottom:6px; cursor:pointer;
 }
-.tome-row:hover{border-color:var(--border-hover)}
+.tome-row:hover{border-color:var(--border-hover); background:var(--surface)}
 .tome-row .mini{width:34px; height:51px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
 .tome-row .mini img{width:100%; height:100%; object-fit:cover}
 .tome-row .ti{flex:1; min-width:0; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -522,7 +541,7 @@ body.selecting .card:hover .qk{opacity:0}
 
 /* Toast */
 #toast{
-  position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(90px);
+  position:fixed; bottom:calc(24px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%) translateY(90px);
   background:var(--surface2); border:1px solid var(--border-hover); color:var(--text);
   padding:10px 18px; border-radius:var(--r-md); font-size:14px; font-weight:600;
   box-shadow:var(--shadow); transition:transform .28s cubic-bezier(.2,.7,.3,1); z-index:200; pointer-events:none;
@@ -534,6 +553,8 @@ body.selecting .card:hover .qk{opacity:0}
 #toast .toast-action:hover{text-decoration:underline}
 
 @media(max-width:640px){
+  /* 16px minimum : empêche le rezoom automatique d'iOS au focus d'un champ */
+  input,select,textarea{font-size:16px}
   .header-in{flex-wrap:wrap; gap:8px; padding:10px 12px}
   nav{order:3; width:100%; justify-content:space-between; margin-left:0}
   nav button{flex:1; text-align:center; padding:7px 4px}
@@ -557,18 +578,22 @@ body.selecting .card:hover .qk{opacity:0}
   .ld-item .rm{display:flex}
   .ld-item .mv button{width:30px; height:30px; font-size:13px}
   .ld-item .rm{width:28px; height:28px}
+  /* actions rapides sur les cartes : plus grosses au doigt, plus espacées (anti mis-tap) */
+  .qk{gap:8px}
+  .qk button{width:36px; height:36px; font-size:16px}
 }
 body:has(.overlay.open) .fab{display:none}
+body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions groupées */
 </style>
 </head>
 <body>
 
 <header>
   <div class="header-in">
-    <div class="brand">
+    <h1 class="brand">
       <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="#12161a"/><path d="M256 132c-42-26-108-26-146-9v256c38-17 104-17 146 9 42-26 108-26 146-9V123c-38-17-104-17-146 9z" fill="none" stroke="#00d364" stroke-width="30" stroke-linejoin="round"/><path d="M256 132v256" stroke="#00d364" stroke-width="30"/></svg>
       Tome<em>.</em>
-    </div>
+    </h1>
     <nav id="nav" aria-label="Navigation principale">
       <button data-view="library" class="active" aria-current="page">Bibliothèque</button>
       <button data-view="journal">Journal</button>
@@ -580,7 +605,7 @@ body:has(.overlay.open) .fab{display:none}
       <span id="offline-badge" hidden>⚡ Hors ligne</span>
       <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden>▶</button>
       <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème">◐</button>
-      <button class="btn primary" id="btn-open-search">＋ <span class="lbl-txt">Ajouter</span></button>
+      <button class="btn primary" id="btn-open-search" aria-label="Ajouter un livre"><span aria-hidden="true">＋</span> <span class="lbl-txt">Ajouter</span></button>
     </div>
   </div>
 </header>
@@ -713,7 +738,7 @@ body:has(.overlay.open) .fab{display:none}
         <button data-s="reading">En cours</button>
         <button data-s="read">Lu</button>
       </div>
-      <button class="btn small" id="btn-scan" hidden>📷</button>
+      <button class="btn small" id="btn-scan" hidden aria-label="Scanner un code-barres"><span aria-hidden="true">📷</span></button>
       <button class="btn small" id="btn-manual">Manuel</button>
       <button class="x" data-close aria-label="Fermer">✕</button>
     </div>
@@ -724,7 +749,7 @@ body:has(.overlay.open) .fab{display:none}
         <div class="scan-hint">Vise le code-barres (ISBN) au dos du livre</div>
         <button class="btn small" id="scan-stop">Annuler le scan</button>
       </div>
-      <div class="search-results" id="search-results"></div>
+      <div class="search-results" id="search-results" role="status" aria-live="polite"></div>
     </div>
   </div>
 </div>
@@ -771,7 +796,7 @@ body:has(.overlay.open) .fab{display:none}
 
 <!-- ======== MODAL DÉTAIL ======== -->
 <div class="overlay" id="ov-detail">
-  <div class="modal" style="max-width:680px" role="dialog" aria-modal="true" aria-labelledby="detail-head">
+  <div class="modal" style="max-width:680px" role="dialog" aria-modal="true" aria-labelledby="detail-title">
     <div class="modal-head"><h3 id="detail-head">Détail</h3><button class="x" data-close aria-label="Fermer">✕</button></div>
     <div class="modal-body"><div class="detail" id="detail-body"></div></div>
   </div>
@@ -790,6 +815,21 @@ body:has(.overlay.open) .fab{display:none}
 
 <!-- ======== BANDEAU MISE À JOUR PWA ======== -->
 <div id="update-bar" role="status"><span>✨ Nouvelle version disponible</span><button class="btn small primary" id="update-reload">Recharger</button></div>
+
+<!-- ======== BANDEAU ÉCHEC DE SAUVEGARDE (stockage plein) ======== -->
+<div id="save-warning" role="alert" hidden><span>⚠ Sauvegarde impossible — stockage plein. Tes dernières modifications risquent d'être perdues.</span><button class="btn small primary" id="save-warning-export">Exporter maintenant</button></div>
+
+<!-- ======== MODALE GÉNÉRIQUE (confirmation / saisie / choix) ======== -->
+<div class="dialog-ov" id="ov-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-head"><h3 id="dialog-title"></h3></div>
+    <div class="modal-body">
+      <p id="dialog-msg"></p>
+      <input id="dialog-input" hidden aria-labelledby="dialog-title">
+      <div id="dialog-actions"></div>
+    </div>
+  </div>
+</div>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -810,6 +850,86 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
+
+/* =============== Modale générique (remplace prompt/confirm natifs) ===============
+   uiConfirm/uiPrompt/uiChoose renvoient une Promise. Se superpose aux overlays
+   existants sans les fermer (z-index dédié), piège le focus, gère Échap/Entrée. */
+let _dlgResolve = null, _dlgPrevFocus = null, _dlgCancelVal = null;
+function _dlgClose(val){
+  const ov = $('#ov-dialog');
+  if(!ov.classList.contains('open')) return;
+  ov.classList.remove('open');
+  document.removeEventListener('keydown', _dlgKey, true);
+  const r = _dlgResolve; _dlgResolve = null;
+  if(_dlgPrevFocus && document.contains(_dlgPrevFocus)){ try{ _dlgPrevFocus.focus(); }catch(_){} }
+  if(r) r(val);
+}
+function _dlgFocusable(){
+  return $$('#ov-dialog button, #ov-dialog input').filter(el=>!el.hidden && el.offsetParent!==null);
+}
+function _dlgKey(e){
+  if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); _dlgClose(_dlgCancelVal); }
+  else if(e.key==='Enter'){
+    if(e.target && e.target.tagName==='TEXTAREA') return;
+    e.preventDefault(); e.stopPropagation();
+    const def = $('#ov-dialog [data-default]'); if(def) def.click();
+  }
+  else if(e.key==='Tab'){
+    const f = _dlgFocusable(); if(!f.length) return;
+    const first=f[0], last=f[f.length-1];
+    if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+  }
+}
+// openDialog({title, message, input?, actions:[{label,value,variant,default,cancel,returnsInput}]})
+function openDialog(cfg){
+  return new Promise(resolve=>{
+    if(_dlgResolve) _dlgClose(_dlgCancelVal); // une seule modale à la fois
+    _dlgPrevFocus = document.activeElement;
+    _dlgResolve = resolve;
+    $('#dialog-title').textContent = cfg.title || '';
+    const msg = $('#dialog-msg'); msg.textContent = cfg.message || '';
+    const inp = $('#dialog-input');
+    if(cfg.input){ inp.hidden=false; inp.type=cfg.input.type||'text'; inp.value=cfg.input.value!=null?cfg.input.value:''; inp.placeholder=cfg.input.placeholder||''; }
+    else { inp.hidden=true; inp.value=''; }
+    const acts = $('#dialog-actions'); acts.innerHTML='';
+    const cancelAct = cfg.actions.find(a=>a.cancel);
+    _dlgCancelVal = cancelAct ? cancelAct.value : null;
+    cfg.actions.forEach(a=>{
+      const b=document.createElement('button');
+      b.type='button';
+      b.className='btn'+(a.variant==='primary'?' primary':a.variant==='danger'?' danger':'');
+      if(a.default) b.setAttribute('data-default','');
+      b.textContent=a.label;
+      b.addEventListener('click', ()=> _dlgClose(a.returnsInput ? inp.value : a.value));
+      acts.append(b);
+    });
+    $('#ov-dialog').classList.add('open');
+    document.addEventListener('keydown', _dlgKey, true);
+    setTimeout(()=>{ const el = cfg.input ? inp : ($('#ov-dialog [data-default]') || acts.querySelector('button')); if(el){ el.focus(); if(el===inp) inp.select(); } }, 20);
+  });
+}
+function uiConfirm({title, message='', okLabel='Confirmer', cancelLabel='Annuler', danger=false}){
+  return openDialog({ title, message, actions:[
+    { label:cancelLabel, value:false, cancel:true },
+    { label:okLabel, value:true, variant: danger?'danger':'primary', default:true },
+  ]});
+}
+function uiPrompt({title, message='', value='', placeholder='', type='text', okLabel='OK', cancelLabel='Annuler'}){
+  return openDialog({ title, message, input:{value, placeholder, type}, actions:[
+    { label:cancelLabel, value:null, cancel:true },
+    { label:okLabel, variant:'primary', default:true, returnsInput:true },
+  ]});
+}
+// uiChoose({title, message, choices:[{label,value,variant,default}]}) → value choisie, ou null si annulé
+function uiChoose({title, message='', choices, cancelLabel='Annuler'}){
+  return openDialog({ title, message, actions:[
+    ...choices.map(c=>({ label:c.label, value:c.value, variant:c.variant, default:c.default })),
+    { label:cancelLabel, value:null, cancel:true },
+  ]});
+}
+// clic sur le fond (hors modale) = annuler
+$('#ov-dialog').addEventListener('click', e=>{ if(e.target===$('#ov-dialog')) _dlgClose(_dlgCancelVal); });
 function uid(){ return (crypto.randomUUID ? crypto.randomUUID() : Date.now()+'-'+Math.random().toString(36).slice(2)); }
 function dateKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function today(){ return dateKey(new Date()); }
@@ -821,8 +941,8 @@ function toast(msg, opts){
   t.append(document.createTextNode(msg));
   t.classList.toggle('has-action', !!(opts && opts.onAction));
   if(opts && opts.onAction){
-    const btn = document.createElement('span');
-    btn.className = 'toast-action'; btn.textContent = opts.label || 'Annuler';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'toast-action'; btn.textContent = opts.label || 'Annuler';
     let done = false;
     btn.addEventListener('click', ()=>{ if(done) return; done = true; t.classList.remove('has-action','show'); opts.onAction(); });
     t.append(btn);
@@ -1019,21 +1139,32 @@ const _loaded = load();
 const state = _loaded.data;
 let _cacheReadings = null, _cacheActivity = null;
 function invalidateCache(){ _cacheReadings = null; _cacheActivity = null; }
+let _saveBroken = false;
+// Affiche/masque la bannière persistante d'échec de sauvegarde (stockage plein).
+function setSaveBroken(broken){
+  if(broken === _saveBroken) return;
+  _saveBroken = broken;
+  const bar = $('#save-warning');
+  if(bar) bar.hidden = !broken;
+}
 function save(skipCount){
   invalidateCache();
   try{
     state.meta = state.meta || {changes:0, lastExport:null};
     if(!skipCount) state.meta.changes++;
     localStorage.setItem(LS_KEY, JSON.stringify(state));
+    setSaveBroken(false); // une écriture a réussi : on lève l'alerte
     if(!skipCount && state.meta.changes>0 && state.meta.changes%50===0)
       toast(`💾 ${state.meta.changes} modifications depuis le dernier export — pense à sauvegarder (Stats)`);
     return true;
   }catch(e){
     console.error('save failed', e);
-    toast('⚠ Sauvegarde impossible — exporte tes données !');
+    setSaveBroken(true); // bannière persistante tant que le stockage n'accepte pas d'écriture
+    toast('⚠ Sauvegarde impossible — stockage plein', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
     return false;
   }
 }
+$('#save-warning-export').addEventListener('click', ()=>$('#btn-export').click());
 
 const ui = {
   view:'library', status:'all', types:new Set(), q:'', tag:'', sort:'added', groupSeries:true,
@@ -1128,9 +1259,9 @@ function paceHTML(gi){
   if(gi.delta < 0) return `<span class="pace behind">${-gi.delta} de retard</span>`;
   return `<span class="pace">pile à jour</span>`;
 }
-function setGoal(year){
+async function setGoal(year){
   const cur = state.goals[String(year)] || '';
-  const v = prompt(`Objectif de lectures pour ${year} ? (vide pour retirer)`, cur);
+  const v = await uiPrompt({ title:`Objectif de lecture ${year}`, message:'Nombre de livres à lire cette année. Laisse vide pour retirer l\'objectif.', value:String(cur), placeholder:'ex : 24', type:'number', okLabel:'Enregistrer' });
   if(v===null) return;
   const n = parseInt(v, 10);
   if(!n || n<1) delete state.goals[String(year)];
@@ -1288,15 +1419,17 @@ function setProgress(b, page){
   b.progressLog = (b.progressLog||[]);
   b.progressLog.push({date: today(), page: b.currentPage});
   if(b.progressLog.length>500) b.progressLog = b.progressLog.slice(-500);
-  if(b.pages && b.currentPage >= b.pages){
+  if(b.pages && b.currentPage >= b.pages && b.status!=='read'){
     save();
-    if(confirm(`Terminé « ${fullTitle(b)} » ? Je le marque comme lu avec la date du jour.`)){
-      markRead(b);
-      save();
+    if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
+    scheduleRender();
+    // proposition non bloquante (pas de dialogue qui coupe la saisie)
+    toast(`Dernière page de « ${fullTitle(b)} » 🎉`, { label:'Marquer lu', ms:6000, onAction:()=>{
+      markRead(b); save();
       if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id, {pulse:true});
       scheduleRender();
-      return;
-    }
+    }});
+    return;
   }
   save();
   if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
@@ -1341,10 +1474,12 @@ function renderDemoBanner(){
     $('#view-library').insertBefore(banner, $('#now-reading'));
     banner.addEventListener('click', e=>{
       if(e.target.closest('#demo-clear')){
-        if(!confirm('Retirer tous les livres d\'exemple ?')) return;
-        state.books = state.books.filter(b=>!(b.tags||[]).includes('exemple'));
-        state.lists.forEach(l=> l.bookIds = l.bookIds.filter(id=>state.books.some(b=>b.id===id)));
-        save(); render(); toast('Exemples retirés');
+        (async()=>{
+          if(!await uiConfirm({ title:'Retirer les exemples ?', message:'Les livres de démonstration seront retirés. Tes propres livres ne sont pas touchés.', okLabel:'Retirer' })) return;
+          state.books = state.books.filter(b=>!(b.tags||[]).includes('exemple'));
+          state.lists.forEach(l=> l.bookIds = l.bookIds.filter(id=>state.books.some(b=>b.id===id)));
+          save(); render(); toast('Exemples retirés');
+        })();
       }
     });
   }
@@ -1633,9 +1768,9 @@ function applyBulk(mut, label){
     save(); renderLibrary();
   }});
 }
-function bulkDelete(){
+async function bulkDelete(){
   const books = selectedBooks(); if(!books.length) return;
-  if(!confirm(`Supprimer ${books.length} titre(s) de ta bibliothèque ?`)) return;
+  if(!await uiConfirm({ title:`Supprimer ${books.length} titre(s) ?`, message:'Ils seront retirés de ta bibliothèque et de tes listes. Tu pourras annuler juste après.', okLabel:'Supprimer', danger:true })) return;
   const snaps = books.map(b=>({ b, idx:state.books.indexOf(b), memberOf:state.lists.filter(l=>l.bookIds.includes(b.id)).map(l=>l.id) })).sort((a,c)=>a.idx-c.idx);
   const del = new Set(books.map(b=>b.id));
   state.books = state.books.filter(b=>!del.has(b.id));
@@ -1646,20 +1781,24 @@ function bulkDelete(){
     save(); render();
   }});
 }
-function onBulk(action){
+async function onBulk(action){
   const n = ui.selection.size; if(!n && action!=='exit') return;
   if(action==='exit'){ clearSelection(); renderLibrary(); return; }
   if(action==='del'){ bulkDelete(); return; }
   if(action==='type'){
-    const v = (window.prompt('Type pour ces titres : tape livre, bd ou manga')||'').trim().toLowerCase();
-    if(!['livre','bd','manga'].includes(v)) return;
+    const v = await uiChoose({ title:`Type de ${n} titre(s)`, choices:[
+      { label:'Livre', value:'livre', default:true }, { label:'BD', value:'bd' }, { label:'Manga', value:'manga' },
+    ]});
+    if(!v) return;
     applyBulk({ snapshot:b=>b.type, apply:b=>b.type=v, restore:(b,p)=>b.type=p }, `Type → ${TYPE_LABEL[v]}`);
     return;
   }
   if(action==='status'){
-    const v = (window.prompt('Statut : à lire, en cours, lu, abandonné')||'').trim().toLowerCase();
-    const map = {'à lire':'wishlist','a lire':'wishlist','en cours':'reading','lu':'read','lus':'read','abandonné':'abandoned','abandonne':'abandoned'};
-    const s = map[v]; if(!s) return;
+    const s = await uiChoose({ title:`Statut de ${n} titre(s)`, choices:[
+      { label:'À lire', value:'wishlist' }, { label:'En cours', value:'reading' },
+      { label:'Lu', value:'read', default:true }, { label:'Abandonné', value:'abandoned' },
+    ]});
+    if(!s) return;
     applyBulk({
       snapshot:b=>({status:b.status, readings:b.readings.slice()}),
       apply:b=>{ b.status=s; if(s==='read'){ b.readings=b.readings||[]; if(!b.readings.length) b.readings.push({id:uid(), date:today(), rating:null}); } },
@@ -1668,7 +1807,8 @@ function onBulk(action){
     return;
   }
   if(action==='tag'){
-    const t = (window.prompt('Tag à ajouter à la sélection :')||'').trim().slice(0,60);
+    const raw = await uiPrompt({ title:'Ajouter un tag', message:`Appliqué aux ${n} titre(s) sélectionné(s).`, placeholder:'ex : SF, à relire, coup de cœur', okLabel:'Ajouter' });
+    const t = (raw||'').trim().slice(0,60);
     if(!t) return;
     applyBulk({
       snapshot:b=>b.tags.slice(),
@@ -1678,20 +1818,23 @@ function onBulk(action){
     return;
   }
   if(action==='fav'){
-    const on = confirm('OK = mettre en favori · Annuler = retirer des favoris');
-    applyBulk({ snapshot:b=>b.favorite, apply:b=>b.favorite=on, restore:(b,p)=>b.favorite=p }, on?'Ajoutés aux favoris':'Retirés des favoris');
+    const on = await uiChoose({ title:'Favoris', message:`Pour les ${n} titre(s) sélectionné(s) :`, choices:[
+      { label:'♥ Mettre en favori', value:'on', variant:'primary', default:true }, { label:'♡ Retirer des favoris', value:'off' },
+    ]});
+    if(on===null) return;
+    const fav = (on==='on');
+    applyBulk({ snapshot:b=>b.favorite, apply:b=>b.favorite=fav, restore:(b,p)=>b.favorite=p }, fav?'Ajoutés aux favoris':'Retirés des favoris');
     return;
   }
   if(action==='list'){
     if(!state.lists.length){ toast('Crée d\'abord une liste (onglet Listes)'); return; }
-    const names = state.lists.map((l,i)=>`${i+1}. ${l.name}`).join('\n');
-    const pick = window.prompt('Ajouter à quelle liste ? (numéro)\n'+names);
-    const idx = parseInt(pick,10)-1;
-    const l = state.lists[idx]; if(!l) return;
+    const l = await uiChoose({ title:'Ajouter à une liste', choices: state.lists.map((l,i)=>({ label:l.name, value:l.id, default:i===0 })) });
+    if(!l) return;
+    const list = state.lists.find(x=>x.id===l); if(!list) return;
     const books = selectedBooks(); const added = [];
-    books.forEach(b=>{ if(!l.bookIds.includes(b.id) && l.bookIds.length<MAX_BOOKIDS){ l.bookIds.push(b.id); added.push(b.id); } });
+    books.forEach(b=>{ if(!list.bookIds.includes(b.id) && list.bookIds.length<MAX_BOOKIDS){ list.bookIds.push(b.id); added.push(b.id); } });
     clearSelection(); save(); renderLibrary();
-    toast(`${added.length} ajouté(s) à « ${l.name} »`, {label:'Annuler', onAction:()=>{ l.bookIds = l.bookIds.filter(id=>!added.includes(id)); save(); }});
+    toast(`${added.length} ajouté(s) à « ${list.name} »`, {label:'Annuler', onAction:()=>{ list.bookIds = list.bookIds.filter(id=>!added.includes(id)); save(); }});
     return;
   }
 }
@@ -1705,8 +1848,8 @@ function renderSmartChips(){
   box.innerHTML = state.smartCollections.map(c=>
     `<button class="chip" data-sc="${esc(c.id)}">${esc(c.name)} <span class="sc-del" data-sc-del="${esc(c.id)}" aria-label="Supprimer le filtre">✕</span></button>`).join('');
 }
-$('#lib-savefilter').addEventListener('click', ()=>{
-  const name = prompt('Nom de ce filtre enregistré ? (ex : « Mangas en cours », « SF notés 4+ »)');
+$('#lib-savefilter').addEventListener('click', async ()=>{
+  const name = await uiPrompt({ title:'Enregistrer ce filtre', message:'Retrouve cette combinaison de filtres en un clic depuis ta bibliothèque.', placeholder:'ex : Mangas en cours, SF notés 4+', okLabel:'Enregistrer' });
   if(!name || !name.trim()) return;
   state.smartCollections.push({id:uid(), name:name.trim().slice(0,80), f:{status:ui.status, types:[...ui.types], tag:ui.tag, q:ui.q, sort:ui.sort}});
   if(state.smartCollections.length>MAX_SMART) state.smartCollections = state.smartCollections.slice(-MAX_SMART);
@@ -2095,7 +2238,7 @@ function openDetail(id, opts={}){
   $('#detail-body').innerHTML = `
     <div class="dcover"><div class="cover${b.cover?' zoomable':''}"${b.cover?' data-zoom="1"':''}>${coverHTML(b)}</div></div>
     <div class="dmain">
-      <h3 class="dt">${esc(fullTitle(b))}</h3>
+      <h3 class="dt" id="detail-title">${esc(fullTitle(b))}</h3>
       <div class="da">${esc(authorsStr(b))}</div>
       ${b.series ? `<div class="dserie">Série : ${esc(b.series)}${b.volume!=null ? ` · tome ${b.volume}` : ''}${(()=>{const t=Math.max(...sBooks.map(x=>x.seriesTotal||0)); return t?`/${t}`:'';})()} — ${sBooks.length} dans ta bibliothèque
         ${sBooks.length>1 ? `<button data-open-series="${esc(b.series)}">voir la série →</button>` : ''}</div>` : ''}
@@ -2267,8 +2410,10 @@ $('#detail-body').addEventListener('click', e => {
     return;
   }
   if(e.target.closest('#d-loan-out')){
-    const to = prompt('Prêté à qui ?');
-    if(to && to.trim()){ b.loan = {to:to.trim().slice(0,120), since:today()}; save(); openDetail(b.id); scheduleRender(); }
+    (async()=>{
+      const to = await uiPrompt({ title:'Prêter ce livre', message:'À qui prêtes-tu ce livre ?', placeholder:'Nom de la personne', okLabel:'Enregistrer le prêt' });
+      if(to && to.trim()){ b.loan = {to:to.trim().slice(0,120), since:today()}; save(); openDetail(b.id); scheduleRender(); }
+    })();
     return;
   }
   if(e.target.closest('#d-loan-back')){ b.loan = null; save(); openDetail(b.id); scheduleRender(); toast('Retour enregistré ✓'); return; }
@@ -2403,8 +2548,8 @@ function addNextTome(seriesName, opts={}){
 }
 
 /* =============== Listes & panneau série =============== */
-$('#btn-new-list').addEventListener('click', ()=>{
-  const name = prompt('Nom de la liste (ex : « Pépites SF », « À offrir », « Top 2026 ») :');
+$('#btn-new-list').addEventListener('click', async ()=>{
+  const name = await uiPrompt({ title:'Nouvelle liste', placeholder:'ex : Pépites SF, À offrir, Top 2026', okLabel:'Créer' });
   if(!name || !name.trim()) return;
   state.lists.unshift({id:uid(), name:name.trim().slice(0,150), desc:'', bookIds:[], createdAt:new Date().toISOString()});
   save(); renderLists(); toast('Liste créée ✓');
@@ -2517,13 +2662,17 @@ $('#list-body').addEventListener('click', e => {
   }
   const l = state.lists.find(x=>x.id===ui.listId); if(!l) return;
   if(e.target.closest('#l-rename')){
-    const name = prompt('Nouveau nom :', l.name);
-    if(name && name.trim()){ l.name = name.trim().slice(0,150); save(); openList(l.id); renderLists(); }
+    (async()=>{
+      const name = await uiPrompt({ title:'Renommer la liste', value:l.name, okLabel:'Renommer' });
+      if(name && name.trim()){ l.name = name.trim().slice(0,150); save(); openList(l.id); renderLists(); }
+    })();
     return;
   }
   if(e.target.closest('#l-desc')){
-    const d = prompt('Description de la liste :', l.desc||'');
-    if(d!==null){ l.desc = d.trim().slice(0,500); save(); openList(l.id); renderLists(); }
+    (async()=>{
+      const d = await uiPrompt({ title:'Description de la liste', value:l.desc||'', placeholder:'À quoi sert cette liste ?', okLabel:'Enregistrer' });
+      if(d!==null){ l.desc = d.trim().slice(0,500); save(); openList(l.id); renderLists(); }
+    })();
     return;
   }
   const mv = e.target.closest('[data-mv]');
@@ -2953,7 +3102,7 @@ function queueCovers(pairs){
   };
   next();
 }
-function importCSV(text){
+async function importCSV(text){
   const rows = parseCSV(text);
   if(rows.length < 2){ toast('CSV vide ou illisible'); return; }
   const source = detectSource(rows[0]);
@@ -2967,12 +3116,21 @@ function importCSV(text){
     if(res && res.book.title) parsed.push(res);
   }
   if(!parsed.length){ toast('Aucun livre exploitable dans ce fichier'); return; }
-  const replace = confirm(`${parsed.length} livre(s) trouvé(s) dans ton export ${source==='goodreads'?'Goodreads':'StoryGraph'}.\n\nOK = FUSIONNER avec ta bibliothèque (recommandé).\nAnnuler = tout REMPLACER.`);
+  const choice = await uiChoose({
+    title: `Import ${source==='goodreads'?'Goodreads':'StoryGraph'}`,
+    message: `${parsed.length} livre(s) trouvé(s).\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d'abord ta bibliothèque actuelle — une sauvegarde de secours est conservée (restaurable dans Stats).`,
+    choices: [
+      { label:'Fusionner', value:'merge', variant:'primary', default:true },
+      { label:'Tout remplacer', value:'replace', variant:'danger' },
+    ],
+  });
+  if(choice===null) return; // Annuler / Échap / clic hors modale = AUCUNE écriture
+  const doReplace = (choice==='replace');
   // dédup par titre+auteur+tome (les livres existants n'ont pas d'ISBN persisté) ET par ISBN dans le lot
   const titleKey = b => (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
   const pairs = [];
   let added=0, skipped=0;
-  if(replace===false){
+  if(doReplace){
     // Remplacement : backup d'abord (réutilise le mécanisme d'import JSON)
     const prev = JSON.stringify(state);
     let backedUp=false; try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp=true; }catch(_){}
@@ -3007,12 +3165,12 @@ $('#import-file').addEventListener('change', e => {
   e.target.value = '';
   if(f.size > 25*1024*1024){ toast('Fichier trop volumineux pour un export Tome'); return; }
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try{
       const d = JSON.parse(reader.result);
       const clean = normalizeData(d);
       if(!clean.books.length && !clean.lists.length) throw new Error('vide');
-      if(!confirm(`Importer ${clean.books.length} ouvrage(s) et ${clean.lists.length} liste(s) ? Cela remplace tes données actuelles — une sauvegarde de secours est conservée (restaurable dans Stats).`)) return;
+      if(!await uiConfirm({ title:'Importer cette sauvegarde ?', message:`${clean.books.length} ouvrage(s) et ${clean.lists.length} liste(s). Cela remplace tes données actuelles — une sauvegarde de secours est conservée (restaurable dans Stats).`, okLabel:'Importer et remplacer', danger:true })) return;
       // sauvegarde de secours AVANT tout écrasement ; si le stockage est plein, on télécharge l'ancien état
       const prev = JSON.stringify(state);
       let backedUp = false;
@@ -3029,13 +3187,13 @@ $('#import-file').addEventListener('change', e => {
   reader.readAsText(f);
 });
 function hasRecoverable(){ return !!(localStorage.getItem(LS_KEY+'-backup') || localStorage.getItem(LS_KEY+'-corrupt')); }
-$('#btn-restore').addEventListener('click', ()=>{
+$('#btn-restore').addEventListener('click', async ()=>{
   const backup = localStorage.getItem(LS_KEY+'-backup');
   const corrupt = localStorage.getItem(LS_KEY+'-corrupt');
   if(backup){
     try{
       const clean = normalizeData(JSON.parse(backup));
-      if(!confirm(`Restaurer la sauvegarde d'avant-import (${clean.books.length} ouvrage(s), ${clean.lists.length} liste(s)) ? Tes données actuelles seront remplacées.`)) return;
+      if(!await uiConfirm({ title:'Restaurer la sauvegarde ?', message:`Sauvegarde d'avant-import : ${clean.books.length} ouvrage(s), ${clean.lists.length} liste(s). Tes données actuelles seront remplacées.`, okLabel:'Restaurer', danger:true })) return;
       state.books = clean.books; state.lists = clean.lists; state.goals = clean.goals; state.meta = clean.meta; state.series = clean.series||{}; state.smartCollections = clean.smartCollections||[];
       save(); render(); toast('Sauvegarde restaurée ✓');
     }catch(_){ toast('Sauvegarde illisible'); }
