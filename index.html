@@ -538,6 +538,16 @@ body.selecting .card:hover .qk{opacity:0}
 .profile-head{display:flex; align-items:center; gap:14px; margin-bottom:18px}
 .profile-head .avatar{width:56px; height:56px; border-radius:50%; background:var(--accent-soft); color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:22px}
 .common-badge{display:inline-block; background:var(--accent-soft); color:var(--green); font-size:12px; font-weight:700; padding:3px 10px; border-radius:999px}
+.nav-badge{position:absolute; top:2px; right:0; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--red); color:#fff; font-size:10px; font-weight:800; line-height:16px; text-align:center}
+.affinity-ring{display:flex; align-items:center; gap:12px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-md); padding:12px 14px; margin-bottom:16px}
+.affinity-ring .pct{font-size:26px; font-weight:800; color:var(--green); font-variant-numeric:tabular-nums}
+.acct h4{font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:20px 0 8px}
+.acct h4:first-child{margin-top:4px}
+.acct input, .acct textarea{margin-bottom:8px}
+.acct .danger-zone{border:1px solid color-mix(in srgb,var(--red) 35%,var(--border)); border-radius:var(--r-md); padding:12px 14px; margin-top:8px}
+.cmp-row{display:flex; align-items:center; gap:10px; font-size:13.5px; padding:6px 0; border-bottom:1px solid var(--border)}
+.cmp-row .ct{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.cmp-row .me{color:var(--green)} .cmp-row .them{color:var(--star)}
 
 /* Toast */
 #toast{
@@ -599,7 +609,7 @@ body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions g
       <button data-view="journal">Journal</button>
       <button data-view="lists">Listes</button>
       <button data-view="stats">Stats</button>
-      <button data-view="friends">Amis</button>
+      <button data-view="friends" style="position:relative">Amis<span class="nav-badge" id="nav-friends-badge" hidden></span></button>
     </nav>
     <div class="header-actions">
       <span id="offline-badge" hidden>⚡ Hors ligne</span>
@@ -3580,10 +3590,14 @@ function shareableBooks(){
     };
   }).filter(b=>b.status==='read' || b.rating || b.readDate); // on ne partage pas la pile « à lire » vierge
 }
+function setFriendsBadge(n){
+  const b = $('#nav-friends-badge'); if(!b) return;
+  if(n>0){ b.textContent = n>9?'9+':String(n); b.hidden = false; } else { b.hidden = true; }
+}
 async function socRefresh(){
-  if(!socToken()){ social.me=null; return; }
-  try{ const d = await api('/api/me'); social.me = d.user; }
-  catch(e){ if(/401|Non authentifié/.test(e.message)){ try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; } }
+  if(!socToken()){ social.me=null; setFriendsBadge(0); return; }
+  try{ const d = await api('/api/me'); social.me = d.user; setFriendsBadge(d.pendingRequests||0); }
+  catch(e){ if(/401|Non authentifié/.test(e.message)){ try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; setFriendsBadge(0); } }
 }
 function renderFriends(){
   const box = $('#friends-body');
@@ -3600,11 +3614,73 @@ function renderFriends(){
       <button data-tab="feed" class="${social.tab==='feed'?'on':''}">Fil</button>
       <button data-tab="friends" class="${social.tab==='friends'?'on':''}">Mes amis</button>
       <button data-tab="me" class="${social.tab==='me'?'on':''}">Mon partage</button>
+      <button data-tab="account" class="${social.tab==='account'?'on':''}">Mon compte</button>
     </div>
     <div id="soc-tab"></div>`;
   if(social.tab==='feed') renderFeed();
   else if(social.tab==='friends') renderFriendsList();
+  else if(social.tab==='account') renderAccount();
   else renderMyShare();
+}
+async function renderAccount(){
+  const el = $('#soc-tab');
+  el.innerHTML = `<div class="acct">
+    <h4>Profil</h4>
+    <input id="acc-dn" maxlength="40" value="${esc(social.me.displayName)}" placeholder="Nom affiché" aria-label="Nom affiché">
+    <textarea id="acc-bio" rows="2" maxlength="300" placeholder="Bio (visible par tes amis, optionnelle)">${esc(social.me.bio||'')}</textarea>
+    <button class="btn primary" id="acc-save">Enregistrer le profil</button>
+    <h4>Mot de passe</h4>
+    <input id="acc-cur" type="password" autocomplete="current-password" placeholder="Mot de passe actuel">
+    <input id="acc-new" type="password" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)">
+    <button class="btn" id="acc-pw">Changer le mot de passe</button>
+    <h4>Utilisateurs bloqués</h4>
+    <div id="acc-blocks"><p class="friends-empty" style="padding:8px 0">Chargement…</p></div>
+    <h4>Mes données</h4>
+    <div class="data-actions">
+      <button class="btn" id="acc-export">⬇ Exporter mes données (JSON)</button>
+      <button class="btn" id="acc-logoutall">Se déconnecter partout</button>
+    </div>
+    <h4 style="color:var(--red)">Zone danger</h4>
+    <div class="danger-zone">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La suppression est <b>définitive</b> : ton profil, tes amis et ta bibliothèque partagée seront effacés du serveur. Ta bibliothèque locale, elle, reste sur cet appareil.</p>
+      <button class="btn danger" id="acc-delete">Supprimer définitivement mon compte</button>
+    </div>
+  </div>`;
+  $('#acc-save').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
+    try{ const d = await api('/api/account/profile', {method:'POST', body:{displayName:$('#acc-dn').value, bio:$('#acc-bio').value}}); social.me=d.user; toast('Profil mis à jour ✓'); renderFriends(); }
+    catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); b.disabled=false; } };
+  $('#acc-pw').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
+    try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé — autres appareils déconnectés ✓'); }
+    catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
+    finally{ b.disabled=false; } };
+  $('#acc-export').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
+    try{ const d = await api('/api/account/export'); const full={...d, localLibrary:state.books};
+      const blob=new Blob([JSON.stringify(full,null,2)],{type:'application/json'}); const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob); a.download='tome-mes-donnees-'+social.me.username+'.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+      toast('Données exportées ✓'); }
+    catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
+    finally{ b.disabled=false; } };
+  $('#acc-logoutall').onclick = async ()=>{
+    if(!await uiConfirm({title:'Se déconnecter partout ?', message:'Toutes tes sessions seront fermées, y compris ici.', okLabel:'Déconnecter', danger:true})) return;
+    let ok = true;
+    try{ await api('/api/account/logout-all', {method:'POST'}); }catch(_){ ok = false; }
+    try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); renderFriends();
+    toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici — les autres appareils n\'ont pas pu être joints'); };
+  $('#acc-delete').onclick = async ()=>{
+    if(!await uiConfirm({title:'Supprimer ton compte ?', message:'Action IRRÉVERSIBLE. Ton profil, tes amis et ta bibliothèque partagée seront effacés du serveur. Ta bibliothèque locale reste sur cet appareil.', okLabel:'Continuer', danger:true})) return;
+    const pw = await uiPrompt({title:'Confirme avec ton mot de passe', message:'Tape ton mot de passe pour supprimer définitivement le compte.', type:'password', okLabel:'Supprimer'});
+    if(pw==null) return;
+    try{ await api('/api/account/delete', {method:'POST', body:{password:pw}});
+      try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); renderFriends(); toast('Compte supprimé.'); }
+    catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); } };
+  // liste des bloqués
+  try{
+    const d = await api('/api/blocks');
+    $('#acc-blocks').innerHTML = d.blocked.length
+      ? d.blocked.map(u=>`<div class="frow"><div class="avatar">${esc(initials(u.displayName))}</div><div class="fi"><b>${esc(u.displayName)}</b><span>@${esc(u.username)}</span></div><button class="btn small" data-unblock="${esc(u.username)}">Débloquer</button></div>`).join('')
+      : `<p class="friends-empty" style="padding:8px 0">Personne de bloqué.</p>`;
+    $('#acc-blocks').querySelectorAll('[data-unblock]').forEach(btn=>btn.onclick=async ()=>{ try{ await api('/api/unblock',{method:'POST',body:{username:btn.dataset.unblock}}); renderAccount(); }catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); } });
+  }catch(_){ $('#acc-blocks').innerHTML = `<p class="friends-empty" style="padding:8px 0">—</p>`; }
 }
 function renderAuth(box, mode='login', errMsg=''){
   box.innerHTML = `
@@ -3616,30 +3692,47 @@ function renderAuth(box, mode='login', errMsg=''){
       ${mode==='signup'?`<label for="soc-name">Nom affiché</label><input id="soc-name" placeholder="ex : Lucas">`:''}
       <label for="soc-pass">Mot de passe</label>
       <input id="soc-pass" type="password" autocomplete="${mode==='login'?'current-password':'new-password'}" placeholder="8 caractères minimum">
+      ${mode==='signup'?`<label class="consent-row" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);display:flex;gap:8px;align-items:flex-start;margin-top:12px">
+        <input type="checkbox" id="soc-consent" style="width:auto;margin-top:3px">
+        <span>J'accepte les <a data-legal style="color:var(--green);cursor:pointer">mentions légales et la politique de confidentialité</a>.</span></label>`:''}
       <div class="auth-err">${esc(errMsg)}</div>
       <button class="btn primary" id="soc-submit" style="width:100%; justify-content:center">${mode==='login'?'Connexion':'Créer mon compte'}</button>
       <div class="switch">${mode==='login'
         ? `Pas encore de compte ? <a data-auth="signup">Créer un compte</a>`
         : `Déjà inscrit ? <a data-auth="login">Se connecter</a>`}</div>
     </div>`;
+  // affiche l'erreur SANS re-render (préserve pseudo/mot de passe/nom/consentement déjà saisis)
+  const showErr = m => { const e=$('#friends-body .auth-err'); if(e) e.textContent=m; const s=$('#soc-submit'); if(s){ s.disabled=false; s.textContent = mode==='login'?'Connexion':'Créer mon compte'; } };
   const submit = async ()=>{
     const username = $('#soc-user').value.trim();
     const password = $('#soc-pass').value;
     const displayName = mode==='signup' ? ($('#soc-name').value.trim()||username) : '';
-    if(!username || !password){ renderAuth(box, mode, 'Remplis le pseudo et le mot de passe.'); return; }
+    if(!username || !password){ showErr('Remplis le pseudo et le mot de passe.'); return; }
+    if(mode==='signup' && !$('#soc-consent').checked){ showErr('Tu dois accepter les mentions légales pour créer un compte.'); return; }
     $('#soc-submit').textContent = '…'; $('#soc-submit').disabled = true;
     try{
-      const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body:{username, password, displayName}});
+      const body = mode==='login' ? {username, password} : {username, password, displayName, consent:true};
+      const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
       localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tab='feed'; social.view=null;
-      renderFriends();
+      renderFriends(); setFriendsBadge(d.pendingRequests||0);
     }catch(e){
-      renderAuth(box, mode, e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message);
+      showErr(e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message);
     }
   };
   $('#soc-submit').addEventListener('click', submit);
   $('#soc-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+  const legal = $('#friends-body [data-legal]'); if(legal) legal.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
   $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>renderAuth(box, a.dataset.auth)));
 }
+const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
+
+Responsable de traitement : Lucas Marroig (lucas.marroig@essec.edu).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), le sous-ensemble de bibliothèque que tu choisis de partager, tes liens d'amitié, et ton adresse IP (uniquement pour limiter les abus).
+Finalité : te permettre de retrouver des amis et de partager tes lectures.
+Base légale : ton consentement (recueilli à l'inscription).
+Aucune publicité, aucun traceur, aucune revente. Hébergeur : Cloudflare.
+Conservation : sessions 30 jours ; compte supprimé après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
+Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données), effacement (Supprimer mon compte). Ta bibliothèque privée, elle, reste sur ton appareil et n'est jamais envoyée.`;
 async function renderFeed(){
   const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
   try{
@@ -3691,6 +3784,7 @@ async function loadFriendLists(){
     if(d.outgoing.length){ html += `<h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 8px">Demandes envoyées</h4>`;
       html += d.outgoing.map(p=>person(p, `<span style="font-size:12px;color:var(--faint)">en attente</span><button class="btn small" data-remove="${esc(p.id)}">Annuler</button>`)).join(''); }
     el.innerHTML = html;
+    setFriendsBadge(d.incoming.length); // le compteur reflète les demandes reçues
   }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
 }
 async function renderMyShare(){
@@ -3730,26 +3824,52 @@ async function openProfile(username){
   }catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); }
 }
 function renderProfile(box, d){
-  const mine = new Set(shareableBooks().map(b=>b.key));
+  const myBooks = shareableBooks();
+  const myByKey = new Map(myBooks.map(b=>[b.key, b]));
+  const mine = new Set(myBooks.map(b=>b.key));
   const shelf = d.shelf || [];
   const common = shelf.filter(b=>mine.has(b.book_key)).length;
+  // affinité de goût : livres notés des DEUX côtés
+  const rated = shelf.filter(b=>b.rating!=null && myByKey.has(b.book_key) && myByKey.get(b.book_key).rating!=null)
+    .map(b=>({ title:b.title, mine:myByKey.get(b.book_key).rating, them:b.rating }));
+  let affinity = null;
+  if(rated.length){
+    const avgDiff = rated.reduce((s,r)=>s+Math.abs(r.mine-r.them),0)/rated.length;
+    affinity = Math.round(Math.max(0, 100 - avgDiff/4.5*100));
+  }
+  const hues = {livre:205, bd:28, manga:340};
   box.innerHTML = `
     <button class="btn small" id="prof-back" style="margin-bottom:14px">← Retour</button>
     <div class="profile-head">
       <div class="avatar">${esc(initials(d.user.displayName))}</div>
-      <div><h3 style="font-size:20px">${esc(d.user.displayName)}</h3><div class="muted" style="color:var(--muted)">@${esc(d.user.username)}</div></div>
+      <div style="flex:1;min-width:0">
+        <h3 style="font-size:20px">${esc(d.user.displayName)}</h3>
+        <div class="muted" style="color:var(--muted)">@${esc(d.user.username)}</div>
+      </div>
+      ${d.friendState!=='self' ? `<button class="btn small" data-block="${esc(d.user.username)}" title="Bloquer">🚫</button>` : ''}
     </div>
+    ${d.user.bio ? `<p style="color:var(--muted);font-size:14px;margin-bottom:14px">${esc(d.user.bio)}</p>` : ''}
+    ${affinity!=null ? `<div class="affinity-ring"><span class="pct">${affinity}%</span><div><b>d'affinité de goût</b><div class="muted" style="color:var(--muted);font-size:12.5px">sur ${rated.length} livre(s) noté(s) tous les deux</div></div></div>` : ''}
     ${d.areFriends ? (shelf.length ? `
       <p style="margin-bottom:14px">${shelf.length} titre(s) partagé(s)${common?` · <span class="common-badge">${common} en commun</span>`:''}</p>
+      ${rated.length ? `<div style="margin-bottom:16px">${rated.slice(0,8).map(r=>`<div class="cmp-row"><span class="ct">${esc(r.title)}</span><span class="me" title="ta note">${starsTxt(r.mine)}</span><span style="color:var(--faint)">vs</span><span class="them" title="sa note">${starsTxt(r.them)}</span></div>`).join('')}</div>` : ''}
       <div class="grid">${shelf.map(b=>`
         <div class="card"><div class="cover">
           <span class="badge ${esc(b.type)}">${TYPE_LABEL[b.type]||''}</span>
-          ${b.cover?`<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph" style="background:linear-gradient(160deg,hsl(${({livre:205,bd:28,manga:340}[b.type]??150)},32%,26%),hsl(${({livre:205,bd:28,manga:340}[b.type]??150)},38%,13%))"><div class="ph-t">${esc(b.title)}</div><div class="ph-a">${esc(b.authors)}</div></div>`}
+          ${b.cover?`<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph" style="background:linear-gradient(160deg,hsl(${hues[b.type]??150},32%,26%),hsl(${hues[b.type]??150},38%,13%))"><div class="ph-t">${esc(b.title)}</div><div class="ph-a">${esc(b.authors)}</div></div>`}
           ${mine.has(b.book_key)?`<span class="ribbon done">✓ toi aussi</span>`:''}
         </div><div class="under">${b.rating?`<span class="stars">${starsTxt(b.rating)}</span>`:''}</div></div>`).join('')}</div>`
       : `<p class="friends-empty">${esc(d.user.displayName)} ne partage rien pour le moment.</p>`)
-    : `<p class="friends-empty">Vous n'êtes pas encore amis — sa bibliothèque est privée.</p>`}`;
+    : (d.iBlocked ? `<p class="friends-empty">Tu as bloqué cet utilisateur.</p>` : `<p class="friends-empty">Vous n'êtes pas encore amis — sa bibliothèque est privée.</p>`)}`;
   $('#prof-back').addEventListener('click', ()=>{ social.view=null; social.profile=null; social.tab='friends'; renderFriends(); });
+  const blockBtn = box.querySelector('[data-block]');
+  if(blockBtn) blockBtn.addEventListener('click', async ()=>{
+    if(blockBtn.disabled) return;
+    if(!await uiConfirm({title:'Bloquer '+d.user.displayName+' ?', message:'Vous ne serez plus amis et il ne pourra plus t\'ajouter.', okLabel:'Bloquer', danger:true})) return;
+    blockBtn.disabled = true;
+    try{ await api('/api/block', {method:'POST', body:{username:d.user.username}}); toast('Utilisateur bloqué'); social.view=null; social.profile=null; social.tab='friends'; renderFriends(); }
+    catch(e){ blockBtn.disabled = false; toast(e.message); }
+  });
 }
 // écouteur délégué unique pour toute la vue Amis
 $('#friends-body').addEventListener('click', async e => {
