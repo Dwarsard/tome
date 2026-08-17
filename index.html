@@ -81,6 +81,7 @@ nav button.active{color:var(--green); background:var(--accent-soft); font-weight
   display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:var(--r-sm);
   font-weight:600; font-size:14px; background:var(--surface); border:1px solid var(--border);
 }
+.btn[hidden]{display:none} /* display:inline-flex écraserait l'attribut hidden (styles auteur > UA) */
 .btn:hover{background:var(--surface2); border-color:var(--border-hover)}
 .btn:active{transform:translateY(1px)}
 .btn.primary{background:var(--green-strong); border-color:var(--green-strong); color:var(--on-green)}
@@ -594,6 +595,46 @@ body.selecting .card:hover .qk{opacity:0}
 }
 body:has(.overlay.open) .fab{display:none}
 body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions groupées */
+
+/* ---- Fil vivant : critiques + réactions ♥ ---- */
+.feed-item{align-items:flex-start}
+.feed-review{font-size:12.5px; color:var(--muted); font-style:italic; margin-top:3px;
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden}
+.feed-side{display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0}
+.feed-date{font-size:11px; color:var(--faint); white-space:nowrap}
+.heart-btn{display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border);
+  background:transparent; color:var(--faint); border-radius:999px; padding:3px 10px;
+  font-size:12.5px; cursor:pointer; transition:transform .15s ease, color .15s ease, border-color .15s ease}
+.heart-btn:hover{border-color:var(--border-hover); color:var(--text)}
+.heart-btn.on{color:var(--pink); border-color:color-mix(in srgb, var(--pink) 45%, transparent)}
+.heart-btn:active{transform:scale(1.12)}
+.heart-btn .hn{font-variant-numeric:tabular-nums; font-weight:700}
+.heart-btn .hn:empty{display:none}
+
+/* ---- Streak 🔥 dans le header ---- */
+#btn-streak{width:auto; padding:0 10px; gap:3px; font-weight:700; font-variant-numeric:tabular-nums}
+
+/* ---- Journal : « à la même période l'an dernier » ---- */
+.ago-month h3{display:flex; align-items:center; gap:8px}
+.ago-month{background:var(--bg2); border-radius:var(--r-lg); padding:4px 12px 8px; margin-bottom:18px}
+
+/* ---- Idées du jour ---- */
+.ideas-panel{margin:14px 0; padding:14px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-lg)}
+.ideas-head{font-size:13px; font-weight:700; margin-bottom:10px}
+.ideas-head span{font-weight:400; font-size:12px; color:var(--faint); margin-left:8px}
+.ig-label{font-size:12.5px; color:var(--green); font-weight:600; margin:10px 0 6px}
+.idea-group:first-of-type .ig-label{margin-top:0}
+.ig-items{display:flex; flex-direction:column; gap:6px}
+.idea-card{display:flex; align-items:center; gap:10px; padding:6px 8px; background:var(--surface); border-radius:var(--r-md)}
+.idea-card .mini{width:32px; height:48px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
+.idea-card .mini img{width:100%; height:100%; object-fit:cover}
+.idea-card .ii{flex:1; min-width:0}
+.idea-card .ii b{display:block; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.idea-card .ii span{font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block}
+
+/* ---- Invitation ---- */
+.invite-banner{background:color-mix(in srgb, var(--green) 12%, transparent); border:1px solid color-mix(in srgb, var(--green) 35%, transparent);
+  border-radius:var(--r-md); padding:10px 12px; font-size:13.5px; margin-bottom:14px}
 </style>
 </head>
 <body>
@@ -613,6 +654,7 @@ body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions g
     </nav>
     <div class="header-actions">
       <span id="offline-badge" hidden>⚡ Hors ligne</span>
+      <button class="btn icon" id="btn-streak" hidden>🔥<span id="streak-n"></span></button>
       <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden>▶</button>
       <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème">◐</button>
       <button class="btn primary" id="btn-open-search" aria-label="Ajouter un livre"><span aria-hidden="true">＋</span> <span class="lbl-txt">Ajouter</span></button>
@@ -1164,6 +1206,9 @@ function save(skipCount){
     if(!skipCount) state.meta.changes++;
     localStorage.setItem(LS_KEY, JSON.stringify(state));
     setSaveBroken(false); // une écriture a réussi : on lève l'alerte
+    // toute mutation de données peut changer la série de jours — les chemins rapides
+    // (patchCard, actions rapides) ne repassent pas par render(), donc on rafraîchit ici
+    if(typeof updateStreakPill==='function') updateStreakPill();
     if(!skipCount && state.meta.changes>0 && state.meta.changes%50===0)
       toast(`💾 ${state.meta.changes} modifications depuis le dernier export — pense à sauvegarder (Stats)`);
     return true;
@@ -1179,6 +1224,7 @@ $('#save-warning-export').addEventListener('click', ()=>$('#btn-export').click()
 const ui = {
   view:'library', status:'all', types:new Set(), q:'', tag:'', sort:'added', groupSeries:true,
   defaultStatus:'wishlist', typeMetric:'count',
+  ideas:'ask',                             // idées du jour : 'ask' (proposer) | 'on' (activées) — jamais d'appel API sans opt-in
   selectMode:false, selection:new Set(),   // transitoires : jamais persistés ni sérialisés
   editId:null, detailId:null, listId:null, listMode:'list', seriesName:'', recapYear:new Date().getFullYear(),
   searchFromResult:null, heatYear:new Date().getFullYear(), lastFocus:null,
@@ -1190,6 +1236,7 @@ function persistUI(){
     localStorage.setItem(UI_KEY, JSON.stringify({
       status:ui.status, types:[...ui.types], tag:ui.tag, sort:ui.sort,
       groupSeries:ui.groupSeries, view:ui.view, defaultStatus:ui.defaultStatus, typeMetric:ui.typeMetric,
+      ideas:ui.ideas,
     }));
   }catch(_){}
 }
@@ -1590,6 +1637,122 @@ function recommendations(){
   }
   return out.slice(0,12);
 }
+/* ---- Idées du jour : découverte externe « Comme X et Y », 3 idées, nouvelles chaque jour ----
+   Déterministe par date (même trio toute la journée), cache localStorage (1 requête API max/jour),
+   repli silencieux si aucune note ≥ 4 ou API indisponible. */
+const IDEAS_KEY = 'tome-ideas-v1';
+let _ideasLoading = false, _ideasNextTry = 0; // re-tentative throttlée si les API étaient indisponibles
+function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return Math.abs(h); }
+const bookLibKey = (title, author) => (title+'|'+(author||'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
+// Graines du jour : un auteur aimé (rotation quotidienne) + un tag partagé par ≥2 coups de cœur.
+function ideaSeeds(day){
+  const loved = state.books.filter(b=>b.rating>=4);
+  if(!loved.length) return [];
+  const out = [];
+  const authors = [...new Set(loved.flatMap(b=>b.authors||[]))].filter(Boolean).sort();
+  if(authors.length){
+    const a = authors[hashStr(day+'|a') % authors.length];
+    const ex = loved.find(b=>(b.authors||[]).includes(a));
+    out.push({ q:`inauthor:"${a}"`, fallback:a, label:`Parce que tu as aimé ${ex?fullTitle(ex):a}` });
+  }
+  const byTag = new Map();
+  loved.forEach(b=>(b.tags||[]).forEach(t=>{ if(t==='exemple') return; if(!byTag.has(t)) byTag.set(t,[]); byTag.get(t).push(b); }));
+  const tags = [...byTag.keys()].filter(t=>byTag.get(t).length>=2).sort();
+  if(tags.length){
+    const t = tags[hashStr(day+'|t') % tags.length];
+    const pair = byTag.get(t);
+    out.push({ q:`subject:"${t}"`, fallback:t, label:`Comme ${fullTitle(pair[0])} et ${fullTitle(pair[1])}` });
+  }
+  return out;
+}
+async function fetchIdeas(){
+  // null = pas de graines (aucun appel réseau effectué) ; [] = graines mais API muettes
+  const seeds = ideaSeeds(today()); if(!seeds.length) return null;
+  const mine = new Set(state.books.map(b=>bookLibKey(b.title, (b.authors||[])[0])));
+  const groups = [];
+  for(const s of seeds){
+    let rs = [];
+    try{ rs = await searchGoogleBooks(s.q); }
+    catch(_){ try{ rs = await searchOpenLibrary(s.fallback); }catch(_2){ rs = []; } }
+    const seen = new Set();
+    const items = rs.filter(r=>{
+      const k = bookLibKey(r.title, (r.authors||[])[0]);
+      if(mine.has(k) || seen.has(k) || !cleanCover(r.cover)) return false;
+      seen.add(k); mine.add(k);            // pas de doublon entre les deux groupes
+      return true;
+    }).slice(0,3).map(r=>({ title:r.title, authors:r.authors||[], type:r.type||'livre', year:r.year||null,
+                            pages:r.pages||null, cover:r.cover||'', description:r.description||'' }));
+    if(items.length) groups.push({ label:s.label, items });
+  }
+  return groups;
+}
+let _ideasAskMuted = false; // « Pas maintenant » : on reproposera à la prochaine session, pas avant
+async function renderDailyIdeas(){
+  let box = $('#daily-ideas');
+  if(!box){
+    box = document.createElement('div'); box.id='daily-ideas'; box.className='ideas-panel'; box.hidden=true;
+    $('#discover').after(box);
+    box.addEventListener('click', onIdeaAdd);
+  }
+  if(ui.status!=='all' || ui.q || ui.tag || ui.types.size){ box.hidden=true; return; }
+  // Opt-in OBLIGATOIRE : la fonctionnalité envoie des auteurs/tags aimés à des API externes —
+  // rien ne part sans un accord explicite (la proposition, elle, est 100 % locale).
+  if(ui.ideas!=='on'){
+    if(_ideasAskMuted || !ideaSeeds(today()).length){ box.hidden=true; return; }
+    box.hidden = false;
+    box.innerHTML = `<div class="ideas-head">💡 Idées du jour</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques livres à découvrir, choisis d'après tes coups de cœur.
+      Pour ça, Tome enverra le nom d'un auteur ou d'un tag que tu aimes à Google Books / Open Library (comme lors d'une recherche). Rien d'autre ne quitte ton appareil.</p>
+      <div style="display:flex;gap:8px"><button class="btn small primary" data-ideas-optin>Activer</button>
+      <button class="btn small" data-ideas-later>Pas maintenant</button></div>`;
+    return;
+  }
+  let data = null;
+  try{ data = JSON.parse(localStorage.getItem(IDEAS_KEY)||'null'); }catch(_){}
+  if(!data || data.date!==today() || !Array.isArray(data.groups)){
+    if(_ideasLoading || Date.now() < _ideasNextTry) return;
+    _ideasLoading = true;
+    fetchIdeas().then(groups=>{
+      _ideasLoading = false;
+      if(groups===null) return;                                  // pas de graines : aucun appel fait, rien à throttler
+      // fournée vide (API indisponibles) : ne PAS figer la journée — on retentera dans 30 min
+      if(!groups.length){ _ideasNextTry = Date.now() + 30*60*1000; return; }
+      try{ localStorage.setItem(IDEAS_KEY, JSON.stringify({date:today(), groups})); }catch(_){}
+      if(ui.view==='library') renderDailyIdeas();
+    }).catch(()=>{ _ideasLoading = false; _ideasNextTry = Date.now() + 30*60*1000; });
+    return; // rien à montrer tant que la fournée du jour n'est pas prête
+  }
+  // filtre au RENDU contre la bibliothèque actuelle : un livre ajouté disparaît des idées
+  // (sinon le re-rendu ressusciterait son bouton « À lire » → doublons possibles)
+  const libKeys = new Set(state.books.map(b=>bookLibKey(b.title, (b.authors||[])[0])));
+  const groups = data.groups
+    .map(g=>({ label:g.label, items:(g.items||[]).filter(r=>!libKeys.has(bookLibKey(r.title, (r.authors||[])[0]))) }))
+    .filter(g=>g.items.length);
+  if(!groups.length){ box.hidden=true; return; }
+  window._ideaGroups = groups;
+  box.hidden = false;
+  box.innerHTML = `<div class="ideas-head">💡 Idées du jour <span>de nouvelles suggestions chaque jour</span></div>` +
+    groups.map((g,gi)=>`<div class="idea-group"><div class="ig-label">${esc(g.label)}</div><div class="ig-items">` +
+      g.items.map((r,i)=>{ const c = cleanCover(r.cover); return `<div class="idea-card">
+        <div class="mini">${c?`<img src="${esc(c)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
+        <div class="ii"><b>${esc(r.title)}</b><span>${esc((r.authors||[]).join(', '))}</span></div>
+        <button class="btn small" data-idea="${gi}:${i}" title="Ajouter à ma pile à lire">＋ À lire</button>
+      </div>`; }).join('') + `</div></div>`).join('');
+}
+function onIdeaAdd(e){
+  if(e.target.closest('[data-ideas-optin]')){ ui.ideas='on'; persistUI(); renderDailyIdeas(); return; }
+  if(e.target.closest('[data-ideas-later]')){ _ideasAskMuted = true; renderDailyIdeas(); return; }
+  const btn = e.target.closest('[data-idea]'); if(!btn || btn.disabled) return;
+  const [gi, i] = btn.dataset.idea.split(':').map(Number);
+  const r = ((window._ideaGroups||[])[gi]||{items:[]}).items[i]; if(!r) return;
+  const pt = parseTome(r.title) || {};
+  const b = newBook({ title:r.title, authors:r.authors||[], type:r.type||'livre', year:r.year||null, pages:r.pages||null,
+    cover:cleanCover(r.cover||''), synopsis:cleanSynopsis(r.description||''), status:'wishlist',
+    series:pt.series||'', volume:pt.volume ?? null });
+  state.books.unshift(b); save(); scheduleRender();
+  btn.textContent = 'Ajouté ✓'; btn.disabled = true;
+  toast('Ajouté à ta pile à lire ✓', {label:'✎ Modifier', onAction:()=>openEdit(b.id)});
+}
 function renderDiscover(){
   let strip = $('#discover');
   if(!strip){
@@ -1597,8 +1760,9 @@ function renderDiscover(){
     $('#now-reading').after(strip);
     strip.addEventListener('click', e => { const dc = e.target.closest('.now-card'); if(dc) openDetail(dc.dataset.id); });
   }
-  if(ui.status!=='all' || ui.q || ui.tag || ui.types.size){ strip.hidden=true; strip.innerHTML=''; return; }
+  if(ui.status!=='all' || ui.q || ui.tag || ui.types.size){ strip.hidden=true; strip.innerHTML=''; renderDailyIdeas(); return; }
   const recs = recommendations();
+  renderDailyIdeas();
   if(!recs.length){ strip.hidden=true; strip.innerHTML=''; return; }
   strip.hidden=false;
   strip.innerHTML = `<div style="flex:0 0 auto; align-self:center; font-size:12px; color:var(--faint); text-transform:uppercase; letter-spacing:.08em; padding-right:4px">À découvrir</div>` +
@@ -1909,7 +2073,24 @@ function renderJournal(){
     if(!groups.has(key)) groups.set(key, []);
     groups.get(key).push(e);
   }
+  // « À la même période l'an dernier » : lectures dans une fenêtre de ±15 jours autour
+  // d'aujourd'hui moins un an — petit moment de nostalgie façon « souvenirs ».
   let html = '';
+  const _past = new Date(); _past.setFullYear(_past.getFullYear()-1);
+  const _lo = new Date(_past); _lo.setDate(_lo.getDate()-15);
+  const _hi = new Date(_past); _hi.setDate(_hi.getDate()+15);
+  const ago = entries.filter(e=>e.date>=dateKey(_lo) && e.date<=dateKey(_hi));
+  if(ago.length){
+    html += `<div class="month ago-month"><h3>📅 À la même période l'an dernier</h3>` + ago.slice(0,6).map(e=>{
+      const b = e.b, d = new Date(e.date+'T12:00:00'), shown = e.rating ?? b.rating;
+      return `<div class="entry" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, lu le ${fmtDate(e.date)}">
+        <div class="day"><b>${d.getDate()}</b><span>${d.toLocaleDateString('fr-FR',{weekday:'short'})}</span></div>
+        <div class="mini">${coverHTML(b, true)}</div>
+        <div class="einfo"><div class="et">${esc(fullTitle(b))}</div><div class="ea">${esc(authorsStr(b))}</div></div>
+        <div class="emeta">${shown?`<span class="stars">${starsTxt(shown)}</span>`:''}</div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
   for(const [key, list] of groups){
     const label = new Date(key+'-15T12:00:00').toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
     html += `<div class="month"><h3>${label}</h3>` + list.map(e => {
@@ -2724,6 +2905,17 @@ function activityByDay(){
   for(const b of state.books) for(const p of (b.progressLog||[])) map[p.date] = (map[p.date]||0)+1;
   return (_cacheActivity = map);
 }
+// Pill 🔥 du header : rend la série de jours visible (elle existait, cachée dans Stats).
+function updateStreakPill(){
+  const el = $('#btn-streak'); if(!el) return;
+  const {cur} = streaks();
+  if(cur >= 2){
+    el.hidden = false;
+    $('#streak-n').textContent = cur;
+    const t = `${cur} jours de lecture d'affilée — continue !`;
+    el.title = t; el.setAttribute('aria-label', t);
+  } else el.hidden = true;
+}
 function streaks(){
   const days = Object.keys(activityByDay()).sort();
   if(!days.length) return {cur:0, max:0};
@@ -3441,9 +3633,17 @@ document.addEventListener('keydown', e => {
 // Navigation par hash entre les onglets et deep-link #book/<id>
 window.addEventListener('popstate', ()=>applyHashView());
 window.addEventListener('hashchange', ()=>applyHashView());
+const INVITE_RE = /^invite\/([a-z0-9_.-]{3,20})$/i; // même contrainte que les pseudos serveur
 function applyHashView(hash){
   if($$('.overlay.open').length){ closeOverlays(); return; }
   const h = (hash!=null ? hash : location.hash).replace(/^#/, '');
+  const inv = h.match(INVITE_RE);
+  if(inv){
+    social.invite = inv[1].toLowerCase();
+    try{ history.replaceState(history.state, '', location.pathname + location.search); }catch(_){} // ne pas re-déclencher au refresh
+    selectView('friends');
+    return;
+  }
   const m = h.match(/^book\/(.+)$/);
   if(m){
     let id; try{ id = decodeURIComponent(m[1]); }catch(_){ return; }
@@ -3602,6 +3802,7 @@ async function socRefresh(){
 function renderFriends(){
   const box = $('#friends-body');
   if(!social.me){ renderAuth(box); return; }
+  if(social.invite) processInvite(); // invitation en attente traitée dès qu'on est connecté
   if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
   box.innerHTML = `
     <div class="me-bar">
@@ -3682,8 +3883,34 @@ async function renderAccount(){
     $('#acc-blocks').querySelectorAll('[data-unblock]').forEach(btn=>btn.onclick=async ()=>{ try{ await api('/api/unblock',{method:'POST',body:{username:btn.dataset.unblock}}); renderAccount(); }catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); } });
   }catch(_){ $('#acc-blocks').innerHTML = `<p class="friends-empty" style="padding:8px 0">—</p>`; }
 }
+// ---- Invitation par lien : #invite/<pseudo> ----
+// Le lien ne fait que pré-remplir une demande d'ami confirmée par l'utilisateur ;
+// aucun nouveau point d'entrée serveur (la demande passe par /api/friends/request).
+async function shareInvite(){
+  if(!social.me) return;
+  const url = location.origin + location.pathname + '#invite/' + encodeURIComponent(social.me.username);
+  if(navigator.share){
+    try{ await navigator.share({ title:'Tome', text:'Rejoins-moi sur Tome pour partager nos lectures !', url }); return; }
+    catch(e){ if(e && e.name==='AbortError') return; /* sinon : repli presse-papiers */ }
+  }
+  try{ await navigator.clipboard.writeText(url); toast('Lien d\'invitation copié ✓ — envoie-le à un ami'); }
+  catch(_){ openDialog({ title:'Mon lien d\'invitation', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}] }); }
+}
+async function processInvite(){
+  const uname = social.invite; social.invite = null;
+  if(!social.me || !uname) return;
+  if(uname === social.me.username){ toast('C\'est ton propre lien d\'invitation 😄'); return; }
+  const ok = await uiConfirm({ title:'Invitation', message:`Envoyer une demande d'ami à @${uname} ?`, okLabel:'Envoyer la demande' });
+  if(!ok) return;
+  try{
+    const r = await api('/api/friends/request', {method:'POST', body:{username:uname}});
+    toast(r.status==='accepted' ? 'Vous êtes maintenant amis ✓' : 'Demande envoyée ✓');
+    if(social.tab==='friends') loadFriendLists();
+  }catch(e){ toast(e.message==='offline' ? 'Serveur injoignable' : e.message); }
+}
 function renderAuth(box, mode='login', errMsg=''){
   box.innerHTML = `
+    ${social.invite ? `<div class="invite-banner">💌 <b>@${esc(social.invite)}</b> t'invite sur Tome — connecte-toi ou crée un compte pour l'ajouter en ami.</div>` : ''}
     <div class="auth-card">
       <h3>${mode==='login'?'Se connecter':'Créer un compte'}</h3>
       <p class="sub">Retrouve tes amis, compare vos lectures et suis leurs coups de cœur. Ta bibliothèque privée reste sur ton appareil ; seul ce que tu choisis de partager est synchronisé.</p>
@@ -3714,7 +3941,8 @@ function renderAuth(box, mode='login', errMsg=''){
       const body = mode==='login' ? {username, password} : {username, password, displayName, consent:true};
       const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
       localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tab='feed'; social.view=null;
-      renderFriends(); setFriendsBadge(d.pendingRequests||0);
+      renderFriends();
+      socRefresh(); // login/signup ne renvoient pas pendingRequests — /api/me si, pour le badge
     }catch(e){
       showErr(e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message);
     }
@@ -3727,7 +3955,7 @@ function renderAuth(box, mode='login', errMsg=''){
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), le sous-ensemble de bibliothèque que tu choisis de partager, tes liens d'amitié, et ton adresse IP (uniquement pour limiter les abus).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), le sous-ensemble de bibliothèque que tu choisis de partager, tes liens d'amitié, tes réactions ♥ aux lectures de tes amis (horodatées), et ton adresse IP (uniquement pour limiter les abus).
 Finalité : te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l'inscription).
 Aucune publicité, aucun traceur, aucune revente. Hébergeur : Cloudflare.
@@ -3738,16 +3966,46 @@ async function renderFeed(){
   try{
     const d = await api('/api/feed');
     if(!d.feed.length){ el.innerHTML = `<p class="friends-empty">Rien pour l'instant. Ajoute des amis et invite-les à partager leurs lectures.</p>`; return; }
-    el.innerHTML = d.feed.map(x=>`
+    el.innerHTML = d.feed.map(x=>{
+      const rv = String(x.review||'').trim();
+      return `
       <div class="feed-item">
         <div class="mini">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
         <div class="fx">
           <div class="who">${esc(x.display_name)} <span style="color:var(--muted);font-weight:400">a lu</span></div>
           <div class="what">${esc(x.title)}${x.rating?` · ${starsTxt(x.rating)}`:''}</div>
+          ${rv?`<div class="feed-review">« ${esc(rv.slice(0,280))}${rv.length>280?'…':''} »</div>`:''}
         </div>
-        <div style="font-size:11px;color:var(--faint);white-space:nowrap">${x.read_date?esc(fmtDate(x.read_date)):''}</div>
-      </div>`).join('');
+        <div class="feed-side">
+          <div class="feed-date">${x.read_date?esc(fmtDate(x.read_date)):''}</div>
+          <button class="heart-btn${x.i_hearted?' on':''}" data-react="${esc(x.book_key)}" data-owner="${esc(x.username)}"
+            aria-pressed="${x.i_hearted?'true':'false'}" title="J'aime" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts||''}</span></button>
+        </div>
+      </div>`;}).join('');
+    // délégué, une seule fois par élément #soc-tab (le flag meurt avec le nœud)
+    if(!el.dataset.feedBound){ el.dataset.feedBound = '1'; el.addEventListener('click', onFeedHeart); }
   }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
+}
+// le nom accessible remplace le contenu du bouton : il doit donc porter aussi le compteur
+const heartLabel = n => n ? `J'aime cette lecture — ${n} j'aime` : `J'aime cette lecture`;
+// Bascule ♥ optimiste : l'UI répond tout de suite, puis se cale sur la réponse serveur (ou revient en arrière).
+async function onFeedHeart(e){
+  const hb = e.target.closest('[data-react]'); if(!hb || hb.disabled) return;
+  hb.disabled = true;
+  const on = !hb.classList.contains('on');
+  const cnt = hb.querySelector('.hn');
+  const prev = +(cnt.textContent||0);
+  const setN = n => { cnt.textContent = n || ''; hb.setAttribute('aria-label', heartLabel(n)); };
+  hb.classList.toggle('on', on); hb.setAttribute('aria-pressed', on?'true':'false');
+  setN(on ? prev+1 : Math.max(0, prev-1));
+  try{
+    const r = await api('/api/react', {method:'POST', body:{username: hb.dataset.owner, bookKey: hb.dataset.react, on}});
+    setN(r.hearts);
+  }catch(err){
+    hb.classList.toggle('on', !on); hb.setAttribute('aria-pressed', !on?'true':'false');   // retour arrière
+    setN(prev);
+    toast(err.message==='offline' ? 'Serveur injoignable' : err.message);
+  }finally{ hb.disabled = false; }
 }
 async function renderFriendsList(){
   const el = $('#soc-tab');
@@ -3755,8 +4013,10 @@ async function renderFriendsList(){
     <div class="add-friend">
       <input id="friend-username" placeholder="Ajouter par pseudo…" aria-label="Pseudo à ajouter">
       <button class="btn primary" id="friend-add">Ajouter</button>
+      <button class="btn" id="friend-invite" title="Partager mon lien d'invitation">🔗 Inviter</button>
     </div>
     <div id="friend-lists"><p class="friends-empty">Chargement…</p></div>`;
+  $('#friend-invite').addEventListener('click', shareInvite);
   const doAdd = async ()=>{
     const u = $('#friend-username').value.trim(); if(!u) return;
     const btn = $('#friend-add'); if(btn.disabled) return; btn.disabled = true;
@@ -3798,7 +4058,7 @@ async function renderMyShare(){
       <button data-mode="ratings" class="${mode==='ratings'?'on':''}">Notes seules</button>
       <button data-mode="none" class="${mode==='none'?'on':''}">Rien</button>
     </div>
-    <p style="font-size:12.5px;color:var(--faint);margin-bottom:16px">« Tout » : titres, notes, critiques, dates. « Notes seules » : sans tes critiques. « Rien » : profil masqué.</p>
+    <p style="font-size:12.5px;color:var(--faint);margin-bottom:16px">« Tout » : titres, notes, critiques, dates. « Notes seules » : sans tes critiques. « Rien » : profil masqué — ton étagère partagée et les ♥ reçus sont effacés du serveur.</p>
     <button class="btn primary" id="share-sync">↻ Synchroniser mon profil</button>
     <div id="share-status" style="font-size:13px;color:var(--muted);margin-top:12px"></div>`;
   let chosen = mode;
@@ -3899,6 +4159,7 @@ $('#friends-body').addEventListener('click', async e => {
     if(['added','rating','title','author','year'].includes(saved.sort)) ui.sort = saved.sort;
     if(typeof saved.groupSeries==='boolean') ui.groupSeries = saved.groupSeries;
     if(['wishlist','reading','read'].includes(saved.defaultStatus)) ui.defaultStatus = saved.defaultStatus;
+    if(['ask','on'].includes(saved.ideas)) ui.ideas = saved.ideas;
     if(['count','pages'].includes(saved.typeMetric)) ui.typeMetric = saved.typeMetric;
     if(['library','journal','lists','stats','friends'].includes(saved.view)) ui.view = saved.view;
   }
@@ -3917,8 +4178,10 @@ if(['library','journal','lists','stats','friends'].includes(_hash)) ui.view = _h
 selectView(ui.view);
 refreshResume();
 const _origRender = render;
-render = function(){ _origRender(); refreshResume(); };
-if(_initHash.startsWith('#book/')) applyHashView(_initHash);
+render = function(){ _origRender(); refreshResume(); updateStreakPill(); };
+updateStreakPill();
+$('#btn-streak').addEventListener('click', ()=>selectView('stats'));
+if(_initHash.startsWith('#book/') || _initHash.startsWith('#invite/')) applyHashView(_initHash);
 if(_loaded.migrated) save(true); // fige la migration depuis l'ancienne clé, sans compter comme une modification
 if(_loaded.notice) setTimeout(()=>toast(_loaded.notice), 600);
 // restaure la session sociale si un token existe, et rafraîchit la vue Amis si elle est ouverte
@@ -3985,6 +4248,13 @@ if(location.search.includes('selftest')){
   assert('series orphan purged', !srd.series['orpheline']);
   const sre = normalizeData({ books:[], series:{ 'x':{rating:null, review:'', favorite:false, moods:[]} } });
   assert('series empty entry dropped', !sre.series['x']);
+  // v7 : idées du jour + invitation par lien
+  assert('hashStr déterministe', hashStr('2026-08-16|a')===hashStr('2026-08-16|a'));
+  assert('hashStr varie selon la clé', hashStr('2026-08-16|a')!==hashStr('2026-08-16|t'));
+  assert('hashStr positif', hashStr('x')>=0 && hashStr('')>=0);
+  assert('INVITE_RE pseudo valide', (('invite/lucas_bd'.match(INVITE_RE))||[])[1]==='lucas_bd');
+  assert('INVITE_RE rejette pseudo invalide', 'invite/<script>'.match(INVITE_RE)===null && 'invite/ab'.match(INVITE_RE)===null);
+  assert('bookLibKey normalise', bookLibKey('Dune ', 'Frank Herbert')===bookLibKey('dune', 'frank herbert'));
   console.log(`Tome selftest — ${pass} ✓ / ${fail} ✗`);
   toast(`Selftest : ${pass} ✓ / ${fail} ✗`);
 }
