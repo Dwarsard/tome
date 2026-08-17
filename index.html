@@ -611,6 +611,25 @@ body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions g
 .heart-btn .hn{font-variant-numeric:tabular-nums; font-weight:700}
 .heart-btn .hn:empty{display:none}
 
+/* ---- Réponses 💬 sous les entrées du fil ---- */
+.feed-cell{margin-bottom:8px}
+.feed-cell .feed-item{margin-bottom:0}
+.cmt-btn{font-size:12px}
+.feed-thread{margin:2px 0 0 46px; padding:8px 10px; background:var(--surface); border-radius:0 0 var(--r-md) var(--r-md)}
+.cmt-row{display:flex; align-items:flex-start; gap:8px; padding:5px 0}
+.avatar.sm{width:22px; height:22px; font-size:11px; flex-shrink:0}
+.cmt-body{flex:1; min-width:0; font-size:13px; line-height:1.45; overflow-wrap:anywhere}
+.cmt-date{font-size:11px; color:var(--faint); margin-left:6px; white-space:nowrap}
+.cmt-del{background:none; border:none; color:var(--faint); font-size:15px; cursor:pointer; padding:0 4px; line-height:1}
+.cmt-del:hover{color:var(--red)}
+.cmt-none{font-size:12.5px; color:var(--faint); padding:4px 0}
+.cmt-compose{display:flex; gap:8px; margin-top:6px}
+.cmt-compose .cmt-input{flex:1; min-width:0; font-size:14px; padding:7px 10px; border-radius:var(--r-sm); border:1px solid var(--border); background:var(--bg2); color:var(--text)}
+
+/* ---- « Chez tes amis » (fiche livre) ---- */
+.dfriend{display:flex; align-items:center; gap:8px; padding:4px 0; font-size:13.5px}
+.df-none{color:var(--faint); font-size:12px}
+
 /* ---- Streak 🔥 dans le header ---- */
 #btn-streak{width:auto; padding:0 10px; gap:3px; font-weight:700; font-variant-numeric:tabular-nums}
 
@@ -2459,6 +2478,8 @@ function openDetail(id, opts={}){
         <button class="heart ${b.favorite?'on':''}" id="d-fav" title="Favori" aria-label="Favori" aria-pressed="${b.favorite}">♥</button>
       </div>
 
+      <div class="dblock" id="d-friends" hidden></div>
+
       <div class="dblock">
         <label for="d-review">Ma critique</label>
         <textarea id="d-review" rows="3" placeholder="${opts.pulse ? 'Et alors, verdict ?' : 'Qu\'est-ce que tu en as pensé ?'}">${esc(b.review||'')}</textarea>
@@ -2537,6 +2558,32 @@ function openDetail(id, opts={}){
       </div>
     </div>`;
   openOverlay('#ov-detail');
+  loadDetailFriends(b);
+}
+// « Chez tes amis » : lectures croisées sur la fiche — silencieux si déconnecté,
+// hors-ligne, ou si aucun ami ne partage ce livre (la fiche reste 100 % locale sinon).
+// GARDE VIE PRIVÉE : la clé du livre ne part au serveur QUE si ce livre appartient au
+// sous-ensemble partageable (même prédicat que shareableBooks) ET que le partage est actif —
+// jamais pour la wishlist, jamais en mode « rien » : le serveur n'apprend rien qu'il ne
+// connaisse déjà par la synchro. Cache 10 min : les interactions de la fiche ne re-fetchent pas.
+const _bookFriendsCache = new Map();
+async function loadDetailFriends(b){
+  if(!social.me || social.me.shareMode==='none') return;
+  const lastRead = (b.readings||[]).map(r=>r.date).sort().pop() || '';
+  if(!(b.status==='read' || b.rating || lastRead)) return; // hors du périmètre partageable → 100 % local
+  const key = shelfKey(b);
+  try{
+    const hit = _bookFriendsCache.get(key);
+    const d = (hit && Date.now()-hit.at < 10*60*1000) ? hit.d
+      : await api('/api/book-friends?k='+encodeURIComponent(key));
+    _bookFriendsCache.set(key, {at: (hit && Date.now()-hit.at < 10*60*1000) ? hit.at : Date.now(), d});
+    if(ui.detailId!==b.id || !d.friends || !d.friends.length) return;
+    const box = $('#d-friends'); if(!box) return; // la fiche a pu être fermée/re-rendue entre-temps
+    box.hidden = false;
+    box.innerHTML = `<label>Chez tes amis</label>` + d.friends.map(f=>
+      `<div class="dfriend"><span class="avatar sm">${esc(initials(f.displayName))}</span><b>${esc(f.displayName)}</b>${
+        f.rating ? `<span class="stars">${starsTxt(f.rating)}</span>` : `<span class="df-none">pas encore noté</span>`}</div>`).join('');
+  }catch(_){ /* silencieux : la fiche reste purement locale */ }
 }
 
 // Toutes les interactions de la fiche : UN SEUL écouteur délégué, le livre est résolu via ui.detailId.
@@ -3779,10 +3826,13 @@ async function api(path, opts={}){
   return data;
 }
 const initials = s => (String(s||'?').trim()[0]||'?').toUpperCase();
+// clé stable d'un livre côté social — DOIT rester identique entre la synchro (shareableBooks)
+// et les lectures croisées (« chez tes amis »), sinon les correspondances se perdent
+function shelfKey(b){ return (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,''); }
 // sous-ensemble partageable de la bibliothèque
 function shareableBooks(){
   return state.books.map(b=>{
-    const key = (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
+    const key = shelfKey(b);
     const lastRead = (b.readings||[]).map(r=>r.date).sort().pop() || '';
     return {
       key, title:fullTitle(b), authors:authorsStr(b), type:b.type, series:b.series||'', volume:b.volume,
@@ -3796,7 +3846,8 @@ function setFriendsBadge(n){
 }
 async function socRefresh(){
   if(!socToken()){ social.me=null; setFriendsBadge(0); return; }
-  try{ const d = await api('/api/me'); social.me = d.user; setFriendsBadge(d.pendingRequests||0); }
+  try{ const d = await api('/api/me'); social.me = d.user; social.tosOutdated = !!d.tosOutdated; setFriendsBadge(d.pendingRequests||0);
+       if(social.tosOutdated && ui.view==='friends') renderFriends(); }
   catch(e){ if(/401|Non authentifié/.test(e.message)){ try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; setFriendsBadge(0); } }
 }
 function renderFriends(){
@@ -3805,6 +3856,9 @@ function renderFriends(){
   if(social.invite) processInvite(); // invitation en attente traitée dès qu'on est connecté
   if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
   box.innerHTML = `
+    ${social.tosOutdated ? `<div class="invite-banner" id="tos-banner">📄 Les mentions légales ont été mises à jour (ajout : réactions ♥ et réponses).
+      <a data-legal-view style="color:var(--green);cursor:pointer;text-decoration:underline">Les lire</a>
+      <button class="btn small primary" id="tos-accept" style="margin-left:8px">J'accepte</button></div>` : ''}
     <div class="me-bar">
       <div class="avatar">${esc(initials(social.me.displayName))}</div>
       <div><b>${esc(social.me.displayName)}</b><div class="muted">@${esc(social.me.username)}</div></div>
@@ -3818,6 +3872,14 @@ function renderFriends(){
       <button data-tab="account" class="${social.tab==='account'?'on':''}">Mon compte</button>
     </div>
     <div id="soc-tab"></div>`;
+  const tosA = $('#tos-accept');
+  if(tosA) tosA.addEventListener('click', async ()=>{
+    if(tosA.disabled) return; tosA.disabled = true;
+    try{ await api('/api/account/accept-tos', {method:'POST', body:{}}); social.tosOutdated = false; toast('Merci ✓'); const bn=$('#tos-banner'); if(bn) bn.remove(); }
+    catch(e){ tosA.disabled = false; toast(e.message==='offline'?'Serveur injoignable':e.message); }
+  });
+  const tosL = box.querySelector('[data-legal-view]');
+  if(tosL) tosL.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
   if(social.tab==='feed') renderFeed();
   else if(social.tab==='friends') renderFriendsList();
   else if(social.tab==='account') renderAccount();
@@ -3840,6 +3902,7 @@ async function renderAccount(){
     <div class="data-actions">
       <button class="btn" id="acc-export">⬇ Exporter mes données (JSON)</button>
       <button class="btn" id="acc-logoutall">Se déconnecter partout</button>
+      <button class="btn" id="acc-legal">📄 Mentions légales</button>
     </div>
     <h4 style="color:var(--red)">Zone danger</h4>
     <div class="danger-zone">
@@ -3861,6 +3924,7 @@ async function renderAccount(){
       toast('Données exportées ✓'); }
     catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
     finally{ b.disabled=false; } };
+  $('#acc-legal').onclick = ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]});
   $('#acc-logoutall').onclick = async ()=>{
     if(!await uiConfirm({title:'Se déconnecter partout ?', message:'Toutes tes sessions seront fermées, y compris ici.', okLabel:'Déconnecter', danger:true})) return;
     let ok = true;
@@ -3955,7 +4019,7 @@ function renderAuth(box, mode='login', errMsg=''){
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), le sous-ensemble de bibliothèque que tu choisis de partager, tes liens d'amitié, tes réactions ♥ aux lectures de tes amis (horodatées), et ton adresse IP (uniquement pour limiter les abus).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), le sous-ensemble de bibliothèque que tu choisis de partager, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), et ton adresse IP (uniquement pour limiter les abus).
 Finalité : te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l'inscription).
 Aucune publicité, aucun traceur, aucune revente. Hébergeur : Cloudflare.
@@ -3966,28 +4030,116 @@ async function renderFeed(){
   try{
     const d = await api('/api/feed');
     if(!d.feed.length){ el.innerHTML = `<p class="friends-empty">Rien pour l'instant. Ajoute des amis et invite-les à partager leurs lectures.</p>`; return; }
-    el.innerHTML = d.feed.map(x=>{
+    el.innerHTML = d.feed.map((x,fi)=>{
       const rv = String(x.review||'').trim();
+      const isMe = social.me && x.uid===social.me.id; // ma propre lecture : pas d'auto-cœur, mais je vois et modère les réponses
       return `
+      <div class="feed-cell">
       <div class="feed-item">
         <div class="mini">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
         <div class="fx">
-          <div class="who">${esc(x.display_name)} <span style="color:var(--muted);font-weight:400">a lu</span></div>
+          <div class="who">${isMe?'Toi':esc(x.display_name)} <span style="color:var(--muted);font-weight:400">${isMe?'as lu':'a lu'}</span></div>
           <div class="what">${esc(x.title)}${x.rating?` · ${starsTxt(x.rating)}`:''}</div>
           ${rv?`<div class="feed-review">« ${esc(rv.slice(0,280))}${rv.length>280?'…':''} »</div>`:''}
         </div>
         <div class="feed-side">
           <div class="feed-date">${x.read_date?esc(fmtDate(x.read_date)):''}</div>
-          <button class="heart-btn${x.i_hearted?' on':''}" data-react="${esc(x.book_key)}" data-owner="${esc(x.username)}"
-            aria-pressed="${x.i_hearted?'true':'false'}" title="J'aime" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts||''}</span></button>
+          <div style="display:flex;gap:6px">
+            ${isMe ? (x.hearts?`<span class="heart-btn on" style="cursor:default" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts}</span></span>`:'') : `
+            <button class="heart-btn${x.i_hearted?' on':''}" data-react="${esc(x.book_key)}" data-owner="${esc(x.username)}"
+              aria-pressed="${x.i_hearted?'true':'false'}" title="J'aime" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts||''}</span></button>`}
+            <button class="heart-btn cmt-btn" data-thread="${esc(x.username)}" data-key="${esc(x.book_key)}"
+              aria-expanded="false" aria-controls="feed-thread-${fi}" title="Réponses" aria-label="${x.comments?`Réponses — ${x.comments}`:'Répondre'}">💬<span class="hn">${x.comments||''}</span></button>
+          </div>
         </div>
+      </div>
+      <div class="feed-thread" id="feed-thread-${fi}" hidden></div>
       </div>`;}).join('');
     // délégué, une seule fois par élément #soc-tab (le flag meurt avec le nœud)
-    if(!el.dataset.feedBound){ el.dataset.feedBound = '1'; el.addEventListener('click', onFeedHeart); }
+    if(!el.dataset.feedBound){
+      el.dataset.feedBound = '1';
+      el.addEventListener('click', onFeedClick);
+      el.addEventListener('keydown', e=>{ if(e.key==='Enter' && e.target.classList.contains('cmt-input')) sendComment(e.target); });
+    }
   }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
 }
 // le nom accessible remplace le contenu du bouton : il doit donc porter aussi le compteur
 const heartLabel = n => n ? `J'aime cette lecture — ${n} j'aime` : `J'aime cette lecture`;
+// Un seul écouteur délégué pour le fil : cœurs, dépliage des réponses, envoi, suppression.
+function onFeedClick(e){
+  if(e.target.closest('[data-react]')) return onFeedHeart(e);
+  const tb = e.target.closest('[data-thread]');
+  if(tb) return toggleThread(tb);
+  const send = e.target.closest('.cmt-send');
+  if(send) return sendComment(send.closest('.feed-thread').querySelector('.cmt-input'));
+  const del = e.target.closest('[data-cmt-del]');
+  if(del) return deleteComment(del);
+}
+// --- fil de discussion sous une entrée ---
+function threadHTML(d){
+  const rows = d.comments.map(c=>`
+    <div class="cmt-row">
+      <div class="avatar sm">${esc(initials(c.displayName))}</div>
+      <div class="cmt-body"><b>${esc(c.displayName)}</b> ${esc(c.text)}
+        <span class="cmt-date">${new Date(c.at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span></div>
+      ${(c.mine || d.canModerate) ? `<button class="cmt-del" data-cmt-del="${esc(c.id)}" title="Supprimer" aria-label="Supprimer ce commentaire">×</button>` : ''}
+    </div>`).join('');
+  return (rows || `<p class="cmt-none">Sois le premier à répondre.</p>`) + `
+    <div class="cmt-compose">
+      <input class="cmt-input" maxlength="500" placeholder="Répondre…" aria-label="Répondre">
+      <button class="btn small primary cmt-send">Envoyer</button>
+    </div>`;
+}
+async function loadThread(cell){
+  const th = cell.querySelector('.feed-thread');
+  const btn = cell.querySelector('[data-thread]');
+  // un rechargement (envoi, suppression) ne doit jamais avaler un brouillon en cours de frappe
+  const draft = (th.querySelector('.cmt-input')||{}).value || '';
+  if(!th.querySelector('.cmt-row')) th.innerHTML = `<p class="cmt-none">Chargement…</p>`;
+  try{
+    const d = await api(`/api/comments?u=${encodeURIComponent(btn.dataset.thread)}&k=${encodeURIComponent(btn.dataset.key)}`);
+    th.innerHTML = threadHTML(d);
+    if(draft){ const i = th.querySelector('.cmt-input'); if(i) i.value = draft; }
+    // le compteur de l'entrée suit le fil réel
+    const cn = btn.querySelector('.hn'); cn.textContent = d.comments.length || '';
+    btn.setAttribute('aria-label', d.comments.length?`Réponses — ${d.comments.length}`:'Répondre');
+  }catch(err){ th.innerHTML = `<p class="cmt-none">${err.message==='offline'?'Serveur injoignable.':esc(err.message)}</p>`; }
+}
+function toggleThread(btn){
+  const cell = btn.closest('.feed-cell');
+  const th = cell.querySelector('.feed-thread');
+  const open = th.hidden;
+  th.hidden = !open;
+  btn.setAttribute('aria-expanded', open?'true':'false');
+  if(open) loadThread(cell).then(()=>{ const i = th.querySelector('.cmt-input'); if(i) i.focus(); });
+}
+async function sendComment(input){
+  if(!input || !input.value.trim()) return;
+  const cell = input.closest('.feed-cell');
+  const btn = cell.querySelector('[data-thread]');
+  const sendBtn = cell.querySelector('.cmt-send');
+  if(sendBtn.disabled) return; sendBtn.disabled = true;
+  const sent = input.value; input.value = ''; // le brouillon envoyé ne doit pas être restauré par loadThread
+  try{
+    await api('/api/comment', {method:'POST', body:{username:btn.dataset.thread, bookKey:btn.dataset.key, text:sent.trim()}});
+    await loadThread(cell);
+    const i = cell.querySelector('.cmt-input'); if(i) i.focus(); // le focus survit au re-rendu
+  }catch(err){
+    toast(err.message==='offline'?'Serveur injoignable':err.message);
+    const i = cell.querySelector('.cmt-input'); if(i){ i.value = sent; i.focus(); } // rien de perdu
+    sendBtn.disabled = false;
+  }
+}
+async function deleteComment(del){
+  if(del.disabled) return; del.disabled = true;
+  const cell = del.closest('.feed-cell');
+  try{
+    await api('/api/comment/delete', {method:'POST', body:{id:del.dataset.cmtDel}});
+    await loadThread(cell);
+    const i = cell.querySelector('.cmt-input'); if(i) i.focus(); // le focus ne retombe pas sur <body>
+  }
+  catch(err){ del.disabled = false; toast(err.message==='offline'?'Serveur injoignable':err.message); }
+}
 // Bascule ♥ optimiste : l'UI répond tout de suite, puis se cale sur la réponse serveur (ou revient en arrière).
 async function onFeedHeart(e){
   const hb = e.target.closest('[data-react]'); if(!hb || hb.disabled) return;
@@ -4255,6 +4407,7 @@ if(location.search.includes('selftest')){
   assert('INVITE_RE pseudo valide', (('invite/lucas_bd'.match(INVITE_RE))||[])[1]==='lucas_bd');
   assert('INVITE_RE rejette pseudo invalide', 'invite/<script>'.match(INVITE_RE)===null && 'invite/ab'.match(INVITE_RE)===null);
   assert('bookLibKey normalise', bookLibKey('Dune ', 'Frank Herbert')===bookLibKey('dune', 'frank herbert'));
+  assert('shelfKey stable (sync = chez tes amis)', shelfKey({title:'Dune', authors:['Frank Herbert'], volume:2})==='dune|frankherbert|2'.replace(/\|/g,''));
   console.log(`Tome selftest — ${pass} ✓ / ${fail} ✗`);
   toast(`Selftest : ${pass} ✓ / ${fail} ✗`);
 }
