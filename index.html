@@ -460,6 +460,12 @@ body.selecting .card:hover .qk{opacity:0}
 .chips-line{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
 .pill{font-size:12px; background:var(--surface2); border-radius:999px; padding:3px 10px; color:var(--muted); display:inline-flex; align-items:center; gap:5px}
 .pill button{color:var(--faint)} .pill button:hover{color:var(--red)}
+.buy-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:14px 0 2px}
+.btn.buy{font-size:13px; text-decoration:none; background:var(--surface); border:1px solid var(--border)}
+.btn.buy:hover{background:var(--surface2); border-color:var(--border-hover)}
+.btn.buy.amz{background:#ffb200; border-color:#e79a00; color:#1a1200; font-weight:700}
+.btn.buy.amz:hover{filter:brightness(1.05); border-color:#e79a00}
+.buy-note{font-size:11px; color:var(--faint); cursor:help; border-bottom:1px dotted var(--faint)}
 .detail-footer{display:flex; gap:10px; margin-top:18px; padding-top:14px; border-top:1px solid var(--border); flex-wrap:wrap}
 .detail-footer .spacer{flex:1}
 .list-add{display:flex; gap:8px}
@@ -1424,6 +1430,19 @@ function fullTitle(b){
   if(b.series && b.volume!=null) t = `${b.series}, tome ${b.volume}` + (b.title && b.title.toLowerCase()!==b.series.toLowerCase() && !hasTomeInTitle(b.title) ? ` — ${b.title}` : '');
   else if(b.volume!=null && !hasTomeInTitle(b.title)) t = `${b.title} — T.${b.volume}`;
   return t;
+}
+/* ---- Affiliation Amazon (liens d'achat / Kindle) ----
+   Pour TOUCHER une commission : mets ton identifiant Amazon Partenaires dans AMAZON_TAG
+   (ex : 'lucasm-21'), obtenu sur https://partenaires.amazon.fr. Sans identifiant, les boutons
+   fonctionnent quand même mais ne rapportent rien. Lien de RECHERCHE (pas d'API à gérer). */
+const AMAZON_TAG = '';                 // ← ton tag Amazon Partenaires ici (ex : 'lucasm-21')
+const AMAZON_HOST = 'www.amazon.fr';
+function amazonUrl(b, kindle){
+  const q = [fullTitle(b), (b.authors||[])[0]||''].filter(Boolean).join(' ');
+  const p = new URLSearchParams({ k: q });
+  if(kindle) p.set('i', 'digital-text');   // rayon « Boutique Kindle »
+  if(AMAZON_TAG) p.set('tag', AMAZON_TAG);
+  return 'https://' + AMAZON_HOST + '/s?' + p.toString();
 }
 function seriesKey(b){ return (b.series||'').trim().toLowerCase(); }
 function seriesBooks(name){
@@ -2651,6 +2670,12 @@ function openDetail(id, opts={}){
       ${b.synopsis
         ? `<div class="syn collapsed" id="d-syn">${esc(b.synopsis)}</div>${b.synopsis.length>180 ? '<button class="syn-more" id="d-syn-more">voir plus</button>' : ''}`
         : `<button class="syn-more" id="d-syn-fetch">🔎 Chercher le synopsis</button>`}
+
+      <div class="buy-row">
+        <a class="btn buy amz" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow sponsored" title="Ouvrir sur Amazon">🛒 Acheter</a>
+        <a class="btn buy" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow sponsored" title="Édition Kindle sur Amazon">📱 Lire sur Kindle</a>
+        <span class="buy-note" tabindex="0" title="En tant que Partenaire Amazon, ce site perçoit une commission sur les achats remplissant les conditions requises. Aucun surcoût pour toi.">Partenaire Amazon</span>
+      </div>
 
       <div class="seg" id="d-status" role="group" aria-label="Statut">
         ${Object.entries(STATUS_LABEL).map(([k,v]) =>
@@ -4376,6 +4401,7 @@ Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe hach�
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l'inscription).
 Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Seul le sous-ensemble que tu choisis explicitement de partager est visible de tes amis. Aucune publicité, aucun traceur, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
+Liens d'affiliation : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers Amazon. En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi. Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d'Amazon qui s'appliquent.
 Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
 Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil.`;
 async function renderFeed(){
