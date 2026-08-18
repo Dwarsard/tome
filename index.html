@@ -492,6 +492,22 @@ body.selecting .card:hover .qk{opacity:0}
 .empty{text-align:center; padding:56px 20px; color:var(--muted)}
 .empty .big{width:96px; height:96px; line-height:96px; font-size:44px; border-radius:50%; background:var(--bg2); border:1px solid var(--border); margin:0 auto 16px; box-shadow:var(--sh-1)}
 .empty h3{font-family:var(--font-display); font-weight:700; font-size:22px; color:var(--text); margin-bottom:6px; letter-spacing:-.01em}
+/* Onboarding : démarrage rapide */
+.onboard{max-width:760px; margin:0 auto; padding:32px 4px 20px; text-align:center}
+.onboard .big{width:76px; height:76px; line-height:76px; font-size:36px; border-radius:50%; background:var(--bg2); border:1px solid var(--border); margin:0 auto 14px; box-shadow:var(--sh-1)}
+.onboard h3{font-family:var(--font-display); font-weight:700; font-size:clamp(24px,4vw,32px); letter-spacing:-.01em; margin-bottom:8px}
+.onboard .ob-head p{max-width:440px; margin:0 auto 18px; font-size:15px; color:var(--muted); line-height:1.55}
+.ob-or{font-size:13px; color:var(--faint); text-transform:uppercase; letter-spacing:.08em; margin:28px 0 14px}
+.onboard-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:14px}
+.ob-pick{position:relative; display:flex; flex-direction:column; gap:6px; background:none; border:none; cursor:pointer; padding:0; text-align:center}
+.ob-cov{position:relative; aspect-ratio:2/3; border-radius:var(--r-sm); overflow:hidden; border:1px solid var(--border); box-shadow:var(--sh-1); transition:transform .18s ease, box-shadow .2s ease}
+.ob-pick:hover .ob-cov{transform:translateY(-3px); box-shadow:var(--sh-2); border-color:color-mix(in srgb, var(--green) 45%, var(--border))}
+.ob-cov img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1}
+.ob-ph{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:8px; font-size:12px; font-weight:700; line-height:1.25; color:#e8eef4; background:linear-gradient(160deg,#2f5b4a,#16242c)}
+.ob-t{font-size:12px; color:var(--muted); line-height:1.25; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
+.ob-check{position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:color-mix(in srgb, var(--green) 82%, transparent); color:var(--on-green); font-weight:800; font-size:14px; border-radius:var(--r-sm)}
+.ob-pick.done .ob-cov{border-color:var(--green)} .ob-pick.done .ob-check{display:flex}
+.ob-foot{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:26px}
 .empty p{max-width:400px; margin:0 auto 18px; font-size:14px}
 /* Recap annuel */
 .recap-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin:6px 0 4px}
@@ -701,6 +717,20 @@ body.welcome-open{overflow:hidden}
 /* ---- « Chez tes amis » (fiche livre) ---- */
 .dfriend{display:flex; align-items:center; gap:8px; padding:4px 0; font-size:13.5px}
 .df-none{color:var(--faint); font-size:12px}
+
+/* ---- Recherche d'amis + notifications ---- */
+.sub-badge{position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; padding:0 4px; border-radius:8px;
+  background:var(--red); color:#fff; font-size:10px; font-weight:800; line-height:16px; text-align:center}
+.search-res-h{font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700; margin:6px 2px 4px}
+#search-res:empty{display:none}
+#search-res .frow{background:var(--bg2); border-radius:var(--r-md); margin-bottom:6px}
+.frel{font-size:12.5px; color:var(--muted); font-weight:600; white-space:nowrap}
+.notif{display:flex; align-items:flex-start; gap:11px; padding:11px 12px; border-radius:var(--r-md); background:var(--bg2); margin-bottom:7px}
+.notif.unread{background:var(--accent-soft); border:1px solid color-mix(in srgb, var(--green) 25%, transparent)}
+.notif-body{flex:1; min-width:0; font-size:13.5px; line-height:1.5}
+.notif-ic{margin-right:2px}
+.notif-body b{font-weight:700}
+.notif-when{display:block; font-size:11.5px; color:var(--faint); margin-top:2px}
 
 /* ---- Streak 🔥 dans le header ---- */
 #btn-streak{width:auto; padding:0 10px; gap:3px; font-weight:700; font-variant-numeric:tabular-nums}
@@ -1658,6 +1688,22 @@ const DEMO_BOOKS = [
   {title:'Sapiens', type:'livre', authors:['Yuval Noah Harari'], year:2011, pages:512, status:'wishlist', tags:['essai','histoire']},
   {title:'Akira', series:'Akira', volume:1, seriesTotal:6, type:'manga', authors:['Katsuhiro Ōtomo'], year:1982, pages:364, status:'read', rating:4.5, tags:['SF','cyberpunk'], cover:'https://covers.openlibrary.org/b/isbn/9781935429005-M.jpg', readings:[{date:'2025-11-15', rating:4.5}]},
 ];
+// Sélection « démarrage rapide » : incontournables à taper pour amorcer la bibliothèque (les
+// couvertures manquantes retombent sur le placeholder titré — aucun échec bloquant).
+const ONBOARD_PICKS = [
+  {title:'Dune', type:'livre', authors:['Frank Herbert'], year:1965, cover:'https://covers.openlibrary.org/b/isbn/9780441172719-M.jpg'},
+  {title:'1984', type:'livre', authors:['George Orwell'], year:1949, cover:'https://covers.openlibrary.org/b/isbn/9780451524935-M.jpg'},
+  {title:'Le Petit Prince', type:'livre', authors:['Antoine de Saint-Exupéry'], year:1943, cover:'https://covers.openlibrary.org/b/isbn/9782070612758-M.jpg'},
+  {title:'Harry Potter à l\'école des sorciers', type:'livre', authors:['J.K. Rowling'], year:1997, cover:'https://covers.openlibrary.org/b/isbn/9782070584628-M.jpg'},
+  {title:'L\'Étranger', type:'livre', authors:['Albert Camus'], year:1942, cover:'https://covers.openlibrary.org/b/isbn/9782070360024-M.jpg'},
+  {title:'Sapiens', type:'livre', authors:['Yuval Noah Harari'], year:2011, cover:'https://covers.openlibrary.org/b/isbn/9782226257017-M.jpg'},
+  {title:'Watchmen', type:'bd', authors:['Alan Moore','Dave Gibbons'], year:1987, cover:'https://covers.openlibrary.org/b/isbn/9780930289232-M.jpg'},
+  {title:'Persepolis', type:'bd', authors:['Marjane Satrapi'], year:2000, cover:'https://covers.openlibrary.org/b/isbn/9782844140586-M.jpg'},
+  {title:'Berserk', series:'Berserk', volume:1, type:'manga', authors:['Kentarō Miura'], year:1990, cover:'https://covers.openlibrary.org/b/isbn/9781593070205-M.jpg'},
+  {title:'One Piece', series:'One Piece', volume:1, type:'manga', authors:['Eiichirō Oda'], year:1997, cover:'https://covers.openlibrary.org/b/isbn/9782723492607-M.jpg'},
+  {title:'Akira', series:'Akira', volume:1, type:'manga', authors:['Katsuhiro Ōtomo'], year:1982, cover:'https://covers.openlibrary.org/b/isbn/9781935429005-M.jpg'},
+  {title:'Pluto', series:'Pluto', volume:1, type:'manga', authors:['Naoki Urasawa'], year:2003, cover:'https://covers.openlibrary.org/b/isbn/9781421519180-M.jpg'},
+];
 function loadDemo(){
   DEMO_BOOKS.forEach(d=>{
     const b = newBook(Object.assign({}, d, {tags:[...(d.tags||[]),'exemple'], readings:(d.readings||[]).map(r=>({id:uid(), date:r.date, rating:r.rating??null}))}));
@@ -1703,15 +1749,38 @@ function renderLibrary(){
   renderDemoBanner();
   if(!state.books.length){
     grid.innerHTML = ''; $('#lib-count').textContent = '';
-    emptyBox.innerHTML = `<div class="empty"><div class="big">📚</div>
-      <h3>Bienvenue dans Tome</h3>
-      <p>Ta bibliothèque personnelle de livres, BD et manga. Découvre l'app avec quelques exemples, ou commence tout de suite avec tes lectures.</p>
-      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
-        <button class="btn primary" id="empty-demo">✨ Découvrir avec des exemples</button>
-        <button class="btn" id="empty-add">＋ Ajouter ma première lecture</button>
-      </div></div>`;
-    $('#empty-add').addEventListener('click', openSearch);
-    $('#empty-demo').addEventListener('click', loadDemo);
+    emptyBox.innerHTML = `<div class="onboard">
+      <div class="ob-head">
+        <div class="big">📚</div>
+        <h3>Commence ta bibliothèque</h3>
+        <p>Ajoute des livres, BD ou manga que tu as lus — ta collection, ton journal et tes recommandations démarrent tout de suite.</p>
+        <button class="btn primary lp-big" id="ob-search">🔍 Chercher un livre</button>
+      </div>
+      <div class="ob-or">ou tape parmi ces incontournables :</div>
+      <div class="onboard-grid">
+        ${ONBOARD_PICKS.map((p,i)=>`<button class="ob-pick" data-pick="${i}" aria-label="Ajouter ${esc(p.title)}">
+          <div class="ob-cov">${p.cover?`<img src="${esc(p.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><div class="ob-ph">${esc(p.title)}</div>`:`<div class="ob-ph">${esc(p.title)}</div>`}</div>
+          <div class="ob-t">${esc(p.title)}</div><div class="ob-check">✓ Ajouté</div>
+        </button>`).join('')}
+      </div>
+      <div class="ob-foot">
+        <button class="btn" id="ob-demo">Voir plutôt une bibliothèque d'exemple</button>
+        <button class="btn primary" id="ob-done" hidden>Voir ma bibliothèque <span id="ob-n"></span> →</button>
+      </div>
+    </div>`;
+    $('#ob-search').addEventListener('click', openSearch);
+    $('#ob-demo').addEventListener('click', loadDemo);
+    let added = 0;
+    $('#ob-done').addEventListener('click', ()=>render());
+    emptyBox.querySelector('.onboard-grid').addEventListener('click', e=>{
+      const btn = e.target.closest('.ob-pick'); if(!btn || btn.classList.contains('done')) return;
+      const p = ONBOARD_PICKS[+btn.dataset.pick]; if(!p) return;
+      const b = newBook(Object.assign({}, p, { status:'read', readings:[{id:uid(), date:today(), rating:null}] }));
+      state.books.unshift(b); save();                          // seed la biblio (+ sync compte si connecté)
+      btn.classList.add('done'); added++;
+      const doneBtn = $('#ob-done'); doneBtn.hidden = false; $('#ob-n').textContent = '('+added+')';
+      toast(`« ${p.title} » ajouté ✓`, {label:'Annuler', onAction:()=>{ const i=state.books.indexOf(b); if(i>=0){ state.books.splice(i,1); save(); } btn.classList.remove('done'); added=Math.max(0,added-1); if(!added){doneBtn.hidden=true;} else {$('#ob-n').textContent='('+added+')';} }});
+    });
     return;
   }
   // Regroupement par série
@@ -3985,10 +4054,13 @@ function setFriendsBadge(n){
   const b = $('#nav-friends-badge'); if(!b) return;
   if(n>0){ b.textContent = n>9?'9+':String(n); b.hidden = false; } else { b.hidden = true; }
 }
+// le badge de l'onglet Amis = demandes reçues + notifications non lues (tout ce qui est « nouveau »)
+function refreshSocBadge(){ setFriendsBadge((social.pendingRequests||0) + (social.unreadNotifs||0)); }
 async function socRefresh(){
-  if(!socToken()){ social.me=null; setFriendsBadge(0); return; }
-  try{ const d = await api('/api/me'); social.me = d.user; social.tosOutdated = !!d.tosOutdated; setFriendsBadge(d.pendingRequests||0);
-       if(social.tosOutdated && ui.view==='friends') renderFriends(); }
+  if(!socToken()){ social.me=null; social.pendingRequests=0; social.unreadNotifs=0; setFriendsBadge(0); return; }
+  try{ const d = await api('/api/me'); social.me = d.user; social.tosOutdated = !!d.tosOutdated;
+       social.pendingRequests = d.pendingRequests||0; social.unreadNotifs = d.unreadNotifs||0; refreshSocBadge();
+       if((social.tosOutdated || social.unreadNotifs) && ui.view==='friends') renderFriends(); }
   catch(e){ if(/401|Non authentifié/.test(e.message)){ try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; setFriendsBadge(0); } }
 }
 
@@ -4115,9 +4187,10 @@ function renderFriends(){
     </div>
     <div class="friends-sub">
       <button data-tab="feed" class="${social.tab==='feed'?'on':''}">Fil</button>
-      <button data-tab="friends" class="${social.tab==='friends'?'on':''}">Mes amis</button>
-      <button data-tab="me" class="${social.tab==='me'?'on':''}">Mon partage</button>
-      <button data-tab="account" class="${social.tab==='account'?'on':''}">Mon compte</button>
+      <button data-tab="friends" class="${social.tab==='friends'?'on':''}">Amis</button>
+      <button data-tab="notifs" class="${social.tab==='notifs'?'on':''}" style="position:relative">🔔${social.unreadNotifs?`<span class="sub-badge">${social.unreadNotifs>9?'9+':social.unreadNotifs}</span>`:''}</button>
+      <button data-tab="me" class="${social.tab==='me'?'on':''}">Partage</button>
+      <button data-tab="account" class="${social.tab==='account'?'on':''}">Compte</button>
     </div>
     <div id="soc-tab"></div>`;
   const tosA = $('#tos-accept');
@@ -4130,8 +4203,38 @@ function renderFriends(){
   if(tosL) tosL.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
   if(social.tab==='feed') renderFeed();
   else if(social.tab==='friends') renderFriendsList();
+  else if(social.tab==='notifs') renderNotifications();
   else if(social.tab==='account') renderAccount();
   else renderMyShare();
+}
+async function renderNotifications(){
+  const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
+  try{
+    const d = await api('/api/notifications');
+    // marquer lu dès l'ouverture (efface le compteur)
+    if(social.unreadNotifs){ api('/api/notifications/read', {method:'POST', body:{}}).catch(()=>{}); social.unreadNotifs = 0; refreshSocBadge(); const sb=$('#friends-body .sub-badge'); if(sb) sb.remove(); }
+    if(!d.notifications.length){ el.innerHTML = `<p class="friends-empty">Aucune notification pour l'instant. Ajoute des amis et partage tes lectures !</p>`; return; }
+    // résout le titre d'un livre à partir de sa clé (dans MA bibliothèque locale)
+    const byKey = new Map(state.books.map(b=>[shelfKey(b), b]));
+    const verb = { friend_request:'t\'a envoyé une demande d\'ami', friend_accept:'a accepté ta demande d\'ami',
+                   reaction:'a aimé ta lecture', comment:'a commenté ta lecture' };
+    el.innerHTML = d.notifications.map(n=>{
+      const b = n.bookKey ? byKey.get(n.bookKey) : null;
+      const book = b ? ` <b>${esc(fullTitle(b))}</b>` : '';
+      const ic = { friend_request:'👋', friend_accept:'🤝', reaction:'♥', comment:'💬' }[n.type] || '🔔';
+      return `<div class="notif${n.read?'':' unread'}" ${b?`data-profile-book="${esc(b.id)}"`:''}>
+        <div class="avatar sm">${esc(initials(n.displayName))}</div>
+        <div class="notif-body"><span class="notif-ic">${ic}</span> <b>${esc(n.displayName)}</b> ${verb[n.type]||''}${book}
+          <span class="notif-when">${notifWhen(n.at)}</span></div>
+      </div>`;
+    }).join('');
+  }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
+}
+function notifWhen(ts){
+  const s = Math.max(0, (Date.now()-ts)/1000);
+  if(s<60) return 'à l\'instant'; if(s<3600) return 'il y a '+Math.floor(s/60)+' min';
+  if(s<86400) return 'il y a '+Math.floor(s/3600)+' h';
+  return 'il y a '+Math.floor(s/86400)+' j';
 }
 async function renderAccount(){
   const el = $('#soc-tab');
@@ -4413,21 +4516,39 @@ async function renderFriendsList(){
   const el = $('#soc-tab');
   el.innerHTML = `
     <div class="add-friend">
-      <input id="friend-username" placeholder="Ajouter par pseudo…" aria-label="Pseudo à ajouter">
-      <button class="btn primary" id="friend-add">Ajouter</button>
+      <input id="friend-search" placeholder="Rechercher quelqu'un (pseudo ou nom)…" aria-label="Rechercher un utilisateur" autocomplete="off">
       <button class="btn" id="friend-invite" title="Partager mon lien d'invitation">🔗 Inviter</button>
     </div>
+    <div id="search-res"></div>
     <div id="friend-lists"><p class="friends-empty">Chargement…</p></div>`;
   $('#friend-invite').addEventListener('click', shareInvite);
-  const doAdd = async ()=>{
-    const u = $('#friend-username').value.trim(); if(!u) return;
-    const btn = $('#friend-add'); if(btn.disabled) return; btn.disabled = true;
-    try{ const r = await api('/api/friends/request', {method:'POST', body:{username:u}}); toast(r.status==='accepted'?'Vous êtes maintenant amis ✓':'Demande envoyée ✓'); $('#friend-username').value=''; loadFriendLists(); }
-    catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); }
-    finally{ btn.disabled = false; }
-  };
-  $('#friend-add').addEventListener('click', doAdd);
-  $('#friend-username').addEventListener('keydown', e=>{ if(e.key==='Enter') doAdd(); });
+  const addUser = async (uname, btn)=>{ if(btn.disabled) return; btn.disabled = true;
+    try{ const r = await api('/api/friends/request', {method:'POST', body:{username:uname}});
+      toast(r.status==='accepted'?'Vous êtes maintenant amis ✓':'Demande envoyée ✓');
+      doSearchUsers($('#friend-search').value); loadFriendLists(); }
+    catch(e){ btn.disabled=false; toast(e.message==='offline'?'Serveur injoignable':e.message); } };
+  let seq = 0, tmr = 0;
+  function doSearchUsers(q){
+    q = (q||'').trim(); const res = $('#search-res');
+    if(q.length < 2){ res.innerHTML = ''; return; }
+    const my = ++seq; clearTimeout(tmr);
+    tmr = setTimeout(async ()=>{
+      try{
+        const d = await api('/api/search-users?q='+encodeURIComponent(q)); if(my!==seq) return;
+        if(!d.users.length){ res.innerHTML = `<p class="friends-empty" style="padding:8px 0">Personne pour « ${esc(q)} ». Tu peux inviter par lien 🔗.</p>`; return; }
+        res.innerHTML = `<div class="search-res-h">Résultats</div>` + d.users.map(u=>{
+          const act = u.relation==='friend' ? `<span class="frel">✓ ami</span>`
+            : u.relation==='sent' ? `<span class="frel">en attente</span>`
+            : `<button class="btn small primary" data-add="${esc(u.username)}">${u.relation==='incoming'?'Accepter':'＋ Ajouter'}</button>`;
+          return `<div class="frow"><div class="avatar">${esc(initials(u.displayName))}</div>
+            <div class="fi clickable" data-profile="${esc(u.username)}"><b>${esc(u.displayName)}</b><span>@${esc(u.username)}</span></div>
+            <div class="fa">${act}</div></div>`;
+        }).join('');
+      }catch(e){ if(my===seq) res.innerHTML = `<p class="friends-empty" style="padding:8px 0">${e.message==='offline'?'Serveur injoignable':esc(e.message)}</p>`; }
+    }, 280);
+  }
+  $('#friend-search').addEventListener('input', e=>doSearchUsers(e.target.value));
+  $('#search-res').addEventListener('click', e=>{ const b=e.target.closest('[data-add]'); if(b) addUser(b.dataset.add, b); });
   loadFriendLists();
 }
 async function loadFriendLists(){
@@ -4446,7 +4567,7 @@ async function loadFriendLists(){
     if(d.outgoing.length){ html += `<h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 8px">Demandes envoyées</h4>`;
       html += d.outgoing.map(p=>person(p, `<span style="font-size:12px;color:var(--faint)">en attente</span><button class="btn small" data-remove="${esc(p.id)}">Annuler</button>`)).join(''); }
     el.innerHTML = html;
-    setFriendsBadge(d.incoming.length); // le compteur reflète les demandes reçues
+    social.pendingRequests = d.incoming.length; refreshSocBadge();
   }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
 }
 async function renderMyShare(){
