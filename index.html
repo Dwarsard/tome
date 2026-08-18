@@ -23,9 +23,14 @@
   --header-bg:rgba(18,22,26,.9); --chip-bg:rgba(10,13,16,.82); --chip-text:#e8eef4;
   --overlay-dim:rgba(5,8,11,.72);
   --heat1:rgba(47,199,117,.3); --heat2:rgba(47,199,117,.58); --heat3:rgba(47,199,117,.95);
-  --r-sm:8px; --r-md:12px; --r-lg:16px; --radius:12px;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:22px; --radius:12px;
   --sh-1:0 2px 8px rgba(0,0,0,.28); --sh-2:0 10px 26px rgba(0,0,0,.42); --sh-3:0 20px 48px rgba(0,0,0,.5);
   --shadow:var(--sh-2);
+  /* Typo d'affichage : serif système chaleureux (Iowan sur Apple, Palatino sur Windows, Georgia en repli)
+     — donne une identité « livre » aux grands titres, sans police externe (CSP/offline). */
+  --font-display:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --grad-green:linear-gradient(135deg,#34d07d,#1fa863);
+  --glow-green:0 8px 24px -8px color-mix(in srgb, var(--green) 55%, transparent);
 }
 :root[data-theme="light"]{
   --bg:#f4f1e8; --bg2:#fbf9f1; --surface:#ffffff; --surface2:#ece7d9;
@@ -48,8 +53,13 @@ body{
   overscroll-behavior-y:contain; /* évite le pull-to-refresh accidentel en PWA */
 }
 button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
-input,select,textarea{font:inherit; color:var(--text); background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; outline:none; width:100%}
+input,select,textarea{font:inherit; color:var(--text); background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:9px 12px; outline:none; width:100%; transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease}
+input:hover,select:hover,textarea:hover{border-color:var(--border-hover)}
 input:focus,select:focus,textarea:focus{border-color:var(--green); box-shadow:0 0 0 3px var(--accent-soft)}
+/* menus déroulants : on retire la flèche native et on pose un chevron maison (rendu homogène cross-OS) */
+select{appearance:none; -webkit-appearance:none; padding-right:34px; cursor:pointer;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 17px) 51%,calc(100% - 12px) 51%; background-size:5px 5px,5px 5px; background-repeat:no-repeat}
 ::placeholder{color:var(--faint)}
 ::selection{background:color-mix(in srgb, var(--green) 30%, transparent)}
 :focus-visible{outline:2px solid var(--green); outline-offset:2px}
@@ -68,8 +78,8 @@ header{
   padding-top:env(safe-area-inset-top); /* iOS installé : passe sous l'encoche */
 }
 .header-in{max-width:1060px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:14px}
-.brand{display:flex; align-items:center; gap:8px; font-weight:800; font-size:20px; letter-spacing:-.02em}
-.brand .logo{width:24px; height:24px; display:block}
+.brand{display:flex; align-items:center; gap:9px; font-family:var(--font-display); font-weight:700; font-size:23px; letter-spacing:-.01em}
+.brand .logo{width:26px; height:26px; display:block}
 .brand em{font-style:normal; color:var(--green); transition:transform .2s ease; display:inline-block}
 .brand:hover em{transform:scale(1.35)}
 nav{display:flex; gap:2px; margin-left:6px}
@@ -84,8 +94,8 @@ nav button.active{color:var(--green); background:var(--accent-soft); font-weight
 .btn[hidden]{display:none} /* display:inline-flex écraserait l'attribut hidden (styles auteur > UA) */
 .btn:hover{background:var(--surface2); border-color:var(--border-hover)}
 .btn:active{transform:translateY(1px)}
-.btn.primary{background:var(--green-strong); border-color:var(--green-strong); color:var(--on-green)}
-.btn.primary:hover{filter:brightness(1.08); border-color:var(--green-strong); transform:translateY(-1px)}
+.btn.primary{background:var(--grad-green); border-color:transparent; color:var(--on-green); box-shadow:var(--glow-green)}
+.btn.primary:hover{filter:brightness(1.05); border-color:transparent; transform:translateY(-1px); box-shadow:0 10px 28px -8px color-mix(in srgb, var(--green) 70%, transparent)}
 .btn.danger{color:var(--red); border-color:color-mix(in srgb, var(--red) 35%, var(--border))}
 .btn.small{padding:5px 10px; font-size:13px}
 .btn.icon{padding:8px 10px}
@@ -390,7 +400,7 @@ body.selecting .card:hover .qk{opacity:0}
 .detail .dcover{width:150px; flex-shrink:0}
 .detail .dcover .cover{cursor:default}
 .detail .dmain{flex:1; min-width:0}
-.detail h3.dt{font-size:20px; line-height:1.25}
+.detail h3.dt{font-family:var(--font-display); font-weight:700; font-size:25px; line-height:1.2; letter-spacing:-.01em}
 .detail .da{color:var(--muted); margin-bottom:2px}
 .detail .dserie{font-size:13px; color:var(--muted); margin-bottom:2px}
 .detail .dserie button{color:var(--green); font-weight:600; font-size:13px}
@@ -481,7 +491,7 @@ body.selecting .card:hover .qk{opacity:0}
 /* Empty state */
 .empty{text-align:center; padding:56px 20px; color:var(--muted)}
 .empty .big{width:96px; height:96px; line-height:96px; font-size:44px; border-radius:50%; background:var(--bg2); border:1px solid var(--border); margin:0 auto 16px; box-shadow:var(--sh-1)}
-.empty h3{color:var(--text); margin-bottom:6px}
+.empty h3{font-family:var(--font-display); font-weight:700; font-size:22px; color:var(--text); margin-bottom:6px; letter-spacing:-.01em}
 .empty p{max-width:400px; margin:0 auto 18px; font-size:14px}
 /* Recap annuel */
 .recap-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin:6px 0 4px}
@@ -596,6 +606,67 @@ body.selecting .card:hover .qk{opacity:0}
 body:has(.overlay.open) .fab{display:none}
 body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions groupées */
 
+/* ======== Page d'accueil publique ======== */
+#welcome{position:fixed; inset:0; z-index:300; overflow-y:auto; background:var(--bg); color:var(--text);
+  padding:0 max(20px,env(safe-area-inset-left)) calc(40px + env(safe-area-inset-bottom)); animation:fadein .4s ease}
+#welcome[hidden]{display:none}
+body.welcome-open{overflow:hidden}
+.lp-nav{max-width:1080px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; padding:20px 0}
+.lp-nav .brand{font-family:var(--font-display); font-weight:700; font-size:23px; display:flex; align-items:center; gap:9px}
+.lp-nav .brand .logo{width:26px; height:26px}
+.lp-nav .brand em{font-style:normal; color:var(--green)}
+.lp-nav-actions{display:flex; align-items:center; gap:14px}
+.lp-link{background:none; border:none; color:var(--text); font-weight:600; font-size:14.5px; cursor:pointer; padding:8px 4px}
+.lp-link:hover{color:var(--green)}
+.lp-hero{max-width:1080px; margin:0 auto; display:grid; grid-template-columns:1.05fr .95fr; gap:48px; align-items:center;
+  padding:clamp(32px,7vh,80px) 0 clamp(40px,8vh,90px)}
+.lp-eyebrow{font-size:12.5px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--green); margin-bottom:18px}
+.lp-title{font-family:var(--font-display); font-weight:700; font-size:clamp(38px,6vw,64px); line-height:1.04; letter-spacing:-.02em; margin-bottom:22px}
+.lp-title em{font-style:italic; color:var(--green)}
+.lp-sub{font-size:clamp(16px,1.7vw,19px); line-height:1.6; color:var(--muted); max-width:30em; margin-bottom:30px}
+.lp-cta{display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin-bottom:16px}
+.lp-big{padding:14px 26px; font-size:16px; border-radius:var(--r-md)}
+.lp-try{font-size:15px}
+.lp-trust{font-size:13px; color:var(--faint)}
+/* Étagère « en éventail » */
+.lp-hero-visual{display:flex; justify-content:center; perspective:1200px}
+.lp-shelf{position:relative; width:min(360px,80vw); height:clamp(300px,42vh,440px)}
+.lp-book{position:absolute; width:44%; aspect-ratio:2/3; border-radius:10px; padding:16px 15px;
+  display:flex; flex-direction:column; justify-content:flex-start; gap:4px; color:#fff; transform-origin:bottom center;
+  box-shadow:var(--sh-3), inset 0 1px 0 rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.08);
+  transition:transform .4s cubic-bezier(.2,.7,.3,1)}
+.lp-bk-t{font-family:var(--font-display); font-weight:700; font-size:17px; line-height:1.12}
+.lp-bk-a{font-size:11px; opacity:.82}
+.lp-bk-s{font-size:12px; color:#ffd66b; letter-spacing:1px; margin-top:2px}
+.lp-book.b1{left:-1%; bottom:3%; transform:rotate(-15deg); z-index:1; background:linear-gradient(150deg,#e8952f,#8a3d12)}
+.lp-book.b2{left:16%; bottom:9%; transform:rotate(-6deg); z-index:2; background:linear-gradient(150deg,#c2334a,#2a0d14)}
+.lp-book.b3{right:17%; bottom:9%; transform:rotate(6deg); z-index:3; background:linear-gradient(150deg,#f2c744,#7a5b00); color:#241d00}
+.lp-book.b3 .lp-bk-a{opacity:.7} .lp-book.b3 .lp-bk-s{color:#8a1f1f}
+.lp-book.b4{right:-2%; bottom:3%; transform:rotate(15deg); z-index:2; background:linear-gradient(150deg,#2f9bc7,#123a52)}
+.lp-hero-visual:hover .lp-book.b1{transform:rotate(-19deg) translateY(-6px)}
+.lp-hero-visual:hover .lp-book.b4{transform:rotate(19deg) translateY(-6px)}
+/* Fonctionnalités */
+.lp-features{max-width:1080px; margin:0 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:18px; padding:16px 0 40px}
+.lp-feat{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-lg); padding:22px 20px}
+.lp-feat-ic{font-size:26px; margin-bottom:12px; color:var(--green)}
+.lp-feat h3{font-family:var(--font-display); font-weight:700; font-size:18px; margin-bottom:7px; letter-spacing:-.01em}
+.lp-feat p{font-size:13.5px; line-height:1.55; color:var(--muted)}
+/* Rappel final */
+.lp-final{max-width:1080px; margin:0 auto; text-align:center; padding:clamp(40px,7vh,80px) 20px 30px; border-top:1px solid var(--border)}
+.lp-final-t{font-family:var(--font-display); font-weight:700; font-size:clamp(26px,4vw,40px); letter-spacing:-.02em; margin-bottom:24px}
+.lp-foot{margin-top:34px; font-size:13px; color:var(--faint)}
+.lp-foot a{color:var(--faint); text-decoration:underline; cursor:pointer}
+.lp-foot a:hover{color:var(--green)}
+@media(max-width:820px){
+  .lp-hero{grid-template-columns:1fr; gap:24px; text-align:center; padding-top:20px}
+  .lp-sub{margin-left:auto; margin-right:auto}
+  .lp-cta{justify-content:center}
+  .lp-hero-visual{order:-1}
+  .lp-shelf{height:clamp(230px,38vh,300px)}
+  .lp-features{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:480px){ .lp-features{grid-template-columns:1fr} .lp-nav-actions .lp-link{display:none} }
+
 /* ---- Fil vivant : critiques + réactions ♥ ---- */
 .feed-item{align-items:flex-start}
 .feed-review{font-size:12.5px; color:var(--muted); font-style:italic; margin-top:3px;
@@ -657,6 +728,54 @@ body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions g
 </style>
 </head>
 <body>
+
+<!-- ======== PAGE D'ACCUEIL PUBLIQUE (visiteurs) ======== -->
+<div id="welcome" hidden role="dialog" aria-modal="true" aria-label="Bienvenue sur Tome">
+  <div class="lp-nav">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="#12161a"/><path d="M256 132c-42-26-108-26-146-9v256c38-17 104-17 146 9 42-26 108-26 146-9V123c-38-17-104-17-146 9z" fill="none" stroke="#00d364" stroke-width="30" stroke-linejoin="round"/><path d="M256 132v256" stroke="#00d364" stroke-width="30"/></svg>
+      Tome<em>.</em>
+    </div>
+    <div class="lp-nav-actions">
+      <button class="lp-link" data-lp="login">Se connecter</button>
+      <button class="btn primary" data-lp="signup">Commencer</button>
+    </div>
+  </div>
+
+  <header class="lp-hero">
+    <div class="lp-hero-text">
+      <div class="lp-eyebrow">Livres · BD · Manga</div>
+      <h1 class="lp-title">Ta bibliothèque,<br>ton <em>journal</em> de lecture.</h1>
+      <p class="lp-sub">Note ce que tu lis, retrouve tes coups de cœur, suis ta progression et découvre les lectures de tes amis. Ta collection te suit partout, sur tous tes appareils.</p>
+      <div class="lp-cta">
+        <button class="btn primary lp-big" data-lp="signup">Créer mon compte — c'est gratuit</button>
+        <button class="lp-link lp-try" data-lp="try">Essayer d'abord →</button>
+      </div>
+      <div class="lp-trust">Gratuit · sans publicité · tes données t'appartiennent</div>
+    </div>
+    <div class="lp-hero-visual" aria-hidden="true">
+      <div class="lp-shelf">
+        <div class="lp-book b1"><span class="lp-bk-t">Dune</span><span class="lp-bk-a">Frank Herbert</span><span class="lp-bk-s">★★★★★</span></div>
+        <div class="lp-book b2"><span class="lp-bk-t">Berserk</span><span class="lp-bk-a">Kentaro Miura</span><span class="lp-bk-s">★★★★★</span></div>
+        <div class="lp-book b3"><span class="lp-bk-t">Watchmen</span><span class="lp-bk-a">Alan Moore</span><span class="lp-bk-s">★★★★☆</span></div>
+        <div class="lp-book b4"><span class="lp-bk-t">La Horde du Contrevent</span><span class="lp-bk-a">Alain Damasio</span><span class="lp-bk-s">★★★★★</span></div>
+      </div>
+    </div>
+  </header>
+
+  <section class="lp-features">
+    <div class="lp-feat"><div class="lp-feat-ic">📚</div><h3>Collectionne</h3><p>Livres, BD et manga dans une seule bibliothèque. Séries regroupées, couvertures automatiques.</p></div>
+    <div class="lp-feat"><div class="lp-feat-ic">★</div><h3>Note &amp; critique</h3><p>Une demi-étoile à cinq, tes ambiances, tes citations préférées. Ton avis, à ta façon.</p></div>
+    <div class="lp-feat"><div class="lp-feat-ic">📈</div><h3>Suis ta lecture</h3><p>Progression, objectif annuel, séries de jours et une rétro « Wrapped » de ton année.</p></div>
+    <div class="lp-feat"><div class="lp-feat-ic">👥</div><h3>Entre amis</h3><p>Partage tes lectures, réagis, compare vos goûts. Sans pub, sans spoilers, sans classement.</p></div>
+  </section>
+
+  <div class="lp-final">
+    <h2 class="lp-final-t">Commence ta bibliothèque aujourd'hui.</h2>
+    <button class="btn primary lp-big" data-lp="signup">Créer mon compte</button>
+    <div class="lp-foot"><span>Tome</span> · <a data-lp="legal">Confidentialité</a> · fait avec ❤ pour les lecteurs</div>
+  </div>
+</div>
 
 <header>
   <div class="header-in">
@@ -1133,6 +1252,10 @@ function normalizeData(d){
     meta: {
       changes: (d.meta && Number.isFinite(+d.meta.changes)) ? Math.max(0, Math.round(+d.meta.changes)) : 0,
       lastExport: (d.meta && typeof d.meta.lastExport==='string' && isValidDate(d.meta.lastExport)) ? d.meta.lastExport : null,
+      // Sauvegarde compte : à quel compte cette biblio locale appartient, et sur quelle révision
+      // serveur elle est basée (préservés au rechargement pour éviter perte/fuite entre comptes).
+      ownerId: (d.meta && typeof d.meta.ownerId==='string') ? d.meta.ownerId.slice(0,64) : null,
+      libRev: (d.meta && Number.isFinite(+d.meta.libRev)) ? Math.max(0, Math.round(+d.meta.libRev)) : 0,
     },
     // Notes/critiques au niveau série : { [seriesKey]: {rating, review, favorite, moods} }
     series: {},
@@ -1228,6 +1351,8 @@ function save(skipCount){
     // toute mutation de données peut changer la série de jours — les chemins rapides
     // (patchCard, actions rapides) ne repassent pas par render(), donc on rafraîchit ici
     if(typeof updateStreakPill==='function') updateStreakPill();
+    // connecté ? on planifie une sauvegarde serveur (débounce) — le local reste la copie de travail
+    if(typeof scheduleLibPush==='function' && typeof social!=='undefined' && social.me) scheduleLibPush();
     if(!skipCount && state.meta.changes>0 && state.meta.changes%50===0)
       toast(`💾 ${state.meta.changes} modifications depuis le dernier export — pense à sauvegarder (Stats)`);
     return true;
@@ -3435,21 +3560,36 @@ $('#import-file').addEventListener('change', e => {
   };
   reader.readAsText(f);
 });
-function hasRecoverable(){ return !!(localStorage.getItem(LS_KEY+'-backup') || localStorage.getItem(LS_KEY+'-corrupt')); }
+// Sauvegardes restaurables : avant-import (-backup), données corrompues (-corrupt), et les copies
+// de secours faites avant une réconciliation avec le compte (-preacct / -conflit / -autre).
+const RESTORE_KEYS = [
+  { k:'-backup',  label:"Sauvegarde d'avant-import" },
+  { k:'-preacct', label:"Version locale d'avant la synchro du compte" },
+  { k:'-conflit', label:"Version locale d'avant une fusion multi-appareils" },
+  { k:'-autre',   label:"Bibliothèque locale d'un autre compte, mise de côté" },
+];
+function hasRecoverable(){ return RESTORE_KEYS.some(r=>localStorage.getItem(LS_KEY+r.k)) || !!localStorage.getItem(LS_KEY+'-corrupt'); }
 $('#btn-restore').addEventListener('click', async ()=>{
-  const backup = localStorage.getItem(LS_KEY+'-backup');
+  const avail = RESTORE_KEYS.map(r=>({ ...r, raw:localStorage.getItem(LS_KEY+r.k) })).filter(r=>r.raw);
   const corrupt = localStorage.getItem(LS_KEY+'-corrupt');
-  if(backup){
-    try{
-      const clean = normalizeData(JSON.parse(backup));
-      if(!await uiConfirm({ title:'Restaurer la sauvegarde ?', message:`Sauvegarde d'avant-import : ${clean.books.length} ouvrage(s), ${clean.lists.length} liste(s). Tes données actuelles seront remplacées.`, okLabel:'Restaurer', danger:true })) return;
-      state.books = clean.books; state.lists = clean.lists; state.goals = clean.goals; state.meta = clean.meta; state.series = clean.series||{}; state.smartCollections = clean.smartCollections||[];
-      save(); render(); toast('Sauvegarde restaurée ✓');
-    }catch(_){ toast('Sauvegarde illisible'); }
-  }else if(corrupt){
+  if(!avail.length && corrupt){
     downloadJSON(corrupt, `tome-donnees-brutes-${today()}.json`);
-    toast('Copie brute téléchargée — à réparer à la main puis réimporter');
+    toast('Copie brute téléchargée — à réparer à la main puis réimporter'); return;
   }
+  if(!avail.length){ toast('Aucune sauvegarde disponible'); return; }
+  // choisir laquelle restaurer (avec le nombre d'ouvrages pour se repérer)
+  let chosen = avail[0];
+  if(avail.length > 1){
+    const choices = avail.map(r=>{ let n='?'; try{ n=String((JSON.parse(r.raw).books||[]).length); }catch(_){} return { label:`${r.label} — ${n} ouvrage(s)`, value:r.k }; });
+    const pick = await uiChoose({ title:'Quelle sauvegarde restaurer ?', choices });
+    if(!pick) return; chosen = avail.find(r=>r.k===pick);
+  }
+  try{
+    const clean = normalizeData(JSON.parse(chosen.raw));
+    if(!await uiConfirm({ title:'Restaurer cette sauvegarde ?', message:`${chosen.label} : ${clean.books.length} ouvrage(s), ${clean.lists.length} liste(s). Tes données actuelles seront remplacées (elles resteront sauvegardées côté serveur si tu es connecté).`, okLabel:'Restaurer', danger:true })) return;
+    replaceState(clean); libPersist(); render(); if(social.me) scheduleLibPush();
+    toast('Sauvegarde restaurée ✓');
+  }catch(_){ toast('Sauvegarde illisible'); }
 });
 
 /* =============== Carte de partage =============== */
@@ -3850,13 +3990,120 @@ async function socRefresh(){
        if(social.tosOutdated && ui.view==='friends') renderFriends(); }
   catch(e){ if(/401|Non authentifié/.test(e.message)){ try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; setFriendsBadge(0); } }
 }
+
+/* =============== Bibliothèque sur le compte (sauvegarde serveur façon Letterboxd) =============== */
+// Le local reste la copie de travail (rapide, hors-ligne) ; le serveur est la source de vérité
+// synchronisée entre appareils. Concurrence optimiste (rev) : jamais d'écrasement silencieux.
+let _libPushTimer = 0, _libPushing = false, _libDirty = false;
+const LIB_STATUS = { saving:'Sauvegarde…', saved:'Enregistré', offline:'Hors ligne — sera sauvegardé au retour', error:'Erreur de sauvegarde', conflict:'Fusionné depuis un autre appareil' };
+function setLibStatus(s){ social.libStatus = s; const el = $('#lib-status'); if(el){ el.dataset.s = s; el.title = LIB_STATUS[s]||''; el.hidden = !s || s==='saved'; } }
+// mute state EN PLACE (const) à partir de données brutes (normalisées + sanitizées)
+function replaceState(raw){ const n = normalizeData(raw||{}); for(const k of Object.keys(state)) delete state[k]; Object.assign(state, n); invalidateCache(); }
+// horodate/suffixe pour ne pas écraser une sauvegarde de secours précédente
+function backupLocal(suffix){ try{ localStorage.setItem(LS_KEY+suffix, localStorage.getItem(LS_KEY)||''); }catch(_){ } }
+// rattache la biblio locale au compte courant + à une révision serveur (persisté → survit au reload)
+function libTag(rev){ state.meta = state.meta || {}; if(social.me) state.meta.ownerId = social.me.id; if(rev!=null){ state.meta.libRev = rev; social.libRev = rev; } }
+function libPersist(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){ } }
+function scheduleLibPush(){ if(!social.me) return; _libDirty = true; clearTimeout(_libPushTimer); _libPushTimer = setTimeout(()=>pushLibrary(), 1400); }
+async function pushLibrary(opts){
+  if(!social.me) return;
+  if(_libPushing){ _libDirty = true; return; }               // une seule requête à la fois
+  _libPushing = true; _libDirty = false; clearTimeout(_libPushTimer); setLibStatus('saving');
+  try{
+    const res = await fetch(API_BASE+'/api/library', { method:'POST', keepalive: !!(opts&&opts.keepalive),
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+socToken() },
+      body: JSON.stringify({ data: JSON.stringify(state), baseRev: social.libRev||0 }) });
+    if(res.status===409){                                     // un autre appareil a écrit entre-temps
+      const d = await res.json();
+      backupLocal('-conflit');
+      replaceState(mergeLibraries(state, JSON.parse(d.data))); // FUSION (pas d'écrasement) : rien perdu
+      libTag(d.rev); libPersist(); scheduleRender();
+      setLibStatus('conflict'); toast('Bibliothèque fusionnée avec un autre appareil ✓');
+      scheduleLibPush();                                      // re-pousse la fusion
+    } else if(res.ok){ const d = await res.json(); libTag(d.rev); libPersist(); setLibStatus('saved'); }
+    else if(res.status===401){ social.me=null; try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} setLibStatus(''); }
+    else { setLibStatus('error'); }
+  }catch(e){ setLibStatus('offline'); _libDirty = true; }      // hors-ligne : on retentera
+  finally{ _libPushing = false; if(_libDirty) scheduleLibPush(); }
+}
+// Adopte la bibliothèque du serveur (cas : appareil vierge, ou biblio d'un AUTRE compte à remplacer).
+function adoptServerLibrary(d){
+  if(!d || !d.data) return;
+  backupLocal('-preacct');
+  try{ replaceState(JSON.parse(d.data)); libTag(d.rev); libPersist(); scheduleRender(); }
+  catch(e){ setLibStatus('error'); }
+}
+// Fusion SANS perte : union des livres (id + clé titre|auteur|tome), listes, objectifs, collections, séries.
+function libMergeKey(b){ return (String(b.title||'').toLowerCase()+'|'+((b.authors||[])[0]||'').toLowerCase()+'|'+(b.volume??'')).replace(/[^a-z0-9à-ÿ]/g,''); }
+function mergeLibraries(localSt, serverRaw){
+  const out = normalizeData(serverRaw);
+  const ids = new Set(out.books.map(b=>b.id)), keys = new Set(out.books.map(libMergeKey));
+  for(const b of (localSt.books||[])){
+    if((b.tags||[]).includes('exemple')) continue;                 // ne pas réinjecter la démo
+    if(ids.has(b.id) || keys.has(libMergeKey(b))) continue;        // déjà côté serveur → on garde le serveur
+    const nb = normalizeBook(b); out.books.push(nb); ids.add(nb.id); keys.add(libMergeKey(nb));
+  }
+  const byId = new Map(out.lists.map(l=>[l.id,l]));
+  for(const l of (localSt.lists||[])){
+    if(byId.has(l.id)){ const t=byId.get(l.id); t.bookIds=[...new Set([...t.bookIds, ...(l.bookIds||[])])]; }
+    else out.lists.push(l);
+  }
+  for(const [y,v] of Object.entries(localSt.goals||{})) out.goals[y] = Math.max(out.goals[y]||0, +v||0);
+  out.series = Object.assign({}, localSt.series||{}, out.series);
+  // collections intelligentes : union par id (garder les locales absentes du serveur)
+  const scIds = new Set((out.smartCollections||[]).map(c=>c.id));
+  for(const c of (localSt.smartCollections||[])) if(!scIds.has(c.id)){ out.smartCollections.push(c); scIds.add(c.id); }
+  // compteur d'export : garder la date la plus récente
+  if(localSt.meta && localSt.meta.lastExport && (!out.meta.lastExport || localSt.meta.lastExport > out.meta.lastExport)) out.meta.lastExport = localSt.meta.lastExport;
+  return out;
+}
+// À la connexion : réconcilie la biblio locale avec celle du compte, SANS perte ni fuite entre comptes.
+async function syncLibraryOnLogin(){
+  if(!social.me) return;
+  const myId = social.me.id;
+  const localOwner = (state.meta && state.meta.ownerId) || '';
+  const localRev = (state.meta && +state.meta.libRev) || 0;
+  const localMine = !localOwner || localOwner===myId;              // anonyme (jamais rattachée) ou à moi
+  const localHasReal = (state.books||[]).some(b=>!(b.tags||[]).includes('exemple'));
+  let d;
+  try{ d = await api('/api/library'); }
+  catch(e){ setLibStatus('offline'); return; }                    // hors-ligne : on garde le local
+  if(!localMine){
+    // la biblio locale appartient à QUELQU'UN D'AUTRE (appareil partagé) → ne JAMAIS la mêler à ce compte
+    backupLocal('-autre');
+    if(d.exists) adoptServerLibrary(d);
+    else { replaceState({}); libTag(0); libPersist(); scheduleRender(); }
+    return;
+  }
+  if(!d.exists){
+    // compte sans biblio → migrer la biblio locale (à moi/anonyme)
+    libTag(0); await pushLibrary();
+    if(localHasReal) toast('Bibliothèque enregistrée sur ton compte ✓');
+    return;
+  }
+  if(localRev === d.rev){
+    // le local est basé sur la version serveur courante → il peut porter des édits non poussés → LE LOCAL GAGNE
+    libTag(d.rev); await pushLibrary();
+    return;
+  }
+  // divergence (autre appareil a avancé) ou 1re fois sur ce compte → FUSION sans perte + secours
+  backupLocal('-preacct');
+  replaceState(mergeLibraries(state, JSON.parse(d.data)));
+  libTag(d.rev); libPersist(); scheduleRender();
+  await pushLibrary();
+  if(localHasReal) toast('Bibliothèques synchronisées ✓');
+}
+// Flush best-effort quand l'onglet se ferme/masque : pousse une sauvegarde en attente (keepalive
+// survit à la fermeture) — évite de perdre une modif faite juste avant de quitter.
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && _libDirty && social.me && !_libPushing) pushLibrary({keepalive:true}); });
+window.addEventListener('pagehide', ()=>{ if(_libDirty && social.me && !_libPushing) pushLibrary({keepalive:true}); });
 function renderFriends(){
   const box = $('#friends-body');
   if(!social.me){ renderAuth(box); return; }
   if(social.invite) processInvite(); // invitation en attente traitée dès qu'on est connecté
   if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
   box.innerHTML = `
-    ${social.tosOutdated ? `<div class="invite-banner" id="tos-banner">📄 Les mentions légales ont été mises à jour (ajout : réactions ♥ et réponses).
+    ${social.tosOutdated ? `<div class="invite-banner" id="tos-banner">📄 Les mentions légales ont été mises à jour : ta bibliothèque est désormais enregistrée sur ton compte, pour la retrouver sur tous tes appareils (privée, exportable et supprimable à tout moment).
       <a data-legal-view style="color:var(--green);cursor:pointer;text-decoration:underline">Les lire</a>
       <button class="btn small primary" id="tos-accept" style="margin-left:8px">J'accepte</button></div>` : ''}
     <div class="me-bar">
@@ -4005,8 +4252,10 @@ function renderAuth(box, mode='login', errMsg=''){
       const body = mode==='login' ? {username, password} : {username, password, displayName, consent:true};
       const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
       localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tab='feed'; social.view=null;
+      try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d'accueil
       renderFriends();
       socRefresh(); // login/signup ne renvoient pas pendingRequests — /api/me si, pour le badge
+      syncLibraryOnLogin(); // charge/fusionne la bibliothèque du compte (migration sans perte)
     }catch(e){
       showErr(e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message);
     }
@@ -4019,12 +4268,12 @@ function renderAuth(box, mode='login', errMsg=''){
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), le sous-ensemble de bibliothèque que tu choisis de partager, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), et ton adresse IP (uniquement pour limiter les abus).
-Finalité : te permettre de retrouver des amis et de partager tes lectures.
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), et ton adresse IP (uniquement pour limiter les abus).
+Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l'inscription).
-Aucune publicité, aucun traceur, aucune revente. Hébergeur : Cloudflare.
-Conservation : sessions 30 jours ; compte supprimé après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
-Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données), effacement (Supprimer mon compte). Ta bibliothèque privée, elle, reste sur ton appareil et n'est jamais envoyée.`;
+Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Seul le sous-ensemble que tu choisis explicitement de partager est visible de tes amis. Aucune publicité, aucun traceur, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
+Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
+Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil.`;
 async function renderFeed(){
   const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
   try{
@@ -4290,7 +4539,8 @@ $('#friends-body').addEventListener('click', async e => {
   if(e.target.closest('#soc-logout')){
     try{ await api('/api/logout', {method:'POST'}); }catch(_){}
     try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
-    social.me=null; social.view=null; renderFriends(); return;
+    social.me=null; social.view=null; social.libRev=0; setLibStatus(''); // la biblio locale reste sur l'appareil
+    renderFriends(); return;
   }
   const acc = e.target.closest('[data-accept]');
   if(acc){ if(acc.disabled) return; acc.disabled=true; try{ await api('/api/friends/accept', {method:'POST', body:{userId:acc.dataset.accept}}); toast('Ami ajouté ✓'); loadFriendLists(); }catch(e2){ acc.disabled=false; toast(e2.message); } return; }
@@ -4336,8 +4586,38 @@ $('#btn-streak').addEventListener('click', ()=>selectView('stats'));
 if(_initHash.startsWith('#book/') || _initHash.startsWith('#invite/')) applyHashView(_initHash);
 if(_loaded.migrated) save(true); // fige la migration depuis l'ancienne clé, sans compter comme une modification
 if(_loaded.notice) setTimeout(()=>toast(_loaded.notice), 600);
-// restaure la session sociale si un token existe, et rafraîchit la vue Amis si elle est ouverte
-if(socToken()) socRefresh().then(()=>{ if(ui.view==='friends') renderFriends(); });
+// restaure la session sociale si un token existe → rafraîchit la vue Amis + synchronise la biblio du compte
+if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin(); } if(ui.view==='friends') renderFriends(); });
+
+// Page d'accueil : présentée aux visiteurs qui arrivent sans compte et sans bibliothèque à eux.
+// (Les utilisateurs connectés, ou qui ont déjà des livres, entrent directement dans l'app.)
+(function maybeWelcome(){
+  let welcomed = false;
+  try{ welcomed = !!localStorage.getItem('tome-welcomed'); }catch(_){}
+  const hasRealBooks = (state.books||[]).some(b=>!(b.tags||[]).includes('exemple'));
+  if(hasRealBooks || socToken()){ try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}; return; }
+  // _initHash = hash d'ARRIVÉE (capturé avant que selectView ne pose #library) : on n'interrompt
+  // pas un visiteur qui deep-linke (#book/…, #invite/…), seulement une arrivée « à froid ».
+  if(!welcomed && !_initHash) showWelcome();
+})();
+
+/* =============== Page d'accueil publique =============== */
+function showWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=false; document.body.classList.add('welcome-open');
+  const first=w.querySelector('[data-lp="signup"]'); if(first) try{ first.focus(); }catch(_){} }
+function hideWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=true; document.body.classList.remove('welcome-open');
+  if(location.hash==='#welcome'){ try{ history.replaceState(history.state,'',location.pathname+location.search); }catch(_){} } }
+$('#welcome').addEventListener('click', e=>{
+  const b = e.target.closest('[data-lp]'); if(!b) return;
+  const a = b.dataset.lp;
+  if(a==='legal'){ openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); return; }
+  try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus l'imposer au prochain lancement
+  hideWelcome();
+  if(a==='signup' || a==='login'){ selectView('friends'); if(!social.me) renderAuth($('#friends-body'), a==='signup'?'signup':'login'); }
+  // a==='try' : on entre simplement dans l'app (local, sans compte)
+});
+// Prévisualisation : #welcome affiche la page d'accueil (le branchement au 1er lancement viendra avec les comptes)
+if(location.hash==='#welcome') showWelcome();
+window.addEventListener('hashchange', ()=>{ if(location.hash==='#welcome') showWelcome(); });
 
 /* =============== Tests de fumée (?selftest) — coût nul en usage normal =============== */
 if(location.search.includes('selftest')){
@@ -4408,6 +4688,14 @@ if(location.search.includes('selftest')){
   assert('INVITE_RE rejette pseudo invalide', 'invite/<script>'.match(INVITE_RE)===null && 'invite/ab'.match(INVITE_RE)===null);
   assert('bookLibKey normalise', bookLibKey('Dune ', 'Frank Herbert')===bookLibKey('dune', 'frank herbert'));
   assert('shelfKey stable (sync = chez tes amis)', shelfKey({title:'Dune', authors:['Frank Herbert'], volume:2})==='dune|frankherbert|2'.replace(/\|/g,''));
+  // v9 : fusion de bibliothèques (aucun livre perdu, dédup, démo ignorée)
+  const _srv = {books:[{id:'s1',title:'Dune',authors:['Frank Herbert']}]};
+  const _loc = {books:[{id:'l1',title:'Fondation',authors:['Asimov']},{id:'l2',title:'Dune',authors:['Frank Herbert']},{id:'d1',title:'Démo',tags:['exemple']}]};
+  const _m = mergeLibraries(_loc, _srv);
+  assert('merge : garde le livre serveur', _m.books.some(b=>b.title==='Dune'));
+  assert('merge : ajoute le livre local absent', _m.books.some(b=>b.title==='Fondation'));
+  assert('merge : dédup le doublon (Dune une seule fois)', _m.books.filter(b=>b.title==='Dune').length===1);
+  assert('merge : ignore la démo', !_m.books.some(b=>b.title==='Démo'));
   console.log(`Tome selftest — ${pass} ✓ / ${fail} ✗`);
   toast(`Selftest : ${pass} ✓ / ${fail} ✗`);
 }
