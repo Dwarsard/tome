@@ -4102,7 +4102,7 @@ function backupLocal(suffix){ try{ localStorage.setItem(LS_KEY+suffix, localStor
 // rattache la biblio locale au compte courant + à une révision serveur (persisté → survit au reload)
 function libTag(rev){ state.meta = state.meta || {}; if(social.me) state.meta.ownerId = social.me.id; if(rev!=null){ state.meta.libRev = rev; social.libRev = rev; } }
 function libPersist(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){ } }
-function scheduleLibPush(){ if(!social.me) return; _libDirty = true; clearTimeout(_libPushTimer); _libPushTimer = setTimeout(()=>pushLibrary(), 1400); }
+function scheduleLibPush(){ if(!social.me) return; _libDirty = true; clearTimeout(_libPushTimer); _libPushTimer = setTimeout(()=>pushLibrary(), 1400); scheduleShelfPush(); }
 async function pushLibrary(opts){
   if(!social.me) return;
   if(_libPushing){ _libDirty = true; return; }               // une seule requête à la fois
@@ -4195,6 +4195,33 @@ async function syncLibraryOnLogin(){
 // survit à la fermeture) — évite de perdre une modif faite juste avant de quitter.
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && _libDirty && social.me && !_libPushing) pushLibrary({keepalive:true}); });
 window.addEventListener('pagehide', ()=>{ if(_libDirty && social.me && !_libPushing) pushLibrary({keepalive:true}); });
+
+/* ---- Étagère partagée : synchro AUTOMATIQUE ----
+   Avant, le profil visible des amis n'existait qu'après un clic manuel dans « Mon partage » — un
+   nouvel inscrit avait donc un profil vide. Désormais l'étagère suit la bibliothèque, en respectant
+   le mode de partage : « Rien » = jamais rien envoyé ; « Notes seules » = critiques retirées CÔTÉ
+   CLIENT. Débounce long + empreinte persistée : on n'appelle le serveur que si le contenu partagé a
+   réellement changé (limite serveur : 40 synchros/h). Rattrapage à la connexion et au démarrage. */
+const SHELF_TAG_KEY = 'tome-shelf-tag';
+let _shelfTimer = 0, _shelfPushing = false, _shelfDirty = false;
+function shelfPayload(mode){ const books = shareableBooks(); return mode==='ratings' ? books.map(b=>({...b, review:''})) : books; }
+function shelfHash(s){ let h = 5381; for(let i=0;i<s.length;i++) h = ((h<<5)+h+s.charCodeAt(i))>>>0; return h.toString(36); }
+// l'empreinte inclut l'id du compte : sur un appareil partagé, changer de compte force une resynchro
+function shelfTag(mode, payload){ return (social.me?social.me.id:'')+':'+mode+':'+payload.length+':'+shelfHash(JSON.stringify(payload)); }
+function rememberShelfTag(tag){ try{ localStorage.setItem(SHELF_TAG_KEY, tag); }catch(_){ } }
+function scheduleShelfPush(){ if(!social.me || (social.me.shareMode||'all')==='none') return; _shelfDirty = true; clearTimeout(_shelfTimer); _shelfTimer = setTimeout(()=>pushShelf(), 25000); }
+async function pushShelf(){
+  if(!social.me) return;
+  if(_shelfPushing){ _shelfDirty = true; return; }
+  const mode = social.me.shareMode||'all'; if(mode==='none') return;
+  const payload = shelfPayload(mode); const tag = shelfTag(mode, payload);
+  let prev = ''; try{ prev = localStorage.getItem(SHELF_TAG_KEY)||''; }catch(_){ }
+  if(tag===prev){ _shelfDirty = false; return; }
+  _shelfPushing = true; _shelfDirty = false;
+  try{ await api('/api/sync', {method:'POST', body:{shareMode:mode, books:payload}}); rememberShelfTag(tag); }
+  catch(_){ /* best-effort : retentera à la prochaine modification ou au prochain lancement */ }
+  finally{ _shelfPushing = false; if(_shelfDirty) scheduleShelfPush(); }
+}
 function renderFriends(){
   const box = $('#friends-body');
   if(!social.me){ renderAuth(box); return; }
@@ -4384,7 +4411,7 @@ function renderAuth(box, mode='login', errMsg=''){
       try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d'accueil
       renderFriends();
       socRefresh(); // login/signup ne renvoient pas pendingRequests — /api/me si, pour le badge
-      syncLibraryOnLogin(); // charge/fusionne la bibliothèque du compte (migration sans perte)
+      syncLibraryOnLogin().then(()=>pushShelf()); // charge/fusionne la bibliothèque du compte, puis synchronise l'étagère partagée
     }catch(e){
       showErr(e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message);
     }
@@ -4400,7 +4427,7 @@ Responsable de traitement : Lucas Marroig (lucas.marroig@essec.edu).
 Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), et ton adresse IP (uniquement pour limiter les abus).
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l'inscription).
-Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Seul le sous-ensemble que tu choisis explicitement de partager est visible de tes amis. Aucune publicité, aucun traceur, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
+Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n'envoie jamais rien. Aucune publicité, aucun traceur, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
 Liens d'affiliation : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers Amazon. En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi. Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d'Amazon qui s'appliquent.
 Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
 Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil.`;
@@ -4601,14 +4628,14 @@ async function renderMyShare(){
   const mode = social.me.shareMode || 'all';
   const shareable = shareableBooks();
   el.innerHTML = `
-    <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">Choisis ce que tes amis peuvent voir, puis synchronise. ${shareable.length} titre(s) partageables (lus ou notés).</p>
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">Choisis ce que tes amis peuvent voir — ton étagère se synchronise ensuite automatiquement. ${shareable.length} titre(s) partageables (lus ou notés).</p>
     <div class="seg" id="share-mode" style="margin-bottom:14px">
       <button data-mode="all" class="${mode==='all'?'on':''}">Tout</button>
       <button data-mode="ratings" class="${mode==='ratings'?'on':''}">Notes seules</button>
       <button data-mode="none" class="${mode==='none'?'on':''}">Rien</button>
     </div>
     <p style="font-size:12.5px;color:var(--faint);margin-bottom:16px">« Tout » : titres, notes, critiques, dates. « Notes seules » : sans tes critiques. « Rien » : profil masqué — ton étagère partagée et les ♥ reçus sont effacés du serveur.</p>
-    <button class="btn primary" id="share-sync">↻ Synchroniser mon profil</button>
+    <button class="btn primary" id="share-sync">↻ Appliquer et synchroniser maintenant</button>
     <div id="share-status" style="font-size:13px;color:var(--muted);margin-top:12px"></div>`;
   let chosen = mode;
   $$('#share-mode button').forEach(btn=>btn.addEventListener('click', ()=>{ chosen=btn.dataset.mode; $$('#share-mode button').forEach(b=>b.classList.toggle('on', b===btn)); }));
@@ -4616,10 +4643,11 @@ async function renderMyShare(){
     const btn = ev.currentTarget; if(btn.disabled) return; btn.disabled = true;
     $('#share-status').textContent = 'Synchronisation…';
     // le mode « notes seules » ne DOIT PAS envoyer les critiques (confidentialité garantie côté client)
-    const payload = chosen==='none' ? [] : (chosen==='ratings' ? shareable.map(b=>({...b, review:''})) : shareable);
+    const payload = chosen==='none' ? [] : shelfPayload(chosen);
     try{
       const d = await api('/api/sync', {method:'POST', body:{shareMode:chosen, books:payload}});
       social.me.shareMode = d.shareMode;
+      rememberShelfTag(shelfTag(d.shareMode, payload));   // l'auto-synchro sait que c'est à jour
       $('#share-status').textContent = d.shareMode==='none' ? 'Profil masqué. ✓' : `${d.count} titre(s) synchronisé(s) ✓`;
       toast('Profil mis à jour ✓');
     }catch(e){ $('#share-status').textContent = e.message==='offline'?'Serveur injoignable.':e.message; }
@@ -4735,7 +4763,7 @@ if(_initHash.startsWith('#book/') || _initHash.startsWith('#invite/')) applyHash
 if(_loaded.migrated) save(true); // fige la migration depuis l'ancienne clé, sans compter comme une modification
 if(_loaded.notice) setTimeout(()=>toast(_loaded.notice), 600);
 // restaure la session sociale si un token existe → rafraîchit la vue Amis + synchronise la biblio du compte
-if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin(); } if(ui.view==='friends') renderFriends(); });
+if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin().then(()=>pushShelf()); } if(ui.view==='friends') renderFriends(); });
 
 // Page d'accueil : présentée aux visiteurs qui arrivent sans compte et sans bibliothèque à eux.
 // (Les utilisateurs connectés, ou qui ont déjà des livres, entrent directement dans l'app.)
