@@ -514,6 +514,13 @@ body.selecting .card:hover .qk{opacity:0}
 .ob-check{position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:color-mix(in srgb, var(--green) 82%, transparent); color:var(--on-green); font-weight:800; font-size:14px; border-radius:var(--r-sm)}
 .ob-pick.done .ob-cov{border-color:var(--green)} .ob-pick.done .ob-check{display:flex}
 .ob-foot{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:26px}
+/* Aperçu de carte à partager (au-dessus des autres overlays z-100, sous les dialogues z-300) */
+#ov-card{z-index:150}
+.card-modal{max-width:430px}
+#card-body{text-align:center}
+.card-preview{width:100%; max-width:330px; border-radius:14px; border:1px solid var(--border); box-shadow:0 12px 36px rgba(0,0,0,.35); display:block; margin:0 auto 14px}
+.card-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
+.card-hint{font-size:12.5px; color:var(--faint); margin-top:10px}
 .empty p{max-width:400px; margin:0 auto 18px; font-size:14px}
 /* Recap annuel */
 .recap-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin:6px 0 4px}
@@ -1030,6 +1037,12 @@ body.welcome-open{overflow:hidden}
 </div>
 
 <!-- ======== MODAL LISTE / SÉRIE ======== -->
+<div class="overlay" id="ov-card">
+  <div class="modal card-modal" role="dialog" aria-modal="true" aria-labelledby="card-head">
+    <div class="modal-head"><h3 id="card-head">Ta carte à partager</h3><button class="x" id="card-close" aria-label="Fermer">✕</button></div>
+    <div class="modal-body" id="card-body"></div>
+  </div>
+</div>
 <div class="overlay" id="ov-list">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="list-head">
     <div class="modal-head"><h3 id="list-head">Liste</h3><button class="x" data-close aria-label="Fermer">✕</button></div>
@@ -1754,6 +1767,26 @@ function renderDemoBanner(){
     <button class="btn small db-x" id="demo-clear">Tout effacer</button>`;
 }
 
+// Teaser de décembre : la rétro est LE moteur de partage de l'année — on la met sous les yeux
+// au bon moment, une seule fois (masquable, mémorisé par année).
+function isRecapSeason(d){ return (d||new Date()).getMonth()===11; }
+function renderRecapTeaser(){
+  let ban = $('#recap-teaser');
+  const y = new Date().getFullYear();
+  let show = false;
+  try{ show = isRecapSeason() && !localStorage.getItem('tome-recap-teased-'+y) && yearRecap(y).count>0; }catch(_){ }
+  if(!show){ if(ban) ban.remove(); return; }
+  if(!ban){
+    ban = document.createElement('div'); ban.id='recap-teaser'; ban.className='demo-banner';
+    $('#view-library').insertBefore(ban, $('#now-reading'));
+    ban.addEventListener('click', e=>{
+      if(e.target.closest('#recap-open')){ showRecap(y); return; }
+      if(e.target.closest('#recap-dismiss')){ try{ localStorage.setItem('tome-recap-teased-'+y,'1'); }catch(_){ } ban.remove(); }
+    });
+  }
+  ban.innerHTML = `<span>🎁 <b>Ta rétro ${y} est prête</b> — ton année de lecture en une carte à partager.</span>
+    <span style="display:flex;gap:8px"><button class="btn small primary" id="recap-open">Voir 🎉</button><button class="btn small db-x" id="recap-dismiss" aria-label="Masquer">✕</button></span>`;
+}
 function renderLibrary(){
   renderNowReading();
   renderDiscover();
@@ -1766,6 +1799,7 @@ function renderLibrary(){
   const arr = filteredBooks();
   const grid = $('#lib-grid'), emptyBox = $('#lib-empty');
   renderDemoBanner();
+  renderRecapTeaser();
   if(!state.books.length){
     grid.innerHTML = ''; $('#lib-count').textContent = '';
     emptyBox.innerHTML = `<div class="onboard">
@@ -3425,7 +3459,7 @@ function showRecap(year){
       ${r.readingDays?`<div class="recap-hi"><div class="rl">Jours de lecture</div><b>${r.readingDays}</b> jour${r.readingDays>1?'s':''} avec une page tournée</div>`:''}
       ${r.topMoods.length?`<div class="recap-hi"><div class="rl">Tes ambiances</div><b>${r.topMoods.map(esc).join(', ')}</b></div>`:''}
       <div class="recap-hi"><div class="rl">Par type</div><b>${Object.entries(r.byType).filter(([,n])=>n).map(([t,n])=>`${n} ${TYPE_LABEL[t].toLowerCase()}${n>1&&t==='livre'?'s':''}`).join(' · ')||'—'}</b></div>
-      <button class="btn primary" id="recap-share" style="margin-top:14px; width:100%">📸 Télécharger ma carte de l'année</button>`;
+      <button class="btn primary" id="recap-share" style="margin-top:14px; width:100%">📸 Créer ma carte à partager</button>`;
   }
   openOverlay('#ov-list');
 }
@@ -3718,6 +3752,36 @@ function wrapText(ctx, text, x, y, maxW, lineH, maxLines){
   if(line){ ctx.fillText(line, x, y); y += lineH; }
   return y;
 }
+// Aperçu + partage d'une carte générée. Sur mobile, navigator.share({files}) ouvre la feuille
+// native (Instagram, WhatsApp…) — LE canal viral ; sinon repli sur le téléchargement.
+const SITE_URL = 'https://tome-social.lucas-marroig.workers.dev';
+let _cardUrl = ''; // blob-URL de l'aperçu courant, révoquée à la génération suivante
+function presentCard(cv, filename, shareText){
+  cv.toBlob(blob=>{
+    if(!blob){ toast('Génération impossible'); return; }
+    if(_cardUrl){ try{ URL.revokeObjectURL(_cardUrl); }catch(_){ } }
+    _cardUrl = URL.createObjectURL(blob);
+    // aperçu en data: (la CSP img-src autorise data: mais pas blob:) ; le blob sert au partage/téléchargement
+    const dataUrl = cv.toDataURL('image/png');
+    const file = new File([blob], filename, {type:'image/png'});
+    const canNative = !!(navigator.canShare && navigator.canShare({files:[file]}));
+    $('#card-body').innerHTML = `
+      <img class="card-preview" src="${dataUrl}" alt="Aperçu de la carte">
+      <div class="card-actions">
+        ${canNative ? '<button class="btn primary" id="card-share">📲 Partager</button>' : ''}
+        <button class="btn ${canNative?'':'primary'}" id="card-dl">⬇ Télécharger</button>
+      </div>
+      <p class="card-hint">En story, en message… l'adresse de Tome est sur l'image ✨</p>`;
+    if(canNative) $('#card-share').addEventListener('click', async ()=>{
+      try{ await navigator.share({ files:[file], title:'Tome', text:shareText }); }catch(_){ /* partage annulé */ }
+    });
+    $('#card-dl').addEventListener('click', ()=>{
+      const a = document.createElement('a'); a.href = _cardUrl; a.download = filename; a.click();
+      toast('Carte téléchargée ✓');
+    });
+    $('#ov-card').classList.add('open'); // par-dessus la modale ouverte (rétro/détail), sans la fermer
+  }, 'image/png');
+}
 function drawCard(b, coverImg){
   const W = 1000, H = 1250;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -3754,11 +3818,13 @@ function drawCard(b, coverImg){
     y = wrapText(ctx, '« '+b.review+' »', W/2, y+26, W-200, 38, 5);
   }
   ctx.font = 'bold 34px system-ui, sans-serif'; ctx.fillStyle = '#2fc775';
-  ctx.fillText('Tome.', W/2, H-64);
+  ctx.fillText('Tome.', W/2, H-88);
+  ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#7fe0ab';
+  ctx.fillText('tome-social.lucas-marroig.workers.dev', W/2, H-52);
   const lastR = (b.readings||[]).slice().sort((a,c)=>c.date.localeCompare(a.date))[0];
   if(lastR){
     ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#5c6b7a';
-    ctx.fillText('lu le '+fmtDate(lastR.date), W/2, H-30);
+    ctx.fillText('lu le '+fmtDate(lastR.date), W/2, H-20);
   }
   return cv;
 }
@@ -3766,15 +3832,8 @@ function shareCard(b){
   const generate = (img)=>{
     try{
       const cv = drawCard(b, img);
-      cv.toBlob(blob=>{
-        if(!blob){ toast('Génération impossible'); return; }
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `tome-${(b.title||'carte').toLowerCase().replace(/[^a-z0-9à-ÿ]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,40)||'carte'}.png`;
-        a.click();
-        setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-        toast('Carte téléchargée ✓');
-      }, 'image/png');
+      const slug = (b.title||'carte').toLowerCase().replace(/[^a-z0-9à-ÿ]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,40)||'carte';
+      presentCard(cv, `tome-${slug}.png`, `« ${fullTitle(b)} » — mon avis sur Tome · ${SITE_URL}`);
     }catch(e){
       // canvas « souillé » (couverture sans CORS) → on regénère sans l'image
       if(img) generate(null);
@@ -3829,33 +3888,27 @@ function drawYearCard(year, coverImg){
   if(r.topTag) rows.push(['Genre phare', r.topTag[0]]);
   if(r.avg) rows.push(['Note moyenne', r.avg.toFixed(1).replace('.',',')+' ★']);
   if(r.readingDays) rows.push(['Jours de lecture', r.readingDays+' j']);
-  for(const [lbl,val] of rows){
+  for(const [lbl,val] of rows.slice(0,3)){ // 3 max : le graphique et le pied de carte doivent tenir
     ctx.textAlign='left'; ctx.fillStyle='#8fa1b3'; ctx.font='500 30px system-ui'; ctx.fillText(lbl, PAD, y);
     ctx.textAlign='right'; ctx.fillStyle='#e8eef4'; ctx.font='700 32px system-ui';
     let v=String(val); while(ctx.measureText(v).width>W-2*PAD-300 && v.length>1) v=v.slice(0,-1);
-    ctx.fillText(v===String(val)?v:v+'…', W-PAD, y); y+=38;
-    ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.beginPath(); ctx.moveTo(PAD,y); ctx.lineTo(W-PAD,y); ctx.stroke(); y+=34;
+    ctx.fillText(v===String(val)?v:v+'…', W-PAD, y); y+=36;
+    ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.beginPath(); ctx.moveTo(PAD,y); ctx.lineTo(W-PAD,y); ctx.stroke(); y+=26;
   }
-  ctx.textAlign='left'; y+=14; ctx.fillStyle='#8fa1b3'; ctx.font='600 28px system-ui'; ctx.fillText('RYTHME MOIS PAR MOIS', PAD, y); y+=40;
-  const bm=r.byMonth||Array(12).fill(0), bmax=Math.max(...bm,1), cW=W-2*PAD, gap=14, bw=(cW-gap*11)/12, base=y+150;
+  // rythme mensuel ancré au-dessus du pied de carte, hauteur adaptée à la place restante :
+  // impossible de déborder sur « Tome. » + URL quel que soit le contenu au-dessus
+  ctx.textAlign='left'; y+=16;
+  ctx.fillStyle='#8fa1b3'; ctx.font='600 28px system-ui'; ctx.fillText('RYTHME MOIS PAR MOIS', PAD, y);
+  const barsTop = y+22, maxBarH = Math.max(60, Math.min(150, (H-176)-barsTop)), base = barsTop+maxBarH;
+  const bm=r.byMonth||Array(12).fill(0), bmax=Math.max(...bm,1), cW=W-2*PAD, gap=14, bw=(cW-gap*11)/12;
   for(let i=0;i<12;i++){
-    const bh=Math.max(bm[i]/bmax*150, bm[i]?6:2), bx=PAD+i*(bw+gap);
+    const bh=Math.max(bm[i]/bmax*maxBarH, bm[i]?6:2), bx=PAD+i*(bw+gap);
     ctx.fillStyle=bm[i]?'#2fc775':'#242e39';
     if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(bx, base-bh, bw, bh, 5); ctx.fill(); } else ctx.fillRect(bx, base-bh, bw, bh);
-    ctx.fillStyle='#5c6b7a'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText(MONTHS_MINI[i], bx+bw/2, base+34);
+    ctx.fillStyle='#5c6b7a'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText(MONTHS_MINI[i], bx+bw/2, base+32);
   }
-  ctx.textAlign='left'; y=base+96;
-  if(r.topMoods && r.topMoods.length){
-    let cxp=PAD; ctx.font='500 27px system-ui';
-    for(const m of r.topMoods){
-      const w=ctx.measureText(m).width+44; if(cxp+w>W-PAD) break;
-      ctx.fillStyle='rgba(47,199,117,.14)';
-      if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(cxp, y-36, w, 52, 26); ctx.fill(); }
-      ctx.fillStyle='#7fe0ab'; ctx.textAlign='left'; ctx.fillText(m, cxp+22, y); cxp+=w+14;
-    }
-  }
-  ctx.textAlign='center'; ctx.fillStyle='#2fc775'; ctx.font='800 44px system-ui'; ctx.fillText('Tome.', W/2, H-70);
-  ctx.fillStyle='#5c6b7a'; ctx.font='24px system-ui'; ctx.fillText('mon journal de lecture', W/2, H-34);
+  ctx.textAlign='center'; ctx.fillStyle='#2fc775'; ctx.font='800 44px system-ui'; ctx.fillText('Tome.', W/2, H-84);
+  ctx.fillStyle='#7fe0ab'; ctx.font='26px system-ui'; ctx.fillText('tome-social.lucas-marroig.workers.dev', W/2, H-40);
   return cv;
 }
 function shareYearCard(year){
@@ -3863,14 +3916,7 @@ function shareYearCard(year){
   if(!r.count){ toast('Rien à mettre sur la carte pour cette année'); return; }
   const generate = (img)=>{
     try{
-      drawYearCard(year, img).toBlob(blob=>{
-        if(!blob){ toast('Génération impossible'); return; }
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `tome-retro-${year}.png`;
-        a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-        toast('Carte de l\'année téléchargée ✓');
-      }, 'image/png');
+      presentCard(drawYearCard(year, img), `tome-retro-${year}.png`, `Ma rétro lecture ${year} 📚 · ${SITE_URL}`);
     }catch(e){ if(img) generate(null); else toast('Génération impossible'); }
   };
   const cover = r.best && r.best.cover;
@@ -3901,14 +3947,19 @@ function openCover(url){
   ov.classList.add('open');
 }
 $('#ov-cover').addEventListener('click', ()=>$('#ov-cover').classList.remove('open'));
+$('#ov-card').addEventListener('click', e=>{ // se ferme seul, sans fermer la modale en dessous
+  if(e.target===$('#ov-card') || e.target.closest('#card-close')) $('#ov-card').classList.remove('open');
+});
 $$('.overlay').forEach(o => o.addEventListener('click', e => {
-  if(o.id==='ov-cover') return; // fermé par son propre handler (clic n'importe où)
+  if(o.id==='ov-cover' || o.id==='ov-card') return; // fermés par leur propre handler
   if(e.target === o || e.target.closest('[data-close]')) closeOverlays();
 }));
 document.addEventListener('keydown', e => {
   if(e.key!=='Escape') return;
   const cov = $('#ov-cover');
   if(cov.classList.contains('open')){ cov.classList.remove('open'); return; } // ferme d'abord le lightbox
+  const ocd = $('#ov-card');
+  if(ocd.classList.contains('open')){ ocd.classList.remove('open'); return; } // puis l'aperçu de carte
   if($$('.overlay.open').length){ closeOverlays(); return; }
   if(ui.selectMode){ clearSelection(); renderLibrary(); }
 });
