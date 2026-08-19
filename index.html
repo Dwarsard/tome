@@ -6,7 +6,22 @@
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#12161a" id="meta-theme">
-<meta name="description" content="Tome — ta bibliothèque et ton journal de lecture : livres, BD, manga.">
+<meta name="description" content="Tome — ton journal de lecture pour livres, BD et manga. Note, collectionne, suis tes séries et partage avec tes amis. Gratuit, sans publicité, tes données t'appartiennent.">
+<link rel="canonical" href="https://tome-social.lucas-marroig.workers.dev/">
+<!-- Open Graph / Twitter : l'aperçu du lien quand quelqu'un partage Tome (og:image exige une URL absolue) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tome">
+<meta property="og:title" content="Tome — ton journal de lecture">
+<meta property="og:description" content="Livres, BD et manga : note, collectionne, suis tes séries et partage avec tes amis. Gratuit et sans publicité.">
+<meta property="og:url" content="https://tome-social.lucas-marroig.workers.dev/">
+<meta property="og:image" content="https://tome-social.lucas-marroig.workers.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Tome — ton journal de lecture">
+<meta name="twitter:description" content="Livres, BD et manga : note, collectionne, partage avec tes amis. Gratuit, sans publicité.">
+<meta name="twitter:image" content="https://tome-social.lucas-marroig.workers.dev/og.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tome">
@@ -795,7 +810,7 @@ body.welcome-open{overflow:hidden}
         <button class="btn primary lp-big" data-lp="signup">Créer mon compte — c'est gratuit</button>
         <button class="lp-link lp-try" data-lp="try">Essayer d'abord →</button>
       </div>
-      <div class="lp-trust">Gratuit · sans publicité · tes données t'appartiennent</div>
+      <div class="lp-trust">Gratuit · sans publicité · tes données t'appartiennent — <a data-lp="pledge" style="color:var(--green);cursor:pointer;text-decoration:underline">notre promesse</a></div>
     </div>
     <div class="lp-hero-visual" aria-hidden="true">
       <div class="lp-shelf">
@@ -1099,6 +1114,9 @@ function _dlgClose(val){
   const ov = $('#ov-dialog');
   if(!ov.classList.contains('open')) return;
   ov.classList.remove('open');
+  // purge le contenu : un dialogue peut afficher un secret (code de secours) — il ne doit pas
+  // rester lisible dans le DOM d'un appareil partagé après fermeture
+  $('#dialog-msg').textContent=''; $('#dialog-title').textContent=''; $('#dialog-input').value='';
   document.removeEventListener('keydown', _dlgKey, true);
   const r = _dlgResolve; _dlgResolve = null;
   if(_dlgPrevFocus && document.contains(_dlgPrevFocus)){ try{ _dlgPrevFocus.focus(); }catch(_){} }
@@ -4135,6 +4153,7 @@ function refreshSocBadge(){ setFriendsBadge((social.pendingRequests||0) + (socia
 async function socRefresh(){
   if(!socToken()){ social.me=null; social.pendingRequests=0; social.unreadNotifs=0; setFriendsBadge(0); return; }
   try{ const d = await api('/api/me'); social.me = d.user; social.tosOutdated = !!d.tosOutdated;
+       social.hasRecovery = !!d.hasRecovery;
        social.pendingRequests = d.pendingRequests||0; social.unreadNotifs = d.unreadNotifs||0; refreshSocBadge();
        if((social.tosOutdated || social.unreadNotifs) && ui.view==='friends') renderFriends(); }
   catch(e){ if(/401|Non authentifié/.test(e.message)){ try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; setFriendsBadge(0); } }
@@ -4350,6 +4369,10 @@ async function renderAccount(){
     <input id="acc-cur" type="password" autocomplete="current-password" placeholder="Mot de passe actuel">
     <input id="acc-new" type="password" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)">
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
+    <h4>Code de secours</h4>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n'est collecté). ${social.hasRecovery?'Un code est actif — le régénérer invalide l\'ancien.':'<b>Aucun code actif</b> — génère-le maintenant.'}</p>
+    <input id="acc-rec" type="password" autocomplete="current-password" placeholder="Mot de passe actuel">
+    <button class="btn" id="acc-rec-gen">🔑 ${social.hasRecovery?'Régénérer mon code':'Générer mon code'}</button>
     <h4>Utilisateurs bloqués</h4>
     <div id="acc-blocks"><p class="friends-empty" style="padding:8px 0">Chargement…</p></div>
     <h4>Mes données</h4>
@@ -4357,6 +4380,7 @@ async function renderAccount(){
       <button class="btn" id="acc-export">⬇ Exporter mes données (JSON)</button>
       <button class="btn" id="acc-logoutall">Se déconnecter partout</button>
       <button class="btn" id="acc-legal">📄 Mentions légales</button>
+      <button class="btn" id="acc-pledge">💚 Toujours gratuit</button>
     </div>
     <h4 style="color:var(--red)">Zone danger</h4>
     <div class="danger-zone">
@@ -4371,6 +4395,11 @@ async function renderAccount(){
     try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé — autres appareils déconnectés ✓'); }
     catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
     finally{ b.disabled=false; } };
+  $('#acc-rec-gen').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
+    try{ const d = await api('/api/account/recovery-code', {method:'POST', body:{password:$('#acc-rec').value}});
+      $('#acc-rec').value=''; social.hasRecovery = true;
+      await showRecoveryCode(d.recoveryCode); renderAccount(); }
+    catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); b.disabled=false; } };
   $('#acc-export').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
     try{ const d = await api('/api/account/export'); const full={...d, localLibrary:state.books};
       const blob=new Blob([JSON.stringify(full,null,2)],{type:'application/json'}); const a=document.createElement('a');
@@ -4379,6 +4408,7 @@ async function renderAccount(){
     catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
     finally{ b.disabled=false; } };
   $('#acc-legal').onclick = ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]});
+  $('#acc-pledge').onclick = showPledge;
   $('#acc-logoutall').onclick = async ()=>{
     if(!await uiConfirm({title:'Se déconnecter partout ?', message:'Toutes tes sessions seront fermées, y compris ici.', okLabel:'Déconnecter', danger:true})) return;
     let ok = true;
@@ -4400,6 +4430,28 @@ async function renderAccount(){
       : `<p class="friends-empty" style="padding:8px 0">Personne de bloqué.</p>`;
     $('#acc-blocks').querySelectorAll('[data-unblock]').forEach(btn=>btn.onclick=async ()=>{ try{ await api('/api/unblock',{method:'POST',body:{username:btn.dataset.unblock}}); renderAccount(); }catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); } });
   }catch(_){ $('#acc-blocks').innerHTML = `<p class="friends-empty" style="padding:8px 0">—</p>`; }
+}
+// ---- Code de secours : seule voie de récupération (aucun email collecté) ----
+// Reste affiché jusqu'à confirmation explicite ; copie et téléchargement proposés.
+async function showRecoveryCode(code, intro){
+  const msg = `${intro||''}${intro?'\n\n':''}${code}\n\nC'est la SEULE façon de récupérer ton compte si tu oublies ton mot de passe — aucun email n'est collecté. Copie-le ou télécharge-le, puis range-le en lieu sûr : il ne sera plus jamais affiché.`;
+  for(;;){
+    // « C'est noté » est la seule sortie : Échap/clic-fond renvoient null → on réaffiche
+    const v = await openDialog({ title:'🔑 Ton code de secours', message: msg, actions:[
+      {label:'📋 Copier', value:'copy'},
+      {label:'⬇ Télécharger', value:'dl'},
+      {label:'C\'est noté ✓', value:'ok', variant:'primary', default:true},
+    ]});
+    if(v==='ok') return;
+    if(v==='copy'){ try{ await navigator.clipboard.writeText(code); toast('Code copié ✓'); }catch(_){ toast('Copie impossible — note-le à la main'); } }
+    else if(v==='dl'){
+      const txt = `Code de secours Tome\nPseudo : ${social.me?social.me.username:''}\n\n${code}\n\nCe code permet de récupérer ton compte en cas d'oubli du mot de passe.\nGarde ce fichier en lieu sûr — l'utiliser en génère un nouveau.\n${SITE_URL}\n`;
+      const blob = new Blob([txt], {type:'text/plain'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tome-code-de-secours.txt';
+      a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000); toast('Fichier téléchargé ✓');
+    }
+    // v === null (Échap / clic-fond) : on boucle → le dialogue se réaffiche
+  }
 }
 // ---- Invitation par lien : #invite/<pseudo> ----
 // Le lien ne fait que pré-remplir une demande d'ami confirmée par l'utilisateur ;
@@ -4443,7 +4495,7 @@ function renderAuth(box, mode='login', errMsg=''){
       <div class="auth-err">${esc(errMsg)}</div>
       <button class="btn primary" id="soc-submit" style="width:100%; justify-content:center">${mode==='login'?'Connexion':'Créer mon compte'}</button>
       <div class="switch">${mode==='login'
-        ? `Pas encore de compte ? <a data-auth="signup">Créer un compte</a>`
+        ? `Pas encore de compte ? <a data-auth="signup">Créer un compte</a><br><a data-auth="recover" style="font-size:12.5px">Mot de passe oublié ?</a>`
         : `Déjà inscrit ? <a data-auth="login">Se connecter</a>`}</div>
     </div>`;
   // affiche l'erreur SANS re-render (préserve pseudo/mot de passe/nom/consentement déjà saisis)
@@ -4460,9 +4512,12 @@ function renderAuth(box, mode='login', errMsg=''){
       const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
       localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tab='feed'; social.view=null;
       try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d'accueil
-      renderFriends();
       socRefresh(); // login/signup ne renvoient pas pendingRequests — /api/me si, pour le badge
       syncLibraryOnLogin().then(()=>pushShelf()); // charge/fusionne la bibliothèque du compte, puis synchronise l'étagère partagée
+      // le code AVANT renderFriends : sinon la confirmation d'invitation (#invite) écraserait le
+      // dialogue du code (une seule modale à la fois) — l'invitation s'ouvrira après « C'est noté »
+      if(d.recoveryCode) await showRecoveryCode(d.recoveryCode, 'Bienvenue sur Tome ! Avant tout, note ton code de secours :');
+      renderFriends();
     }catch(e){
       showErr(e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message);
     }
@@ -4470,12 +4525,67 @@ function renderAuth(box, mode='login', errMsg=''){
   $('#soc-submit').addEventListener('click', submit);
   $('#soc-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
   const legal = $('#friends-body [data-legal]'); if(legal) legal.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
+  $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>a.dataset.auth==='recover' ? renderRecover(box) : renderAuth(box, a.dataset.auth)));
+}
+// Récupération de compte par code de secours (« mot de passe oublié »)
+function renderRecover(box, errMsg=''){
+  box.innerHTML = `
+    <div class="auth-card">
+      <h3>Récupérer mon compte</h3>
+      <p class="sub">Entre ton pseudo et ton code de secours (montré à la création du compte, ou régénéré depuis les réglages), puis choisis un nouveau mot de passe. Toutes tes sessions seront déconnectées et un nouveau code te sera remis.</p>
+      <label for="rec-user">Pseudo</label>
+      <input id="rec-user" autocomplete="username" placeholder="ex : lucas_bd">
+      <label for="rec-code">Code de secours</label>
+      <input id="rec-code" autocomplete="one-time-code" placeholder="TOME-XXXXX-XXXXX-XXXXX-XXXXX" style="text-transform:uppercase">
+      <label for="rec-pass">Nouveau mot de passe</label>
+      <input id="rec-pass" type="password" autocomplete="new-password" placeholder="8 caractères minimum">
+      <div class="auth-err">${esc(errMsg)}</div>
+      <button class="btn primary" id="rec-submit" style="width:100%; justify-content:center">Récupérer mon compte</button>
+      <div class="switch"><a data-auth="login">← Retour à la connexion</a></div>
+    </div>`;
+  const showErr = m => { const e=$('#friends-body .auth-err'); if(e) e.textContent=m; const s=$('#rec-submit'); if(s){ s.disabled=false; s.textContent='Récupérer mon compte'; } };
+  const submit = async ()=>{
+    const username = $('#rec-user').value.trim(), code = $('#rec-code').value.trim(), newPassword = $('#rec-pass').value;
+    if(!username || !code || !newPassword){ showErr('Remplis les trois champs.'); return; }
+    $('#rec-submit').textContent = '…'; $('#rec-submit').disabled = true;
+    try{
+      const d = await api('/api/recover', {method:'POST', body:{username, code, newPassword}});
+      localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tab='feed'; social.view=null;
+      socRefresh();
+      syncLibraryOnLogin().then(()=>pushShelf());
+      // même ordre qu'à l'inscription : le code d'abord, l'onglet Amis (et une éventuelle invitation) ensuite
+      if(d.recoveryCode) await showRecoveryCode(d.recoveryCode, 'Compte récupéré ✓ Voici ton NOUVEAU code de secours (l\'ancien ne fonctionne plus) :');
+      renderFriends();
+    }catch(e){ showErr(e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message); }
+  };
+  $('#rec-submit').addEventListener('click', submit);
+  $('#rec-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
   $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>renderAuth(box, a.dataset.auth)));
 }
+// La promesse publique du modèle : le cœur reste gratuit, le payant (un jour) sera du confort en
+// plus — jamais une reprise de l'existant. C'est un ENGAGEMENT : ne jamais l'affaiblir en douce.
+const FREE_PLEDGE = `Ce qui restera toujours gratuit — la promesse de Tome.
+
+Tome proposera peut-être un jour des options payantes (du confort, du soutien au projet). Mais le cœur de l'app est gratuit, pour toujours :
+
+• Bibliothèque, séries et listes ILLIMITÉES — jamais de plafond de livres.
+• Journal de lecture, notes, critiques, citations, ambiances, objectif annuel, streak.
+• Amis, fil d'activité, réactions ♥, réponses, notifications.
+• Récap annuel et cartes de partage.
+• Import ET export complets — tes données t'appartiennent, tu peux partir à tout moment.
+• Multi-appareils : ta bibliothèque enregistrée sur ton compte, privée.
+
+Et trois « jamais » :
+• Jamais de publicité display.
+• Jamais de vente de tes données individuelles.
+• Jamais de limite rétroactive : ce qui est gratuit aujourd'hui le reste.
+
+Si des options payantes arrivent, ce sera du confort EN PLUS (statistiques avancées, personnalisation, soutien) — jamais une rançon sur ce que tu utilises déjà.`;
+function showPledge(){ openDialog({title:'💚 Toujours gratuit', message:FREE_PLEDGE, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), et ton adresse IP (uniquement pour limiter les abus).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n'étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), et ton adresse IP (uniquement pour limiter les abus).
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l'inscription).
 Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n'envoie jamais rien. Aucune publicité, aucun traceur, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
@@ -4837,6 +4947,7 @@ $('#welcome').addEventListener('click', e=>{
   const b = e.target.closest('[data-lp]'); if(!b) return;
   const a = b.dataset.lp;
   if(a==='legal'){ openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); return; }
+  if(a==='pledge'){ showPledge(); return; }
   try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus l'imposer au prochain lancement
   hideWelcome();
   if(a==='signup' || a==='login'){ selectView('friends'); if(!social.me) renderAuth($('#friends-body'), a==='signup'?'signup':'login'); }
