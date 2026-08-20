@@ -199,6 +199,18 @@ h2.section{font-size:13px; text-transform:uppercase; letter-spacing:.12em; color
 .qk button:hover{color:var(--green)}
 .qk button.on{color:var(--orange)}
 .count-note{color:var(--faint); font-size:13px; margin-bottom:12px}
+/* Barre de filtres compacte (retour utilisateurs : « trop de boutons ») : par défaut, seuls les
+   4 statuts courants + recherche + tri + « ⚙ Filtres » sont visibles. Le reste se déplie — mais
+   un filtre ACTIF reste TOUJOURS affiché : l'état ne peut jamais être invisible. */
+.filterbar.compact #status-chips .chip[data-status="abandoned"]:not(.active),
+.filterbar.compact #status-chips .chip[data-status="fav"]:not(.active),
+.filterbar.compact #status-chips .chip[data-status="loan"]:not(.active),
+.filterbar.compact #type-chips .chip[data-type]:not(.active),
+.filterbar.compact #chip-series,
+.filterbar.compact #lib-savefilter,
+.filterbar.compact #lib-select:not(.active),
+.filterbar.compact #lib-tag:not(.has-value){ display:none }
+#lib-more[aria-expanded="true"]{ background:color-mix(in srgb, var(--green) 16%, var(--surface)); border-color:var(--green); color:var(--green) }
 /* Sélection multiple */
 .selbox{position:absolute; top:6px; left:6px; width:26px; height:26px; border-radius:50%; background:var(--chip-bg); border:2px solid var(--border-hover); display:none; align-items:center; justify-content:center; z-index:4; color:var(--green); font-weight:800; font-size:14px}
 body.selecting .selbox{display:flex}
@@ -710,7 +722,7 @@ body.welcome-open{overflow:hidden}
   .lp-shelf{height:clamp(230px,38vh,300px)}
   .lp-features{grid-template-columns:repeat(2,1fr)}
 }
-@media(max-width:480px){ .lp-features{grid-template-columns:1fr} .lp-nav-actions .lp-link{display:none} }
+@media(max-width:480px){ .lp-features{grid-template-columns:1fr} }
 
 /* ---- Fil vivant : critiques + réactions ♥ ---- */
 .feed-item{align-items:flex-start}
@@ -797,7 +809,6 @@ body.welcome-open{overflow:hidden}
     </div>
     <div class="lp-nav-actions">
       <button class="lp-link" data-lp="login">Se connecter</button>
-      <button class="btn primary" data-lp="signup">Commencer</button>
     </div>
   </div>
 
@@ -863,7 +874,7 @@ body.welcome-open{overflow:hidden}
 <main>
   <!-- ======== BIBLIOTHÈQUE ======== -->
   <section class="view active" id="view-library">
-    <div class="filterbar">
+    <div class="filterbar compact" id="filterbar">
       <div class="chips" id="status-chips">
         <button class="chip active" data-status="all" aria-pressed="true">Tout</button>
         <button class="chip" data-status="read" aria-pressed="false">Lus</button>
@@ -891,6 +902,7 @@ body.welcome-open{overflow:hidden}
       </select>
       <button class="btn small" id="lib-savefilter" title="Enregistrer les filtres actuels comme collection">＋ Filtre</button>
       <button class="btn small" id="lib-select" title="Sélectionner plusieurs titres">☑ Sélection</button>
+      <button class="btn small" id="lib-more" aria-expanded="false" title="Afficher tous les filtres et options">⚙ Filtres</button>
     </div>
     <div class="chips smart-chips" id="smart-chips"></div>
     <div class="now-strip" id="now-reading" hidden></div>
@@ -1636,6 +1648,10 @@ $('#type-chips').addEventListener('click', e => {
   persistUI(); renderLibrary();
 });
 const _rerunLib = debounce(renderLibrary, 160);
+$('#lib-more').addEventListener('click', ()=>{
+  const expanded = !$('#filterbar').classList.toggle('compact'); // classe présente = replié
+  $('#lib-more').setAttribute('aria-expanded', expanded);
+});
 $('#lib-q').addEventListener('input', e => { ui.q = e.target.value.toLowerCase().trim(); _rerunLib(); });
 $('#lib-sort').addEventListener('change', e => { ui.sort = e.target.value; persistUI(); renderLibrary(); });
 $('#lib-tag').addEventListener('change', e => { ui.tag = e.target.value; persistUI(); renderLibrary(); });
@@ -1814,6 +1830,10 @@ function renderLibrary(){
   tagSel.hidden = !allTags.length;
   tagSel.innerHTML = `<option value="">Tous les tags</option>` +
     allTags.map(t=>`<option value="${esc(t)}"${t===ui.tag?' selected':''}>#${esc(t)}</option>`).join('');
+  // barre compacte : un tag choisi reste visible, et la pastille compte les filtres actifs repliables
+  tagSel.classList.toggle('has-value', !!ui.tag);
+  const nbActifs = (['abandoned','fav','loan'].includes(ui.status)?1:0) + ui.types.size + (ui.tag?1:0) + (ui.groupSeries?0:1);
+  $('#lib-more').textContent = nbActifs ? `⚙ Filtres · ${nbActifs}` : '⚙ Filtres';
   const arr = filteredBooks();
   const grid = $('#lib-grid'), emptyBox = $('#lib-empty');
   renderDemoBanner();
