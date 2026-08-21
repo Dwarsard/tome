@@ -1,14 +1,34 @@
 /* Service worker de Tome — cache l'app pour l'usage hors ligne.
    Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
    qui affiche le bandeau « Nouvelle version — Recharger ». */
-const CACHE = 'tome-v3';
+const CACHE = 'tome-v9';
 const CACHE_PREFIX = 'tome-';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+// Caches d'AVANT l'éclatement du single-file (index.html contenait tout le CSS/JS).
+const PRE_SPLIT = /^tome-v[1-8]$/;
+const ASSETS = [
+  './',
+  './index.html',
+  './app.css',
+  './app.js',
+  './manifest.webmanifest',
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png',
+  './apple-touch-icon.png'
+];
 
 self.addEventListener('install', e => {
-  // NE PAS skipWaiting ici : le nouveau worker reste en attente jusqu'à ce que
-  // l'utilisateur clique « Recharger » (message SKIP_WAITING ci-dessous).
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+  // NE PAS skipWaiting en général : le nouveau worker attend que l'utilisateur clique
+  // « Recharger » (message SKIP_WAITING ci-dessous) — pas de rechargement surprise en pleine saisie.
+  // EXCEPTION, une seule fois : venant d'un cache d'avant l'éclatement, l'ancien worker met en
+  // cache le nouvel index.html SANS app.css/app.js (qu'il ne connaît pas) — hors ligne, la page
+  // serait alors vide. On prend donc le contrôle tout de suite pour réparer cet état incohérent.
+  e.waitUntil((async () => {
+    await (await caches.open(CACHE)).addAll(ASSETS);
+    const keys = await caches.keys();
+    if (keys.some(k => PRE_SPLIT.test(k))) await self.skipWaiting();
+  })());
 });
 self.addEventListener('message', e => {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();

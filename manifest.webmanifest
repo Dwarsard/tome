@@ -1,13 +1,28 @@
 {
+  "id": "./",
   "name": "Tome — Journal de lecture",
   "short_name": "Tome",
-  "description": "Ta bibliothèque et ton journal de lecture : livres, BD, manga.",
+  "description": "Ta bibliothèque et ton journal de lecture pour les livres, BD et manga.",
   "lang": "fr",
-  "start_url": ".",
+  "dir": "ltr",
+  "start_url": "./#today",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#12161a",
   "theme_color": "#12161a",
+  "categories": ["books", "lifestyle", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Aujourd'hui", "short_name": "Aujourd'hui", "url": "./#today" },
+    { "name": "Ma bibliothèque", "short_name": "Bibliothèque", "url": "./#library" },
+    { "name": "Mon journal", "short_name": "Journal", "url": "./#journal" },
+    { "name": "Mes amis", "short_name": "Amis", "url": "./#friends" }
   ]
 }
