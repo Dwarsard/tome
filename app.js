@@ -606,6 +606,8 @@ function selectView(view){
   if(location.hash.slice(1) !== view){ try{ history.replaceState(history.state, '', '#'+view); }catch(_){} }
   persistUI();
   render();
+  // sans cela on arrive au milieu de la nouvelle vue, à la hauteur où on avait laissé l'ancienne
+  if(!ui._noScrollReset) window.scrollTo({top:0, behavior:'instant'});
 }
 function render(){
   if(ui.view==='today') renderToday();
@@ -2072,28 +2074,28 @@ function renderStudyEditor(b, focus=''){
       <button class="btn" data-study-back>← Revenir au livre</button>
     </div>
     <details class="study-section" open><summary>🎯 Intention et résumé</summary><div class="study-inside">
-      <label class="study-label" for="st-objective">Pourquoi je lis ce livre</label><textarea id="st-objective" rows="2" placeholder="Ce que tu veux comprendre, apprendre ou changer…">${esc(s.objective)}</textarea>
-      <label class="study-label" for="st-summary">Résumé avec mes propres mots</label><textarea id="st-summary" rows="6" placeholder="Explique le livre comme si tu devais le raconter à quelqu’un…">${esc(s.summary)}</textarea>
+      <label class="study-label" for="st-objective">Pourquoi je lis ce livre</label><textarea id="st-objective" aria-label="Mon intention de lecture" rows="2" placeholder="Ce que tu veux comprendre, apprendre ou changer…">${esc(s.objective)}</textarea>
+      <label class="study-label" for="st-summary">Résumé avec mes propres mots</label><textarea id="st-summary" aria-label="Résumé personnel" rows="6" placeholder="Explique le livre comme si tu devais le raconter à quelqu’un…">${esc(s.summary)}</textarea>
     </div></details>
     <details class="study-section" open><summary>💡 Idées essentielles <span class="pill">${s.ideas.length}</span></summary><div class="study-inside">
       ${studySimpleItems(s.ideas,'ideas','Note les principes ou arguments que tu ne veux pas oublier.')}
-      <div class="study-add"><textarea id="st-idea" rows="2" placeholder="Une idée importante…"></textarea><button class="btn small primary" data-study-add="idea">＋ Ajouter</button></div>
+      <div class="study-add"><textarea id="st-idea" aria-label="Idée essentielle" rows="2" placeholder="Une idée importante…"></textarea><button class="btn small primary" data-study-add="idea">＋ Ajouter</button></div>
     </div></details>
     <details class="study-section"${focus==='lessons'?' open':''}><summary>✅ Leçons à appliquer <span class="pill">${s.lessons.length}</span></summary><div class="study-inside">
       ${studySimpleItems(s.lessons,'lessons','Transforme une idée en action concrète dans ta vie, tes études ou ton travail.')}
-      <div class="study-add"><textarea id="st-lesson" rows="2" placeholder="Ce que je vais appliquer…"></textarea><button class="btn small primary" data-study-add="lesson">＋ Ajouter</button></div>
+      <div class="study-add"><textarea id="st-lesson" aria-label="Leçon à appliquer" rows="2" placeholder="Ce que je vais appliquer…"></textarea><button class="btn small primary" data-study-add="lesson">＋ Ajouter</button></div>
     </div></details>
     <details class="study-section"${focus==='questions'?' open':''}><summary>❓ Questions de compréhension <span class="pill">${s.questions.length}</span></summary><div class="study-inside">
       ${studyQuestionItems(s.questions)}
-      <div class="study-add two"><textarea id="st-question" rows="2" placeholder="Question…"></textarea><textarea id="st-answer" rows="2" placeholder="Réponse…"></textarea><button class="btn small primary" data-study-add="question">＋ Ajouter</button></div>
+      <div class="study-add two"><textarea id="st-question" aria-label="Question de compréhension" rows="2" placeholder="Question…"></textarea><textarea id="st-answer" aria-label="Réponse" rows="2" placeholder="Réponse…"></textarea><button class="btn small primary" data-study-add="question">＋ Ajouter</button></div>
     </div></details>
     <details class="study-section"${focus==='chapters'?' open':''}><summary>📑 Notes par chapitre <span class="pill">${s.chapters.length}</span></summary><div class="study-inside">
       ${studyChapterItems(s.chapters)}
-      <div class="study-add two"><input id="st-chapter-title" placeholder="Titre ou numéro du chapitre"><textarea id="st-chapter-notes" rows="3" placeholder="Notes du chapitre…"></textarea><button class="btn small primary" data-study-add="chapter">＋ Ajouter</button></div>
+      <div class="study-add two"><input id="st-chapter-title" aria-label="Titre du chapitre" placeholder="Titre ou numéro du chapitre"><textarea id="st-chapter-notes" aria-label="Notes du chapitre" rows="3" placeholder="Notes du chapitre…"></textarea><button class="btn small primary" data-study-add="chapter">＋ Ajouter</button></div>
     </div></details>
     <details class="study-section" open><summary>🧠 Cartes mémoire <span class="pill">${s.cards.length}</span></summary><div class="study-inside">
       ${studyCardItems(s.cards)}
-      <div class="study-add two"><textarea id="st-card-front" rows="2" placeholder="Question / recto…"></textarea><textarea id="st-card-back" rows="2" placeholder="Réponse / verso…"></textarea><button class="btn small primary" data-study-add="card">＋ Créer</button></div>
+      <div class="study-add two"><textarea id="st-card-front" aria-label="Recto de la carte mémoire" rows="2" placeholder="Question / recto…"></textarea><textarea id="st-card-back" aria-label="Verso de la carte mémoire" rows="2" placeholder="Réponse / verso…"></textarea><button class="btn small primary" data-study-add="card">＋ Créer</button></div>
     </div></details>`;
 }
 function openStudy(id){
@@ -2352,7 +2354,7 @@ function openDetail(id, opts={}){
             <button class="qdel" data-qdel="${esc(q.id)}" title="Supprimer" aria-label="Supprimer ce passage">✕</button>
           </div>`).join('')}</div>
         <div class="add-quote">
-          <textarea id="d-quote-text" rows="2" placeholder="Un passage qui t'a marqué·e…"></textarea>
+          <textarea id="d-quote-text" aria-label="Passage ou citation" rows="2" placeholder="Un passage qui t'a marqué·e…"></textarea>
           <div class="row">
             <input type="number" id="d-quote-page" min="0" placeholder="page" aria-label="Page">
             <button class="btn small" id="d-quote-add">＋ Ajouter le passage</button>
@@ -2717,7 +2719,7 @@ function openSeries(name){
         ${rec.rating ? `<button class="clear-rate" id="s-clear">effacer</button>` : ''}
         <button class="heart ${rec.favorite?'on':''}" id="s-fav" title="Série favorite" aria-pressed="${rec.favorite}">♥</button>
       </div>
-      <textarea id="s-review" rows="2" placeholder="Ton avis sur la série dans son ensemble…">${esc(rec.review||'')}</textarea>
+      <textarea id="s-review" aria-label="Mon avis sur la série" rows="2" placeholder="Ton avis sur la série dans son ensemble…">${esc(rec.review||'')}</textarea>
     </div>
     ${books.map(b=>`
       <div class="tome-row" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, ${STATUS_LABEL[b.status]}">
@@ -2838,6 +2840,27 @@ function streaks(){
   return {cur, max};
 }
 function renderStats(){
+  // Bibliothèque vide : afficher l'échafaudage complet (tuiles à 0, heatmap vide, histogrammes
+  // sans barres) donne l'impression d'une app cassée. On propose plutôt une porte de sortie.
+  const vide = $('#stats-empty');
+  if(!state.books.length){
+    $$('#view-stats > *:not(.section):not(#stats-empty)').forEach(el=>el.hidden = true);
+    if(!vide){
+      const d = document.createElement('div'); d.id='stats-empty'; d.className='empty';
+      d.innerHTML = `<div class="big">📈</div><h3>Tes statistiques arrivent</h3>
+        <p>Ajoute quelques lectures et tu verras ici ton rythme, tes genres, tes notes et ta régularité au fil de l'année.</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button class="btn primary" id="stats-add">＋ Ajouter une lecture</button>
+          <button class="btn" id="stats-lib">Voir ma bibliothèque</button>
+        </div>`;
+      $('#view-stats').appendChild(d);
+      $('#stats-add').addEventListener('click', openSearch);
+      $('#stats-lib').addEventListener('click', ()=>selectView('library'));
+    } else vide.hidden = false;
+    return;
+  }
+  if(vide) vide.hidden = true;
+  $$('#view-stats > *:not(#stats-empty)').forEach(el=>{ if(el.hidden && el.id!=='stats-empty') el.hidden = false; });
   const read = state.books.filter(b=>b.status==='read');
   const readings = allReadings();
   const yr = new Date().getFullYear();
@@ -3764,15 +3787,36 @@ function shareYearCard(year){
 }
 
 /* =============== Overlays & focus =============== */
+// Une modale ouverte pousse une entrée d'historique : le bouton Retour (matériel Android,
+// geste iOS, ou de la souris) ferme la modale au lieu de quitter l'application.
+let _overlayDepth = 0;
+function pushOverlayHistory(){
+  try{ history.pushState({ tomeOverlay: ++_overlayDepth }, ''); }catch(_){ }
+}
+window.addEventListener('popstate', e=>{
+  const st = e.state || {};
+  if(_overlayDepth > 0 && !st.tomeOverlay){        // on remonte au-dessus de la pile de modales
+    _overlayDepth = 0;
+    if($$('.overlay.open').length || !$('#ov-dialog').hidden) closeOverlays(true);
+    const card=$('#ov-card'), cov=$('#ov-cover');
+    if(card) card.classList.remove('open');
+    if(cov) cov.classList.remove('open');
+    syncModalIsolation();
+  }
+});
 function openOverlay(sel){
   ui.lastFocus = document.activeElement;
   closeOverlays(false);
+  pushOverlayHistory();
   const root=$(sel); root.classList.add('open'); syncModalIsolation();
   queueMicrotask(()=>{ if(!root.contains(document.activeElement)){ const first=modalFocusables(root)[0]; if(first) first.focus(); } });
 }
 function closeOverlays(restore=true){
   stopScan();
+  const etaitOuverte = $$('.overlay.open').length > 0;
   $$('.overlay').forEach(o=>o.classList.remove('open'));
+  // rendre l'entrée d'historique poussée à l'ouverture (sans re-déclencher la fermeture)
+  if(etaitOuverte && _overlayDepth > 0 && (history.state||{}).tomeOverlay){ _overlayDepth = 0; try{ history.back(); }catch(_){ } }
   syncModalIsolation();
   if(restore && ui.lastFocus && document.contains(ui.lastFocus)){ try{ ui.lastFocus.focus(); }catch(_){} }
   if(_dirtyBg){ _dirtyBg=false; render(); } // rattrape le rendu de fond différé pendant la modale
@@ -4325,11 +4369,11 @@ async function renderAccount(){
   el.innerHTML = `<div class="acct">
     <h4>Profil</h4>
     <input id="acc-dn" maxlength="40" value="${esc(social.me.displayName)}" placeholder="Nom affiché" aria-label="Nom affiché">
-    <textarea id="acc-bio" rows="2" maxlength="300" placeholder="Bio (visible par tes amis, optionnelle)">${esc(social.me.bio||'')}</textarea>
+    <textarea id="acc-bio" aria-label="Ma bio" rows="2" maxlength="300" placeholder="Bio (visible par tes amis, optionnelle)">${esc(social.me.bio||'')}</textarea>
     <button class="btn primary" id="acc-save">Enregistrer le profil</button>
     <h4>Mot de passe</h4>
-    <input id="acc-cur" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
-    <input id="acc-new" type="password" maxlength="256" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)">
+    <input id="acc-cur" aria-label="Mot de passe actuel" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
+    <input id="acc-new" aria-label="Nouveau mot de passe" type="password" maxlength="256" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)">
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
     <h4>Notifications</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Être prévenu·e quand un ami t'ajoute, aime ou commente une de tes lectures — même quand Tome est fermé. <span id="acc-push-state"></span></p>
@@ -4342,7 +4386,7 @@ async function renderAccount(){
     </div>
     <h4>Code de secours</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n'est collecté). ${social.hasRecovery?'Un code est actif — le régénérer invalide l\'ancien.':'<b>Aucun code actif</b> — génère-le maintenant.'}</p>
-    <input id="acc-rec" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
+    <input id="acc-rec" aria-label="Mot de passe actuel (pour générer le code de secours)" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
     <button class="btn" id="acc-rec-gen">🔑 ${social.hasRecovery?'Régénérer mon code':'Générer mon code'}</button>
     <h4>Utilisateurs bloqués</h4>
     <div id="acc-blocks"><p class="friends-empty" style="padding:8px 0">Chargement…</p></div>

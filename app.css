@@ -1030,3 +1030,29 @@ button:disabled:hover, .btn:disabled:hover{background:var(--surface); border-col
 
 /* Petites commandes textuelles sans rembourrage : sous le minimum de 24x24 px (WCAG 2.5.8) */
 .syn-more, .tagbtn, .clear-rate, .today-links button{min-height:24px; padding:3px 6px}
+
+/* ===== Empilement des barres flottantes =====
+   Le toast, le bandeau de mise à jour et l'alerte de stockage partageaient la même position
+   en bas de l'écran : la plus haute en z-index masquait les autres. On les décale. */
+#save-warning{bottom:calc(20px + env(safe-area-inset-bottom))}                     /* le plus urgent, en bas */
+#update-bar{bottom:calc(80px + env(safe-area-inset-bottom))}                       /* au-dessus */
+#toast{bottom:calc(140px + env(safe-area-inset-bottom))}                           /* le plus éphémère, au-dessus */
+/* Un toast porteur d'action ne doit jamais recouvrir une modale ouverte */
+body:has(.overlay.open) #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
+
+/* ===== Retour au toucher =====
+   Sur écran tactile il n'y a pas de survol : sans :active, rien ne confirme l'appui. */
+.btn:active, .chip:active, #nav button:active, .seg button:active, .today-mini:active,
+.linkish:active, .frow button:active{transform:scale(.97)}
+@media (prefers-reduced-motion: reduce){
+  .btn:active, .chip:active, #nav button:active, .seg button:active, .today-mini:active{transform:none; opacity:.75}
+}
+
+/* ===== Barre d'actions groupées =====
+   Ses marges négatives étaient calées sur la gouttière du bureau (-16px) ; sous 640 px la
+   gouttière passe à 12px et la barre débordait, provoquant un défilement horizontal. */
+@media (max-width:640px){ .bulkbar{margin-left:-12px; margin-right:-12px} }
+
+/* ===== Commandes révélées au survol =====
+   « Retirer de la liste » n'existait qu'au hover : inatteignable au clavier et au doigt. */
+.ld-item .rm:focus-visible, .ld-item:focus-within .rm{display:flex}
