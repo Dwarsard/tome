@@ -772,7 +772,7 @@ function renderTodaySocial(){
   if(!social.todayFeed && !_todayFeedLoading){ el.innerHTML=`<div class="today-social-empty"><span class="today-pulse" aria-hidden="true"></span><p>Chargement des dernières lectures…</p></div>`; loadTodayFeed(); return; }
   if(_todayFeedLoading && !social.todayFeed){ el.innerHTML=`<div class="today-social-empty"><span class="today-pulse" aria-hidden="true"></span><p>Chargement des dernières lectures…</p></div>`; return; }
   const feed=(social.todayFeed||[]).slice(0,3);
-  if(!feed.length){ el.innerHTML=`<div class="today-social-empty"><p>Ton fil est encore calme. Invite un ami pour commencer à partager vos lectures.</p><button class="btn" data-today-friends>Inviter un ami</button></div>`; return; }
+  if(!feed.length){ el.innerHTML=`<div class="today-social-empty"><p>Ton fil est encore calme. Invite un ami pour commencer à partager vos lectures.</p><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn primary" data-today-invite>🔗 Inviter un ami</button><button class="btn" data-today-friends>Voir mes amis</button></div></div>`; return; }
   el.innerHTML=`<div class="today-feed">${feed.map(x=>`<button class="today-feed-row" data-today-friends>
     <span class="today-feed-cover">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:'<span aria-hidden="true">📕</span>'}</span>
     <span class="today-feed-copy"><b>${social.me&&x.uid===social.me.id?'Toi':esc(x.display_name)}</b><span>a lu <strong>${esc(x.title)}</strong>${x.rating?` · <span class="stars">${starsTxt(x.rating)}</span>`:''}</span></span>
@@ -790,6 +790,11 @@ $('#today-body').addEventListener('click', async e=>{
   }
   const finish=e.target.closest('[data-today-finish]'); if(finish){ const b=state.books.find(x=>x.id===finish.dataset.todayFinish); if(b){ markRead(b); save(); render(); } return; }
   const start=e.target.closest('[data-today-start]'); if(start){ const b=state.books.find(x=>x.id===start.dataset.todayStart); if(b){ b.status='reading'; if(b.currentPage==null)b.currentPage=0; save(); render(); toast('Bonne lecture 📖'); } return; }
+  if(e.target.closest('[data-today-invite]')){
+    if(social.me) shareInvite();                       // partage direct du lien
+    else { social.tab='feed'; social.view=null; selectView('friends'); renderAuth($('#friends-body'),'signup'); }
+    return;
+  }
   if(e.target.closest('[data-today-install]')){
     requestInstall().then(()=>{ try{ localStorage.setItem('tome-install-hidden','1'); }catch(_){ } renderToday(); });
     return;
@@ -3788,6 +3793,9 @@ function applyHashView(hash){
   const inv = h.match(INVITE_RE);
   if(inv){
     social.invite = inv[1].toLowerCase();
+    // persistée : sur mobile, l'aller-retour vers l'app de messagerie ou un rechargement
+    // faisait perdre l'invitation — c'est le seul canal d'acquisition de l'app.
+    try{ localStorage.setItem(PENDING_INVITE, JSON.stringify({u:social.invite, at:Date.now()})); }catch(_){ }
     try{ history.replaceState(history.state, '', location.pathname + location.search); }catch(_){} // ne pas re-déclencher au refresh
     selectView('friends');
     return;
@@ -3938,6 +3946,18 @@ document.addEventListener('keydown', e => {
 // (`npx wrangler dev` dans Tome-Social sert app + API sur 8787, même origine).
 const API_BASE = (location.port==='8791') ? 'http://localhost:8787' : '';
 const SOC_TOKEN = 'tome-social-token';
+// Invitation en attente : conservée jusqu'à ce que la demande d'ami parte VRAIMENT (une
+// invitation perdue = un utilisateur perdu — c'est le seul canal d'acquisition). Expire à 7 jours.
+const PENDING_INVITE = 'tome-pending-invite';
+function loadPendingInvite(){
+  try{
+    const raw = localStorage.getItem(PENDING_INVITE); if(!raw) return '';
+    const d = JSON.parse(raw);
+    if(!d || !d.u || (Date.now() - (d.at||0)) > 7*864e5){ localStorage.removeItem(PENDING_INVITE); return ''; }
+    return String(d.u);
+  }catch(_){ return ''; }
+}
+function clearPendingInvite(){ try{ localStorage.removeItem(PENDING_INVITE); }catch(_){ } }
 const social = { me:null, tab:'feed', view:null, profile:null, sessionError:'' };
 function socToken(){ try{ return localStorage.getItem(SOC_TOKEN)||''; }catch(_){ return ''; } }
 async function api(path, opts={}){
@@ -4240,12 +4260,27 @@ async function renderNotifications(){
       const b = n.bookKey ? byKey.get(n.bookKey) : null;
       const book = b ? ` <b>${esc(fullTitle(b))}</b>` : '';
       const ic = { friend_request:'👋', friend_accept:'🤝', reaction:'♥', comment:'💬' }[n.type] || '🔔';
-      return `<div class="notif${n.read?'':' unread'}" ${b?`data-profile-book="${esc(b.id)}"`:''}>
+      // une demande d'ami s'accepte ICI : c'est l'événement le plus important de l'app
+      const actions = n.type==='friend_request' && n.actorId
+        ? `<div class="notif-actions"><button class="btn small primary" data-accept="${esc(n.actorId)}">Accepter</button></div>` : '';
+      return `<div class="notif${n.read?'':' unread'}" ${b?`data-profile-book="${esc(b.id)}"`:''} ${n.username?`data-profile-user="${esc(n.username)}"`:''}>
         <div class="avatar sm">${esc(initials(n.displayName))}</div>
         <div class="notif-body"><span class="notif-ic">${ic}</span> <b>${esc(n.displayName)}</b> ${verb[n.type]||''}${book}
-          <span class="notif-when">${notifWhen(n.at)}</span></div>
+          <span class="notif-when">${notifWhen(n.at)}</span>${actions}</div>
       </div>`;
     }).join('');
+    el.addEventListener('click', async e=>{
+      const acc = e.target.closest('[data-accept]');
+      if(acc){
+        if(acc.disabled) return; acc.disabled = true;
+        try{ await api('/api/friends/accept', {method:'POST', body:{userId: acc.dataset.accept}});
+          toast('Vous êtes maintenant amis ✓'); socRefresh(); renderNotifications(); }
+        catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); acc.disabled = false; }
+        return;
+      }
+      const row = e.target.closest('[data-profile-user]');
+      if(row) openProfile(row.dataset.profileUser);
+    });
   }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
 }
 function notifWhen(ts){
@@ -4400,18 +4435,26 @@ async function shareInvite(){
   catch(_){ openDialog({ title:'Mon lien d\'invitation', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}] }); }
 }
 async function processInvite(){
-  const uname = social.invite; social.invite = null;
+  const uname = social.invite || loadPendingInvite();
+  social.invite = null;
   if(!social.me || !uname) return;
-  if(uname === social.me.username){ toast('C\'est ton propre lien d\'invitation 😄'); return; }
-  const ok = await uiConfirm({ title:'Invitation', message:`Envoyer une demande d'ami à @${uname} ?`, okLabel:'Envoyer la demande' });
-  if(!ok) return;
+  if(uname === social.me.username){ clearPendingInvite(); toast("C'est ton propre lien d'invitation 😄"); return; }
+  const ok = await uiConfirm({ title:`@${uname} t'invite`, message:`Envoyer une demande d'ami à @${uname} ? Vous verrez alors vos lectures respectives.`, okLabel:'Envoyer la demande' });
+  if(!ok){ clearPendingInvite(); return; }          // refus explicite : ne pas redemander
   try{
     const r = await api('/api/friends/request', {method:'POST', body:{username:uname}});
+    clearPendingInvite();                            // seulement une fois la demande PARTIE
     toast(r.status==='accepted' ? 'Vous êtes maintenant amis ✓' : 'Demande envoyée ✓');
     if(social.tab==='friends') loadFriendLists();
-  }catch(e){ toast(e.message==='offline' ? 'Serveur injoignable' : e.message); }
+  }catch(e){
+    // hors ligne / serveur injoignable : l'invitation reste en attente pour la prochaine ouverture
+    toast(e.message==='offline' ? "Serveur injoignable — l'invitation est gardée" : e.message);
+  }
 }
-function renderAuth(box, mode='login', errMsg=''){
+function renderAuth(box, mode, errMsg=''){
+  // un visiteur sans jeton n'a par définition pas de compte : lui présenter l'inscription,
+  // pas un mur de connexion (surtout s'il arrive par l'invitation d'un ami)
+  if(!mode) mode = (socToken() && !social.invite && !loadPendingInvite()) ? 'login' : 'signup';
   box.innerHTML = `
     ${social.invite ? `<div class="invite-banner">💌 <b>@${esc(social.invite)}</b> t'invite sur Tome — connecte-toi ou crée un compte pour l'ajouter en ami.</div>` : ''}
     <div class="auth-card">
@@ -4529,7 +4572,18 @@ async function renderFeed(){
   const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
   try{
     const d = await api('/api/feed'); social.todayFeed=d.feed||[]; social.todayFeedAt=Date.now(); social.todayFeedUser=social.me&&social.me.id; social.todayFeedError='';
-    if(!d.feed.length){ el.innerHTML = `<p class="friends-empty">Rien pour l'instant. Ajoute des amis et invite-les à partager leurs lectures.</p>`; return; }
+    if(!d.feed.length){
+      // écran d'atterrissage de tous les chemins sociaux : il DOIT proposer une issue
+      el.innerHTML = `<div class="friends-empty" style="text-align:center">
+        <p>Ton fil s'animera dès qu'un ami partagera une lecture.</p>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
+          <button class="btn primary" id="feed-invite">🔗 Inviter un ami</button>
+          <button class="btn" id="feed-find">Chercher quelqu'un</button>
+        </div></div>`;
+      $('#feed-invite').addEventListener('click', shareInvite);
+      $('#feed-find').addEventListener('click', ()=>{ social.tab='friends'; renderFriends(); setTimeout(()=>{ const q=$('#friend-search'); if(q) q.focus(); },80); });
+      return;
+    }
     el.innerHTML = d.feed.map((x,fi)=>{
       const rv = String(x.review||'').trim();
       const isMe = social.me && x.uid===social.me.id; // ma propre lecture : pas d'auto-cœur, mais je vois et modère les réponses
@@ -4878,12 +4932,20 @@ if(_pubUser) showPublicProfile(_pubUser);   // visiteur arrivé par un lien de b
   // pas un visiteur qui deep-linke (#book/…, #invite/…), seulement une arrivée « à froid ».
   // seuls les VRAIS deep-links suppriment la page d'accueil : le start_url de la PWA porte
   // désormais #today, qui sinon la désactiverait définitivement pour les nouveaux venus
-  const deepLink = _initHash.startsWith('#book/') || _initHash.startsWith('#invite/');
+  // Une invitation N'EST PAS un deep-link à respecter en silence : c'est le trafic le plus
+  // qualifié (recommandé par un ami). Il doit voir ce qu'est Tome avant qu'on lui demande
+  // de créer un compte — l'invitation est mémorisée et traitée après l'inscription.
+  const deepLink = _initHash.startsWith('#book/');
   if(!welcomed && !deepLink) showWelcome();
 })();
 
 /* =============== Page d'accueil publique =============== */
-function showWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=false; document.body.classList.add('welcome-open'); syncModalIsolation();
+function showWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=false; document.body.classList.add('welcome-open');
+  // invité par un ami : le dire ici, sur la page qui explique le produit
+  const who = social.invite || loadPendingInvite();
+  const host = $('#lp-invite');
+  if(host){ host.innerHTML = who ? `💌 <b>@${esc(who)}</b> t'invite à le/la rejoindre sur Tome.` : ''; host.hidden = !who; }
+  syncModalIsolation();
   const first=w.querySelector('[data-lp="signup"]'); if(first) try{ first.focus(); }catch(_){} }
 function hideWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=true; document.body.classList.remove('welcome-open'); syncModalIsolation();
   if(location.hash==='#welcome'){ try{ history.replaceState(history.state,'',location.pathname+location.search); }catch(_){} } }
