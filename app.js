@@ -20,6 +20,7 @@ const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTim
 const _modalHidden = new Map();
 function activeModalRoot(){
   const dlg=$('#ov-dialog'); if(dlg && dlg.classList.contains('open')) return dlg;
+  const pub=$('#pubprofile'); if(pub && !pub.hidden) return pub;   // page publique : couvre tout l'écran
   const welcome=$('#welcome'); if(welcome && !welcome.hidden) return welcome;
   const overlays=$$('.overlay.open');
   if(!overlays.length) return null;
@@ -677,7 +678,16 @@ function todayMiniCards(reading){
   if(next) cards.push(`<button class="today-mini" data-today-open="${esc(next.b.id)}">
     <span class="today-mini-icon next" aria-hidden="true">✦</span><span><small>Dans ta pile</small><b>${esc(fullTitle(next.b))}</b><em>${esc(next.why)}</em></span><span class="today-arrow" aria-hidden="true">→</span>
   </button>`);
-  return cards.slice(0,3).join('');
+  // Installer : proposé au bon moment (l'utilisateur a une vraie bibliothèque), une seule fois,
+  // et jamais si l'app est déjà installée — le bouton des réglages reste le chemin permanent.
+  let installDismissed = false;
+  try{ installDismissed = !!localStorage.getItem('tome-install-hidden'); }catch(_){ }
+  const canInstall = !isStandalone() && (installEvt || isIOSDevice()) && !installDismissed
+    && (state.books||[]).filter(b=>!(b.tags||[]).includes('exemple')).length >= 3;
+  const extra = canInstall ? `<button class="today-mini" data-today-install>
+    <span class="today-mini-icon" aria-hidden="true">⬇</span><span><small>Toujours à portée</small><b>Installer Tome</b><em>Sur ton écran d’accueil, même hors ligne</em></span><span class="today-arrow" aria-hidden="true">→</span>
+  </button>` : '';
+  return cards.slice(0,3).join('') + extra;
 }
 function todayFocusHTML(reading){
   if(reading){
@@ -780,6 +790,10 @@ $('#today-body').addEventListener('click', async e=>{
   }
   const finish=e.target.closest('[data-today-finish]'); if(finish){ const b=state.books.find(x=>x.id===finish.dataset.todayFinish); if(b){ markRead(b); save(); render(); } return; }
   const start=e.target.closest('[data-today-start]'); if(start){ const b=state.books.find(x=>x.id===start.dataset.todayStart); if(b){ b.status='reading'; if(b.currentPage==null)b.currentPage=0; save(); render(); toast('Bonne lecture 📖'); } return; }
+  if(e.target.closest('[data-today-install]')){
+    requestInstall().then(()=>{ try{ localStorage.setItem('tome-install-hidden','1'); }catch(_){ } renderToday(); });
+    return;
+  }
   if(e.target.closest('[data-today-rate]')){ openQuickRate(); return; }
   if(e.target.closest('[data-today-study]')){ startStudyReview(); return; }
   if(e.target.closest('[data-today-loans]')){ openTodayShelf('loan'); return; }
@@ -3351,6 +3365,55 @@ $('#btn-restore').addEventListener('click', async ()=>{
   }catch(_){ toast('Sauvegarde illisible'); }
 });
 
+/* =============== Page publique /@pseudo ===============
+   Lisible sans compte : c'est le lien qu'on met dans une bio. Elle n'affiche QUE ce que le
+   serveur accepte de rendre public (opt-in + mode de partage) — le front ne décide rien. */
+function publicUsernameFromURL(){
+  const m = location.pathname.match(/^\/@([a-z0-9_.-]{3,20})$/i);
+  if(m) return m[1].toLowerCase();
+  const h = location.hash.match(/^#@([a-z0-9_.-]{3,20})$/i);   // repli si l'hébergeur ne route pas /@
+  return h ? h[1].toLowerCase() : '';
+}
+async function showPublicProfile(uname){
+  const host = $('#pubprofile'), body = $('#pp-body');
+  host.hidden = false; document.body.style.overflow='hidden';
+  syncModalIsolation();
+  body.innerHTML = `<div class="pp-empty">Chargement du profil…</div>`;
+  let d;
+  try{ d = await api('/api/public/'+encodeURIComponent(uname)); }
+  catch(e){
+    body.innerHTML = `<div class="pp-empty">
+      <p>${e.message==='offline' ? 'Profil indisponible hors ligne.' : 'Ce profil n\'existe pas ou n\'est pas public.'}</p>
+      <p style="margin-top:16px"><a class="btn primary" href="/">Découvrir Tome</a></p></div>`;
+    return;
+  }
+  const u = d.user, st = d.stats||{}, shelf = d.shelf||[];
+  const annee = u.since ? new Date(u.since).getFullYear() : '';
+  document.title = `${u.displayName} — Tome`;
+  body.innerHTML = `
+    <header class="pp-head">
+      <h1 class="pp-name">${esc(u.displayName)}</h1>
+      <div class="pp-user">@${esc(u.username)}</div>
+      ${u.bio ? `<p class="pp-bio">${esc(u.bio)}</p>` : ''}
+      <div class="pp-stats">
+        <div class="pp-stat"><b>${st.books||0}</b><span>livre${(st.books||0)>1?'s':''}</span></div>
+        ${st.avg!=null ? `<div class="pp-stat"><b>${String(st.avg).replace('.',',')} ★</b><span>note moyenne</span></div>` : ''}
+        ${annee ? `<div class="pp-stat"><b>${annee}</b><span>sur Tome depuis</span></div>` : ''}
+      </div>
+    </header>
+    ${shelf.length ? `<div class="pp-sec">Ses lectures</div>
+      <div class="pp-grid">${shelf.map(b=>`<div class="pp-item">
+        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"><div class="pp-ph">${esc(b.title)}</div>` : `<div class="pp-ph">${esc(b.title)}</div>`}</div>
+        <div class="pp-t">${esc(b.title)}</div>
+        ${b.rating ? `<div class="pp-r">${starsTxt(b.rating)}</div>` : ''}
+      </div>`).join('')}</div>` : `<div class="pp-empty">Ce lecteur n'a encore rien partagé.</div>`}
+    <section class="pp-cta">
+      <h3>Et toi, tu lis quoi ?</h3>
+      <p>Note tes livres, BD et manga, garde la trace de tes lectures et compare avec tes amis. Gratuit, sans publicité.</p>
+      <a class="btn primary lp-big" href="/">Créer ma bibliothèque</a>
+    </section>`;
+}
+
 /* =============== Notation rapide ===============
    Une bibliothèque remplie rétrospectivement arrive souvent SANS notes (constaté chez le premier
    utilisateur réel : 41 livres lus, 0 note) — or les notes nourrissent les stats, le récap, le fil
@@ -3884,6 +3947,7 @@ async function socRefresh(){
        if(social.todayFeedUser && social.todayFeedUser!==d.user.id){ social.todayFeed=null; social.todayFeedAt=0; social.todayFeedError=''; }
        social.me = d.user; social.todayFeedUser=d.user.id; social.sessionError=''; social.tosOutdated = !!d.tosOutdated;
        social.hasRecovery = !!d.hasRecovery;
+       social.publicProfile = !!d.publicProfile;
        social.pendingRequests = d.pendingRequests||0; social.unreadNotifs = d.unreadNotifs||0; refreshSocBadge();
        if((social.tosOutdated || social.unreadNotifs) && ui.view==='friends') renderFriends();
        if(ui.view==='today') renderToday(); }
@@ -4160,6 +4224,12 @@ async function renderAccount(){
     <input id="acc-cur" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
     <input id="acc-new" type="password" maxlength="256" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)">
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
+    <h4>Ma page publique</h4>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n'affiche que ce que tu partages déjà (Amis → Mon partage) — <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
+    <div class="data-actions">
+      <button class="btn ${social.publicProfile?'':'primary'}" id="acc-pub">${social.publicProfile?'Rendre ma page privée':'Publier ma page'}</button>
+      ${social.publicProfile?`<button class="btn" id="acc-pub-copy">🔗 Copier le lien</button><a class="btn" id="acc-pub-open" href="/@${esc(social.me.username)}" target="_blank" rel="noopener">Voir ma page ↗</a>`:''}
+    </div>
     <h4>Code de secours</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n'est collecté). ${social.hasRecovery?'Un code est actif — le régénérer invalide l\'ancien.':'<b>Aucun code actif</b> — génère-le maintenant.'}</p>
     <input id="acc-rec" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
@@ -4186,6 +4256,18 @@ async function renderAccount(){
     try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé — autres appareils déconnectés ✓'); }
     catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
     finally{ b.disabled=false; } };
+  $('#acc-pub').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
+    try{ const d = await api('/api/account/public-profile', {method:'POST', body:{public: !social.publicProfile}});
+      social.publicProfile = d.public;
+      toast(d.public ? 'Ta page est en ligne ✓' : 'Ta page redevient privée');
+      renderAccount(); }
+    catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); b.disabled=false; } };
+  const pubCopy = $('#acc-pub-copy');
+  if(pubCopy) pubCopy.onclick = async ()=>{
+    const url = location.origin + '/@' + social.me.username;
+    try{ await navigator.clipboard.writeText(url); toast('Lien copié ✓'); }
+    catch(_){ openDialog({title:'Ma page publique', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
+  };
   $('#acc-rec-gen').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
     try{ const d = await api('/api/account/recovery-code', {method:'POST', body:{password:$('#acc-rec').value}});
       $('#acc-rec').value=''; social.hasRecovery = true;
@@ -4724,7 +4806,10 @@ if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin().then(
 
 // Page d'accueil : présentée aux visiteurs qui arrivent sans compte et sans bibliothèque à eux.
 // (Les utilisateurs connectés, ou qui ont déjà des livres, entrent directement dans l'app.)
+const _pubUser = publicUsernameFromURL();
+if(_pubUser) showPublicProfile(_pubUser);   // visiteur arrivé par un lien de bio : page publique, rien d'autre
 (function maybeWelcome(){
+  if(_pubUser) return;                      // ne pas superposer la page d'accueil à un profil public
   let welcomed = false;
   try{ welcomed = !!localStorage.getItem('tome-welcomed'); }catch(_){}
   const hasRealBooks = (state.books||[]).some(b=>!(b.tags||[]).includes('exemple'));
