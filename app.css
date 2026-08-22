@@ -996,3 +996,4 @@ body.welcome-open{overflow:hidden}
 .pp-empty{padding:44px 0; color:var(--muted); text-align:center}
 .notif-actions{display:flex; gap:8px; margin-top:8px}
 .notif[data-profile-user]{cursor:pointer}
+.pp-avatar .avatar{width:76px; height:76px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:28px; margin-bottom:14px; box-shadow:var(--sh-1)}

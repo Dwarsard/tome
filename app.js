@@ -2425,7 +2425,7 @@ async function loadDetailFriends(b){
     const box = $('#d-friends'); if(!box) return; // la fiche a pu être fermée/re-rendue entre-temps
     box.hidden = false;
     box.innerHTML = `<label>Chez tes amis</label>` + d.friends.map(f=>
-      `<div class="dfriend"><span class="avatar sm">${esc(initials(f.displayName))}</span><b>${esc(f.displayName)}</b>${
+      `<div class="dfriend">${avatarHTML(f.displayName,"sm")}<b>${esc(f.displayName)}</b>${
         f.rating ? `<span class="stars">${starsTxt(f.rating)}</span>` : `<span class="df-none">pas encore noté</span>`}</div>`).join('');
   }catch(_){ /* silencieux : la fiche reste purement locale */ }
 }
@@ -3454,6 +3454,7 @@ async function showPublicProfile(uname){
   document.title = `${u.displayName} — Tome`;
   body.innerHTML = `
     <header class="pp-head">
+      <div class="pp-avatar">${avatarHTML(u.displayName)}</div>
       <h1 class="pp-name">${esc(u.displayName)}</h1>
       <div class="pp-user">@${esc(u.username)}</div>
       ${u.bio ? `<p class="pp-bio">${esc(u.bio)}</p>` : ''}
@@ -3994,7 +3995,21 @@ async function api(path, opts={}){
   if(!res.ok){ const e = new Error(data.error || ('Erreur '+res.status)); e.status = res.status; throw e; }
   return data;
 }
-const initials = s => (String(s||'?').trim()[0]||'?').toUpperCase();
+const initials = s => {
+  const mots = String(s||'?').trim().split(/[\s_.-]+/).filter(Boolean);
+  return ((mots[0]||'?')[0] + (mots.length>1 ? mots[mots.length-1][0] : '')).toUpperCase();
+};
+// Couleur d'avatar dérivée du nom : chacun a la sienne, stable, sans rien stocker.
+// Dégradé saturé + texte blanc = lisible sur fond clair comme sombre.
+function avatarStyle(seed){
+  const s = String(seed||'?');
+  let h = 0; for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) % 360;
+  return `background:linear-gradient(135deg,hsl(${h},52%,46%),hsl(${(h+28)%360},54%,34%));color:#fff`;
+}
+// markup complet d'un avatar (une seule source de vérité pour les 8 endroits qui en affichent)
+function avatarHTML(name, cls=''){
+  return `<div class="avatar${cls?' '+cls:''}" style="${avatarStyle(name)}">${esc(initials(name))}</div>`;
+}
 // clé stable d'un livre côté social — DOIT rester identique entre la synchro (shareableBooks)
 // et les lectures croisées (« chez tes amis »), sinon les correspondances se perdent
 function shelfKey(b){ return (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,''); }
@@ -4230,7 +4245,7 @@ function renderFriends(){
       <a data-legal-view style="color:var(--green);cursor:pointer;text-decoration:underline">Les lire</a>
       <button class="btn small primary" id="tos-accept" style="margin-left:8px">J'accepte</button></div>` : ''}
     <div class="me-bar">
-      <div class="avatar">${esc(initials(social.me.displayName))}</div>
+      ${avatarHTML(social.me.displayName)}
       <div><b>${esc(social.me.displayName)}</b><div class="muted">@${esc(social.me.username)}</div></div>
       <span class="spacer"></span>
       <button class="btn small" id="soc-logout">Se déconnecter</button>
@@ -4280,7 +4295,7 @@ async function renderNotifications(){
       const actions = n.type==='friend_request' && n.actorId
         ? `<div class="notif-actions"><button class="btn small primary" data-accept="${esc(n.actorId)}">Accepter</button></div>` : '';
       return `<div class="notif${n.read?'':' unread'}" ${b?`data-profile-book="${esc(b.id)}"`:''} ${n.username?`data-profile-user="${esc(n.username)}"`:''}>
-        <div class="avatar sm">${esc(initials(n.displayName))}</div>
+        ${avatarHTML(n.displayName,"sm")}
         <div class="notif-body"><span class="notif-ic">${ic}</span> <b>${esc(n.displayName)}</b> ${verb[n.type]||''}${book}
           <span class="notif-when">${notifWhen(n.at)}</span>${actions}</div>
       </div>`;
@@ -4410,7 +4425,7 @@ async function renderAccount(){
   try{
     const d = await api('/api/blocks');
     $('#acc-blocks').innerHTML = d.blocked.length
-      ? d.blocked.map(u=>`<div class="frow"><div class="avatar">${esc(initials(u.displayName))}</div><div class="fi"><b>${esc(u.displayName)}</b><span>@${esc(u.username)}</span></div><button class="btn small" data-unblock="${esc(u.username)}">Débloquer</button></div>`).join('')
+      ? d.blocked.map(u=>`<div class="frow">${avatarHTML(u.displayName)}<div class="fi"><b>${esc(u.displayName)}</b><span>@${esc(u.username)}</span></div><button class="btn small" data-unblock="${esc(u.username)}">Débloquer</button></div>`).join('')
       : `<p class="friends-empty" style="padding:8px 0">Personne de bloqué.</p>`;
     $('#acc-blocks').querySelectorAll('[data-unblock]').forEach(btn=>btn.onclick=async ()=>{ try{ await api('/api/unblock',{method:'POST',body:{username:btn.dataset.unblock}}); renderAccount(); }catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); } });
   }catch(_){ $('#acc-blocks').innerHTML = `<p class="friends-empty" style="padding:8px 0">—</p>`; }
@@ -4649,7 +4664,7 @@ function onFeedClick(e){
 function threadHTML(d){
   const rows = d.comments.map(c=>`
     <div class="cmt-row">
-      <div class="avatar sm">${esc(initials(c.displayName))}</div>
+      ${avatarHTML(c.displayName,"sm")}
       <div class="cmt-body"><b>${esc(c.displayName)}</b> ${esc(c.text)}
         <span class="cmt-date">${new Date(c.at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span></div>
       ${(c.mine || d.canModerate) ? `<button class="cmt-del" data-cmt-del="${esc(c.id)}" title="Supprimer" aria-label="Supprimer ce commentaire">×</button>` : ''}
@@ -4757,7 +4772,7 @@ async function renderFriendsList(){
           const act = u.relation==='friend' ? `<span class="frel">✓ ami</span>`
             : u.relation==='sent' ? `<span class="frel">en attente</span>`
             : `<button class="btn small primary" data-add="${esc(u.username)}">${u.relation==='incoming'?'Accepter':'＋ Ajouter'}</button>`;
-          return `<div class="frow"><div class="avatar">${esc(initials(u.displayName))}</div>
+          return `<div class="frow">${avatarHTML(u.displayName)}
             <div class="fi clickable" data-profile="${esc(u.username)}"><b>${esc(u.displayName)}</b><span>@${esc(u.username)}</span></div>
             <div class="fa">${act}</div></div>`;
         }).join('');
@@ -4772,7 +4787,7 @@ async function loadFriendLists(){
   const el = $('#friend-lists');
   try{
     const d = await api('/api/friends');
-    const person = (p, actions)=>`<div class="frow"><div class="avatar">${esc(initials(p.displayName))}</div>
+    const person = (p, actions)=>`<div class="frow">${avatarHTML(p.displayName)}
       <div class="fi clickable" data-profile="${esc(p.username)}"><b>${esc(p.displayName)}</b><span>@${esc(p.username)}</span></div>
       <div class="fa">${actions}</div></div>`;
     let html = '';
@@ -4847,7 +4862,7 @@ function renderProfile(box, d){
   box.innerHTML = `
     <button class="btn small" id="prof-back" style="margin-bottom:14px">← Retour</button>
     <div class="profile-head">
-      <div class="avatar">${esc(initials(d.user.displayName))}</div>
+      ${avatarHTML(d.user.displayName)}
       <div style="flex:1;min-width:0">
         <h3 style="font-size:20px">${esc(d.user.displayName)}</h3>
         <div class="muted" style="color:var(--muted)">@${esc(d.user.username)}</div>
