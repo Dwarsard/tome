@@ -659,6 +659,16 @@ function todayMiniCards(reading){
   const gi = goalInfo(new Date().getFullYear());
   const next = reading ? dailyNextRead() : null;
   const cards = [];
+  // Sans email collecté, le code de secours est la SEULE voie de récupération : un compte qui
+  // n'en a pas est définitivement perdu si le mot de passe l'est. On le dit, et on le repropose
+  // tous les 30 jours tant que ce n'est pas fait.
+  let recSnooze = 0;
+  try{ recSnooze = +localStorage.getItem('tome-rec-snooze') || 0; }catch(_){ }
+  if(social.me && social.hasRecovery===false && Date.now()-recSnooze > 30*864e5){
+    cards.push(`<button class="today-mini urgent" data-today-recovery>
+      <span class="today-mini-icon" aria-hidden="true">🔑</span><span><small>Sécurité du compte</small><b>Aucun code de secours</b><em>Sans lui, un mot de passe oublié = compte perdu</em></span><span class="today-arrow" aria-hidden="true">→</span>
+    </button>`);
+  }
   const unrated = unratedBooks();
   if(unrated.length) cards.push(`<button class="today-mini" data-today-rate>
     <span class="today-mini-icon" aria-hidden="true">★</span><span><small>Sans note</small><b>${unrated.length} lecture${unrated.length>1?'s':''}</b><em>Les noter en moins d’une minute</em></span><span class="today-arrow" aria-hidden="true">→</span>
@@ -790,6 +800,12 @@ $('#today-body').addEventListener('click', async e=>{
   }
   const finish=e.target.closest('[data-today-finish]'); if(finish){ const b=state.books.find(x=>x.id===finish.dataset.todayFinish); if(b){ markRead(b); save(); render(); } return; }
   const start=e.target.closest('[data-today-start]'); if(start){ const b=state.books.find(x=>x.id===start.dataset.todayStart); if(b){ b.status='reading'; if(b.currentPage==null)b.currentPage=0; save(); render(); toast('Bonne lecture 📖'); } return; }
+  if(e.target.closest('[data-today-recovery]')){
+    social.tab='account'; social.view=null; selectView('friends');
+    setTimeout(()=>{ const el=$('#acc-rec'); if(el){ el.scrollIntoView({block:'center'}); el.focus(); } }, 220);
+    try{ localStorage.setItem('tome-rec-snooze', String(Date.now())); }catch(_){ }
+    return;
+  }
   if(e.target.closest('[data-today-invite]')){
     if(social.me) shareInvite();                       // partage direct du lien
     else { social.tab='feed'; social.view=null; selectView('friends'); renderAuth($('#friends-body'),'signup'); }
