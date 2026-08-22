@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body{margin:0}
+    a{color:#0a7d41} a:hover{color:#086535}
+    .ic{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+  </style>
+</helmet>
+<div style="width:820px; background:#f4f1e8; color:#202b35; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size:16px; line-height:1.55; padding:30px 32px 36px">
+
+  <div style="font-family:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif; font-size:32px; font-weight:700; letter-spacing:-.01em">Des icônes, pas des emoji</div>
+  <p style="color:#556270; font-size:16px; margin:8px 0 4px; max-width:64ch">
+    Un emoji change de dessin sur chaque appareil : le 📚 d’un iPhone n’est pas celui d’Android ni de Windows.
+    Il ne prend pas la couleur du thème et ne s’aligne jamais tout à fait. Ces icônes sont dessinées
+    sur une grille de 24 px, épaisseur constante, et héritent de la couleur du texte.
+  </p>
+
+  <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:14px; margin-top:26px">
+    <sc-for list="{{icones}}" as="i" hint-placeholder-count="12">
+      <div style="background:#fbf9f1; border:1px solid #dcd5c4; border-radius:12px; box-shadow:0 2px 8px rgba(80,70,40,.1); padding:16px; display:flex; flex-direction:column; gap:10px">
+        <div style="display:flex; align-items:center; gap:12px">
+          <div style="width:38px; height:38px; display:grid; place-items:center; border-radius:11px; background:rgba(10,125,65,.12); color:#0a7d41">
+            <span innerHTML="{{i.svg}}"></span>
+          </div>
+          <div style="font-size:22px; opacity:.5; line-height:1">{{i.emoji}}</div>
+        </div>
+        <div>
+          <div style="font-size:14px; font-weight:650">{{i.nom}}</div>
+          <div style="font-size:12px; color:#5f6b78; line-height:1.35">{{i.ou}}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin-top:28px; display:flex; gap:16px; align-items:flex-start; padding:18px; border-radius:12px; background:#fbf9f1; border:1px solid #dcd5c4">
+    <div style="width:38px; height:38px; display:grid; place-items:center; border-radius:11px; background:rgba(10,125,65,.12); color:#0a7d41; flex-shrink:0">
+      <svg viewBox="0 0 24 24" class="ic" style="width:20px;height:20px"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+    </div>
+    <div style="font-size:14px; color:#556270; line-height:1.6">
+      Les emoji gardent leur place là où ils sont <b>expressifs</b> et non structurels : les réactions ♥,
+      le récap de fin d’année, les notifications d’amis. C’est leur usage naturel — décorer, pas signaler.
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":820,"height":760}}'>
+class Component extends DCLogic {
+  renderVals(){
+    const s = (d, extra) => '<svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round">' + d + '</svg>';
+    return { icones: [
+      { nom:'Livre', ou:'Lecture en cours', emoji:'📖', svg:s('<path d="M12 7c-2-1.3-5-1.3-7-.5v10c2-.8 5-.8 7 .5 2-1.3 5-1.3 7-.5v-10c-2-.8-5-.8-7 .5z"/><path d="M12 7v10.5"/>') },
+      { nom:'Cible', ou:'Objectif annuel', emoji:'◎', svg:s('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>') },
+      { nom:'Étoile', ou:'Notes, coups de cœur', emoji:'★', svg:s('<path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.7l5.8-.8z"/>') },
+      { nom:'Marque-page', ou:'Dans ta pile', emoji:'✦', svg:s('<path d="M6 4h12a1 1 0 0 1 1 1v15l-7-4-7 4V5a1 1 0 0 1 1-1z"/>') },
+      { nom:'Cloche', ou:'Notifications', emoji:'🔔', svg:s('<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/>') },
+      { nom:'Personnes', ou:'Amis, cercle', emoji:'👥', svg:s('<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2M17.5 13.6a5.5 5.5 0 0 1 3 5.4"/>') },
+      { nom:'Téléchargement', ou:'Installer l’app', emoji:'⬇', svg:s('<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/>') },
+      { nom:'Clé', ou:'Code de secours', emoji:'🔑', svg:s('<circle cx="8" cy="14" r="4"/><path d="m11 11 8-8M17 5l2 2M14.5 7.5l2 2"/>') },
+      { nom:'Panier', ou:'Acheter le livre', emoji:'🛒', svg:s('<path d="M3 5h2l2.2 9.5a2 2 0 0 0 2 1.5h6.9a2 2 0 0 0 2-1.5L20 8H6"/><circle cx="9.5" cy="19.5" r="1.2"/><circle cx="17" cy="19.5" r="1.2"/>') },
+      { nom:'Graphique', ou:'Statistiques', emoji:'📈', svg:s('<path d="M4 19V6M4 19h16"/><path d="M8 15v-3M12 17v-7M16 13V8"/>') },
+      { nom:'Liste', ou:'Mes listes', emoji:'📋', svg:s('<path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6v.01M4 12v.01M4 18v.01"/>') },
+      { nom:'Recherche', ou:'Trouver un livre', emoji:'🔍', svg:s('<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>') }
+    ]};
+  }
+}
+</script>
+</body>
+</html>

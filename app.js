@@ -15,6 +15,48 @@ const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
 
+/* =============== Icônes =================================================
+   Un emoji change de dessin selon l'appareil (le 📚 d'un iPhone n'est pas celui d'Android),
+   ne prend pas la couleur du thème et ne s'aligne jamais tout à fait. Ces icônes sont dessinées
+   sur une grille de 24, épaisseur constante, et héritent de currentColor.
+   Les emoji restent là où ils sont EXPRESSIFS (réactions ♥, récap 🎉, notifications 👋). */
+const ICONS = {
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  chevron:'<path d="M9 6l6 6-6 6"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
+  book:'<path d="M12 7c-2-1.3-5-1.3-7-.5v10c2-.8 5-.8 7 .5 2-1.3 5-1.3 7-.5v-10c-2-.8-5-.8-7 .5z"/><path d="M12 7v10.5"/>',
+  target:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>',
+  star:'<path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.7l5.8-.8z"/>',
+  bookmark:'<path d="M6 4h12a1 1 0 0 1 1 1v15l-7-4-7 4V5a1 1 0 0 1 1-1z"/>',
+  bell:'<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  users:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2M17.5 13.6a5.5 5.5 0 0 1 3 5.4"/>',
+  download:'<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/>',
+  upload:'<path d="M12 20V9M7.5 13.5 12 9l4.5 4.5"/><path d="M4 5h16"/>',
+  key:'<circle cx="8" cy="14" r="4"/><path d="m11 11 8-8M17 5l2 2M14.5 7.5l2 2"/>',
+  cart:'<path d="M3 5h2l2.2 9.5a2 2 0 0 0 2 1.5h6.9a2 2 0 0 0 2-1.5L20 8H6"/><circle cx="9.5" cy="19.5" r="1.2"/><circle cx="17" cy="19.5" r="1.2"/>',
+  device:'<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18.5h2"/>',
+  chart:'<path d="M4 19V6M4 19h16"/><path d="M8 15v-3M12 17v-7M16 13V8"/>',
+  list:'<path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6v.01M4 12v.01M4 18v.01"/>',
+  cards:'<rect x="3" y="5" width="13" height="14" rx="2"/><path d="M19 8v9a2 2 0 0 1-2 2"/>',
+  share:'<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.2M8.2 13.2l7.6 4.2"/>',
+  link:'<path d="M10 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 1 0-5-5l-1.2 1.2"/><path d="M14 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 1 0 5 5l1.2-1.2"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m5 18 5-4.5 4 3.2 2.5-2.2L21 18"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M4.2 7.5l1.9 1.1M17.9 15.4l1.9 1.1M4.2 16.5l1.9-1.1M17.9 8.6l1.9-1.1"/>',
+  checkbox:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L15.5 10"/>',
+  restore:'<path d="M4 10a8 8 0 1 1 .7 5"/><path d="M4 5v5h5"/>',
+  doc:'<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h4"/>',
+  heart:'<path d="M12 20s-7-4.4-7-9.2A4 4 0 0 1 12 8a4 4 0 0 1 7 2.8C19 15.6 12 20 12 20z"/>',
+  mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/>',
+};
+/* size en px ; le trait s'affine sur les grandes tailles pour rester léger */
+function ic(nom, size=18, extra=''){
+  const d = ICONS[nom]; if(!d) return '';
+  const w = size >= 30 ? 1.5 : 1.75;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:${size}px;height:${size}px;flex-shrink:0;${extra}"
+    fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+}
+
 /* Isolation accessible des surfaces modales : le fond devient réellement indisponible au clavier
    et aux lecteurs d'écran, quel que soit le type de modale ouvert. */
 const _modalHidden = new Map();
@@ -668,27 +710,27 @@ function todayMiniCards(reading){
   try{ recSnooze = +localStorage.getItem('tome-rec-snooze') || 0; }catch(_){ }
   if(social.me && social.hasRecovery===false && Date.now()-recSnooze > 30*864e5){
     cards.push(`<button class="today-mini urgent" data-today-recovery>
-      <span class="today-mini-icon" aria-hidden="true">🔑</span><span><small>Sécurité du compte</small><b>Aucun code de secours</b><em>Sans lui, un mot de passe oublié = compte perdu</em></span><span class="today-arrow" aria-hidden="true">→</span>
+      <span class="today-mini-icon" aria-hidden="true">${ic('key',22)}</span><span><small>Sécurité du compte</small><b>Aucun code de secours</b><em>Sans lui, un mot de passe oublié = compte perdu</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
     </button>`);
   }
   const unrated = unratedBooks();
   if(unrated.length) cards.push(`<button class="today-mini" data-today-rate>
-    <span class="today-mini-icon" aria-hidden="true">★</span><span><small>Sans note</small><b>${unrated.length} lecture${unrated.length>1?'s':''}</b><em>Les noter en moins d’une minute</em></span><span class="today-arrow" aria-hidden="true">→</span>
+    <span class="today-mini-icon" aria-hidden="true">${ic('star',22)}</span><span><small>Sans note</small><b>${unrated.length} lecture${unrated.length>1?'s':''}</b><em>Les noter en moins d’une minute</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
   if(due.length) cards.push(`<button class="today-mini" data-today-study>
-    <span class="today-mini-icon study" aria-hidden="true">◫</span><span><small>À réviser</small><b>${due.length} carte${due.length>1?'s':''}</b><em>Session de moins de 5 min</em></span><span class="today-arrow" aria-hidden="true">→</span>
+    <span class="today-mini-icon study" aria-hidden="true">${ic('cards',22)}</span><span><small>À réviser</small><b>${due.length} carte${due.length>1?'s':''}</b><em>Session de moins de 5 min</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
   if(loans.length){
     const first = loans[0], detail = first.due ? first.due.text : `${loans.length} prêt${loans.length>1?'s':''} en cours`;
     cards.push(`<button class="today-mini ${first.due&&first.due.days<0?'urgent':''}" data-today-loans>
-      <span class="today-mini-icon loan" aria-hidden="true">↗</span><span><small>Prêts</small><b>${loans.length} livre${loans.length>1?'s':''}</b><em>${esc(detail)}</em></span><span class="today-arrow" aria-hidden="true">→</span>
+      <span class="today-mini-icon loan" aria-hidden="true">${ic('share',22)}</span><span><small>Prêts</small><b>${loans.length} livre${loans.length>1?'s':''}</b><em>${esc(detail)}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
     </button>`);
   }
   cards.push(`<button class="today-mini" data-today-goal>
-    <span class="today-mini-icon goal" aria-hidden="true">◎</span><span><small>Objectif ${new Date().getFullYear()}</small><b>${gi?`${gi.done} / ${gi.goal}`:'À définir'}</b><em>${gi?(gi.done>=gi.goal?'Objectif atteint':gi.delta<0?`${-gi.delta} lecture${gi.delta<-1?'s':''} à rattraper`:'Tu tiens le rythme'):'Donne un cap à ton année'}</em></span><span class="today-arrow" aria-hidden="true">→</span>
+    <span class="today-mini-icon goal" aria-hidden="true">${ic('target',22)}</span><span><small>Objectif ${new Date().getFullYear()}</small><b>${gi?`${gi.done} / ${gi.goal}`:'À définir'}</b><em>${gi?(gi.done>=gi.goal?'Objectif atteint':gi.delta<0?`${-gi.delta} lecture${gi.delta<-1?'s':''} à rattraper`:'Tu tiens le rythme'):'Donne un cap à ton année'}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
   if(next) cards.push(`<button class="today-mini" data-today-open="${esc(next.b.id)}">
-    <span class="today-mini-icon next" aria-hidden="true">✦</span><span><small>Dans ta pile</small><b>${esc(fullTitle(next.b))}</b><em>${esc(next.why)}</em></span><span class="today-arrow" aria-hidden="true">→</span>
+    <span class="today-mini-icon next" aria-hidden="true">${ic('bookmark',22)}</span><span><small>Dans ta pile</small><b>${esc(fullTitle(next.b))}</b><em>${esc(next.why)}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
   // Installer : proposé au bon moment (l'utilisateur a une vraie bibliothèque), une seule fois,
   // et jamais si l'app est déjà installée — le bouton des réglages reste le chemin permanent.
@@ -697,7 +739,7 @@ function todayMiniCards(reading){
   const canInstall = !isStandalone() && (installEvt || isIOSDevice()) && !installDismissed
     && (state.books||[]).filter(b=>!(b.tags||[]).includes('exemple')).length >= 3;
   const extra = canInstall ? `<button class="today-mini" data-today-install>
-    <span class="today-mini-icon" aria-hidden="true">⬇</span><span><small>Toujours à portée</small><b>Installer Tome</b><em>Sur ton écran d’accueil, même hors ligne</em></span><span class="today-arrow" aria-hidden="true">→</span>
+    <span class="today-mini-icon" aria-hidden="true">${ic('download',22)}</span><span><small>Toujours à portée</small><b>Installer Tome</b><em>Sur ton écran d’accueil, même hors ligne</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>` : '';
   return cards.slice(0,3).join('') + extra;
 }
@@ -784,7 +826,7 @@ function renderTodaySocial(){
   if(!social.todayFeed && !_todayFeedLoading){ el.innerHTML=`<div class="today-social-empty"><span class="today-pulse" aria-hidden="true"></span><p>Chargement des dernières lectures…</p></div>`; loadTodayFeed(); return; }
   if(_todayFeedLoading && !social.todayFeed){ el.innerHTML=`<div class="today-social-empty"><span class="today-pulse" aria-hidden="true"></span><p>Chargement des dernières lectures…</p></div>`; return; }
   const feed=(social.todayFeed||[]).slice(0,3);
-  if(!feed.length){ el.innerHTML=`<div class="today-social-empty"><p>Ton fil est encore calme. Invite un ami pour commencer à partager vos lectures.</p><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn primary" data-today-invite>🔗 Inviter un ami</button><button class="btn" data-today-friends>Voir mes amis</button></div></div>`; return; }
+  if(!feed.length){ el.innerHTML=`<div class="today-social-empty"><p>Ton fil est encore calme. Invite un ami pour commencer à partager vos lectures.</p><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn primary" data-today-invite>${ic('link',16)} Inviter un ami</button><button class="btn" data-today-friends>Voir mes amis</button></div></div>`; return; }
   el.innerHTML=`<div class="today-feed">${feed.map(x=>`<button class="today-feed-row" data-today-friends>
     <span class="today-feed-cover">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:'<span aria-hidden="true">📕</span>'}</span>
     <span class="today-feed-copy"><b>${social.me&&x.uid===social.me.id?'Toi':esc(x.display_name)}</b><span>a lu <strong>${esc(x.title)}</strong>${x.rating?` · <span class="stars">${starsTxt(x.rating)}</span>`:''}</span></span>
@@ -1071,7 +1113,7 @@ function renderLibrary(){
         <div class="big">📚</div>
         <h3>Commence ta bibliothèque</h3>
         <p>Ajoute des livres, BD ou manga que tu as lus — ta collection, ton journal et tes recommandations démarrent tout de suite.</p>
-        <button class="btn primary lp-big" id="ob-search">🔍 Chercher un livre</button>
+        <button class="btn primary lp-big" id="ob-search">${ic('search',16)} Chercher un livre</button>
       </div>
       <div class="ob-or">ou tape parmi ces incontournables :</div>
       <div class="onboard-grid">
@@ -2292,8 +2334,8 @@ function openDetail(id, opts={}){
         : `<button class="syn-more" id="d-syn-fetch">🔎 Chercher le synopsis</button>`}
 
       <div class="buy-row">
-        <a class="btn buy amz" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow sponsored" title="Ouvrir sur Amazon">🛒 Acheter</a>
-        <a class="btn buy" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow sponsored" title="Édition Kindle sur Amazon">📱 Lire sur Kindle</a>
+        <a class="btn buy amz" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow sponsored" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter</a>
+        <a class="btn buy" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow sponsored" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle</a>
         <span class="buy-note" tabindex="0" title="En tant que Partenaire Amazon, ce site perçoit une commission sur les achats remplissant les conditions requises. Aucun surcoût pour toi.">Partenaire Amazon</span>
       </div>
 
@@ -2847,10 +2889,10 @@ function renderStats(){
     $$('#view-stats > *:not(.section):not(#stats-empty)').forEach(el=>el.hidden = true);
     if(!vide){
       const d = document.createElement('div'); d.id='stats-empty'; d.className='empty';
-      d.innerHTML = `<div class="big">📈</div><h3>Tes statistiques arrivent</h3>
+      d.innerHTML = `<div class="big">${ic('chart',34)}</div><h3>Tes statistiques arrivent</h3>
         <p>Ajoute quelques lectures et tu verras ici ton rythme, tes genres, tes notes et ta régularité au fil de l'année.</p>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-          <button class="btn primary" id="stats-add">＋ Ajouter une lecture</button>
+          <button class="btn primary" id="stats-add">${ic('plus',16)} Ajouter une lecture</button>
           <button class="btn" id="stats-lib">Voir ma bibliothèque</button>
         </div>`;
       $('#view-stats').appendChild(d);
@@ -3086,7 +3128,7 @@ function showRecap(year){
       ${r.readingDays?`<div class="recap-hi"><div class="rl">Jours de lecture</div><b>${r.readingDays}</b> jour${r.readingDays>1?'s':''} avec une page tournée</div>`:''}
       ${r.topMoods.length?`<div class="recap-hi"><div class="rl">Tes ambiances</div><b>${r.topMoods.map(esc).join(', ')}</b></div>`:''}
       <div class="recap-hi"><div class="rl">Par type</div><b>${Object.entries(r.byType).filter(([,n])=>n).map(([t,n])=>`${n} ${TYPE_LABEL[t].toLowerCase()}${n>1&&t==='livre'?'s':''}`).join(' · ')||'—'}</b></div>
-      <button class="btn primary" id="recap-share" style="margin-top:14px; width:100%">📸 Créer ma carte à partager</button>`;
+      <button class="btn primary" id="recap-share" style="margin-top:14px; width:100%">${ic('image',16)} Créer ma carte à partager</button>`;
   }
   openOverlay('#ov-list');
 }
@@ -3474,6 +3516,11 @@ async function showPublicProfile(uname){
   }
   const u = d.user, st = d.stats||{}, shelf = d.shelf||[];
   const annee = u.since ? new Date(u.since).getFullYear() : '';
+  // Une liste de couvertures ne donne pas envie ; un livre défendu, si. On met en avant le mieux
+  // noté — en préférant celui qui porte une critique, c'est ce qui fait la valeur d'un journal.
+  const coeur = shelf.filter(b=>b.rating>=4.5).sort((a,b)=>
+      ((b.review?1:0)-(a.review?1:0)) || (b.rating-a.rating))[0] || null;
+  const reste = coeur ? shelf.filter(b=>b!==coeur) : shelf;
   document.title = `${u.displayName} — Tome`;
   body.innerHTML = `
     <header class="pp-head">
@@ -3487,8 +3534,18 @@ async function showPublicProfile(uname){
         ${annee ? `<div class="pp-stat"><b>${annee}</b><span>sur Tome depuis</span></div>` : ''}
       </div>
     </header>
-    ${shelf.length ? `<div class="pp-sec">Ses lectures</div>
-      <div class="pp-grid">${shelf.map(b=>`<div class="pp-item">
+    ${coeur ? `<section class="pp-fav">
+      <div class="pp-fav-cov">${coeur.cover ? `<img src="${esc(coeur.cover)}" alt="" referrerpolicy="no-referrer"><div class="pp-ph">${esc(coeur.title)}</div>` : `<div class="pp-ph">${esc(coeur.title)}</div>`}</div>
+      <div class="pp-fav-txt">
+        <div class="pp-fav-kicker">${ic('star',14)} Son coup de cœur</div>
+        <div class="pp-fav-title">${esc(coeur.title)}</div>
+        ${coeur.authors ? `<div class="pp-fav-author">${esc(coeur.authors)}</div>` : ''}
+        <div class="pp-fav-stars">${starsTxt(coeur.rating)}</div>
+        ${coeur.review ? `<blockquote class="pp-fav-quote">« ${esc(coeur.review)} »</blockquote>` : ''}
+      </div>
+    </section>` : ''}
+    ${reste.length ? `<div class="pp-sec">${coeur ? 'Ses autres lectures' : 'Ses lectures'}</div>
+      <div class="pp-grid">${reste.map(b=>`<div class="pp-item">
         <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"><div class="pp-ph">${esc(b.title)}</div>` : `<div class="pp-ph">${esc(b.title)}</div>`}</div>
         <div class="pp-t">${esc(b.title)}</div>
         ${b.rating ? `<div class="pp-r">${starsTxt(b.rating)}</div>` : ''}
@@ -3624,8 +3681,8 @@ function presentCard(cv, filename, shareText){
     $('#card-body').innerHTML = `
       <img class="card-preview" src="${dataUrl}" alt="Aperçu de la carte">
       <div class="card-actions">
-        ${canNative ? '<button class="btn primary" id="card-share">📲 Partager</button>' : ''}
-        <button class="btn ${canNative?'':'primary'}" id="card-dl">⬇ Télécharger</button>
+        ${canNative ? `<button class="btn primary" id="card-share">${ic('share',16)} Partager</button>` : ''}
+        <button class="btn ${canNative?'':'primary'}" id="card-dl">${ic('download',16)} Télécharger</button>
       </div>
       <p class="card-hint">En story, en message… l'adresse de Tome est sur l'image ✨</p>`;
     if(canNative) $('#card-share').addEventListener('click', async ()=>{
@@ -4377,17 +4434,17 @@ async function renderAccount(){
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
     <h4>Notifications</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Être prévenu·e quand un ami t'ajoute, aime ou commente une de tes lectures — même quand Tome est fermé. <span id="acc-push-state"></span></p>
-    <div class="data-actions"><button class="btn" id="acc-push">🔔 Activer les notifications</button></div>
+    <div class="data-actions"><button class="btn" id="acc-push">${ic('bell',16)} Activer les notifications</button></div>
     <h4>Ma page publique</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n'affiche que ce que tu partages déjà (Amis → Mon partage) — <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
     <div class="data-actions">
       <button class="btn ${social.publicProfile?'':'primary'}" id="acc-pub">${social.publicProfile?'Rendre ma page privée':'Publier ma page'}</button>
-      ${social.publicProfile?`<button class="btn" id="acc-pub-copy">🔗 Copier le lien</button><a class="btn" id="acc-pub-open" href="/@${esc(social.me.username)}" target="_blank" rel="noopener">Voir ma page ↗</a>`:''}
+      ${social.publicProfile?`<button class="btn" id="acc-pub-copy">${ic('link',16)} Copier le lien</button><a class="btn" id="acc-pub-open" href="/@${esc(social.me.username)}" target="_blank" rel="noopener">Voir ma page ↗</a>`:''}
     </div>
     <h4>Code de secours</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n'est collecté). ${social.hasRecovery?'Un code est actif — le régénérer invalide l\'ancien.':'<b>Aucun code actif</b> — génère-le maintenant.'}</p>
     <input id="acc-rec" aria-label="Mot de passe actuel (pour générer le code de secours)" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
-    <button class="btn" id="acc-rec-gen">🔑 ${social.hasRecovery?'Régénérer mon code':'Générer mon code'}</button>
+    <button class="btn" id="acc-rec-gen">${ic('key',16)} ${social.hasRecovery?'Régénérer mon code':'Générer mon code'}</button>
     <h4>Utilisateurs bloqués</h4>
     <div id="acc-blocks"><p class="friends-empty" style="padding:8px 0">Chargement…</p></div>
     <h4>Mes données</h4>
@@ -4414,8 +4471,8 @@ async function renderAccount(){
     const st = await pushState(); const b = $('#acc-push'), lbl = $('#acc-push-state');
     if(!b) return;
     if(st==='unsupported'){ b.hidden = true; if(lbl) lbl.textContent = 'Non géré par ce navigateur.'; return; }
-    if(st==='denied'){ b.disabled = true; b.textContent = '🔕 Notifications bloquées'; if(lbl) lbl.textContent = 'À réautoriser dans les réglages de ton navigateur.'; return; }
-    b.textContent = st==='on' ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications';
+    if(st==='denied'){ b.disabled = true; b.innerHTML = ic('bell',16)+' Notifications bloquées'; if(lbl) lbl.textContent = 'À réautoriser dans les réglages de ton navigateur.'; return; }
+    b.innerHTML = ic('bell',16) + (st==='on' ? ' Désactiver les notifications' : ' Activer les notifications');
     if(lbl) lbl.textContent = st==='on' ? 'Actives sur cet appareil.' : '';
     b.onclick = async ()=>{
       if(b.disabled) return; b.disabled = true;
@@ -4482,7 +4539,7 @@ async function showRecoveryCode(code, intro){
     // « C'est noté » est la seule sortie : Échap/clic-fond renvoient null → on réaffiche
     const v = await openDialog({ title:'🔑 Ton code de secours', message: msg, actions:[
       {label:'📋 Copier', value:'copy'},
-      {label:'⬇ Télécharger', value:'dl'},
+      {label:'Télécharger', value:'dl'},
       {label:'C\'est noté ✓', value:'ok', variant:'primary', default:true},
     ]});
     if(v==='ok') return;
@@ -4652,7 +4709,7 @@ async function renderFeed(){
       el.innerHTML = `<div class="friends-empty" style="text-align:center">
         <p>Ton fil s'animera dès qu'un ami partagera une lecture.</p>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
-          <button class="btn primary" id="feed-invite">🔗 Inviter un ami</button>
+          <button class="btn primary" id="feed-invite">${ic('link',16)} Inviter un ami</button>
           <button class="btn" id="feed-find">Chercher quelqu'un</button>
         </div></div>`;
       $('#feed-invite').addEventListener('click', shareInvite);
@@ -4793,7 +4850,7 @@ async function renderFriendsList(){
   el.innerHTML = `
     <div class="add-friend">
       <input id="friend-search" placeholder="Rechercher quelqu'un (pseudo ou nom)…" aria-label="Rechercher un utilisateur" autocomplete="off">
-      <button class="btn" id="friend-invite" title="Partager mon lien d'invitation">🔗 Inviter</button>
+      <button class="btn" id="friend-invite" title="Partager mon lien d'invitation">${ic('link',16)} Inviter</button>
     </div>
     <div id="search-res"></div>
     <div id="friend-lists"><p class="friends-empty">Chargement…</p></div>`;
