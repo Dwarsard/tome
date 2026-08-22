@@ -3365,6 +3365,47 @@ $('#btn-restore').addEventListener('click', async ()=>{
   }catch(_){ toast('Sauvegarde illisible'); }
 });
 
+/* =============== Notifications push ===============
+   Sans elles, on n'apprend qu'en ouvrant l'app qu'un ami a réagi : le fil social reste muet.
+   Opt-in explicite (le navigateur exige un geste utilisateur), désactivable à tout moment. */
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function urlB64ToBytes(b64){
+  const s = (b64+'='.repeat((4-b64.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');
+  const bin = atob(s); const a = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i);
+  return a;
+}
+async function pushState(){
+  if(!pushSupported()) return 'unsupported';
+  if(Notification.permission==='denied') return 'denied';
+  try{
+    const reg = await navigator.serviceWorker.getRegistration();
+    if(!reg) return 'off';
+    return (await reg.pushManager.getSubscription()) ? 'on' : 'off';
+  }catch(_){ return 'off'; }
+}
+async function enablePush(){
+  if(!pushSupported()){ toast('Ton navigateur ne gère pas les notifications'); return false; }
+  const perm = await Notification.requestPermission();
+  if(perm!=='granted'){ toast(perm==='denied' ? 'Notifications refusées — à réautoriser dans les réglages du navigateur' : 'Notifications non activées'); return false; }
+  const reg = await navigator.serviceWorker.ready;
+  const { key } = await api('/api/push/key');
+  if(!key){ toast('Notifications indisponibles pour le moment'); return false; }
+  let sub = await reg.pushManager.getSubscription();
+  if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64ToBytes(key) });
+  const j = sub.toJSON();
+  await api('/api/push/subscribe', {method:'POST', body:{ endpoint: sub.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }});
+  return true;
+}
+async function disablePush(){
+  try{
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if(sub){ await api('/api/push/unsubscribe', {method:'POST', body:{ endpoint: sub.endpoint }}); await sub.unsubscribe(); }
+    else await api('/api/push/unsubscribe', {method:'POST', body:{}});
+  }catch(_){ }
+}
+
 /* =============== Page publique /@pseudo ===============
    Lisible sans compte : c'est le lien qu'on met dans une bio. Elle n'affiche QUE ce que le
    serveur accepte de rendre public (opt-in + mode de partage) — le front ne décide rien. */
@@ -4224,6 +4265,9 @@ async function renderAccount(){
     <input id="acc-cur" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
     <input id="acc-new" type="password" maxlength="256" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)">
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
+    <h4>Notifications</h4>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Être prévenu·e quand un ami t'ajoute, aime ou commente une de tes lectures — même quand Tome est fermé. <span id="acc-push-state"></span></p>
+    <div class="data-actions"><button class="btn" id="acc-push">🔔 Activer les notifications</button></div>
     <h4>Ma page publique</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n'affiche que ce que tu partages déjà (Amis → Mon partage) — <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
     <div class="data-actions">
@@ -4256,6 +4300,22 @@ async function renderAccount(){
     try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé — autres appareils déconnectés ✓'); }
     catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
     finally{ b.disabled=false; } };
+  (async ()=>{                                   // état réel des notifications (permission + abonnement)
+    const st = await pushState(); const b = $('#acc-push'), lbl = $('#acc-push-state');
+    if(!b) return;
+    if(st==='unsupported'){ b.hidden = true; if(lbl) lbl.textContent = 'Non géré par ce navigateur.'; return; }
+    if(st==='denied'){ b.disabled = true; b.textContent = '🔕 Notifications bloquées'; if(lbl) lbl.textContent = 'À réautoriser dans les réglages de ton navigateur.'; return; }
+    b.textContent = st==='on' ? '🔕 Désactiver les notifications' : '🔔 Activer les notifications';
+    if(lbl) lbl.textContent = st==='on' ? 'Actives sur cet appareil.' : '';
+    b.onclick = async ()=>{
+      if(b.disabled) return; b.disabled = true;
+      try{
+        if(st==='on'){ await disablePush(); toast('Notifications désactivées'); }
+        else if(await enablePush()) toast('Notifications activées ✓');
+      }catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
+      finally{ renderAccount(); }
+    };
+  })();
   $('#acc-pub').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
     try{ const d = await api('/api/account/public-profile', {method:'POST', body:{public: !social.publicProfile}});
       social.publicProfile = d.public;

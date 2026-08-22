@@ -1,7 +1,7 @@
 /* Service worker de Tome — cache l'app pour l'usage hors ligne.
    Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
    qui affiche le bandeau « Nouvelle version — Recharger ». */
-const CACHE = 'tome-v9';
+const CACHE = 'tome-v10';
 const CACHE_PREFIX = 'tome-';
 // Caches d'AVANT l'éclatement du single-file (index.html contenait tout le CSS/JS).
 const PRE_SPLIT = /^tome-v[1-8]$/;
@@ -62,4 +62,31 @@ self.addEventListener('fetch', e => {
         (e.request.mode === 'navigate' ? await caches.match('./index.html') : Response.error())
       )
   );
+});
+
+/* ---------- Notifications push ----------
+   Le message arrive chiffré ; le navigateur le déchiffre et nous donne un JSON. */
+self.addEventListener('push', e => {
+  let d = {};
+  try{ d = e.data ? e.data.json() : {}; }catch(_){ d = { body: e.data ? e.data.text() : '' }; }
+  const title = d.title || 'Tome';
+  e.waitUntil(self.registration.showNotification(title, {
+    body: d.body || 'Tu as du nouveau sur Tome',
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    tag: d.tag || 'tome',            // regroupe : pas d'empilement de notifications identiques
+    data: { url: d.url || '/#friends' },
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const cible = (e.notification.data && e.notification.data.url) || '/#friends';
+  // réutiliser un onglet déjà ouvert plutôt que d'en empiler un nouveau
+  e.waitUntil((async () => {
+    const clientsList = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
+    for(const c of clientsList){
+      if(new URL(c.url).origin === self.location.origin){ await c.focus(); if('navigate' in c) await c.navigate(cible); return; }
+    }
+    await self.clients.openWindow(cible);
+  })());
 });
