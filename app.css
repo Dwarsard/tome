@@ -19,7 +19,10 @@
 :root[data-theme="light"]{
   --bg:#f4f1e8; --bg2:#fbf9f1; --surface:#ffffff; --surface2:#ece7d9;
   --border:#dcd5c4; --border-hover:#c3b6a0; --text:#202b35; --muted:#556270; --faint:#5f6b78;
-  --green:#0c9d55; --green-strong:#0a7d41; --on-green:#ffffff; --star:#b5790e; --star-off:#cfc8b6;
+  /* verts assombris : #0c9d55 ne donnait que 3,1:1 en texte et 2,5:1 sous le blanc des boutons */
+  --green:#0a7d41; --green-strong:#086535; --on-green:#ffffff; --star:#b5790e; --star-off:#cfc8b6;
+  --red:#c0392b; --orange:#a35200;      /* rouge et orange du thème sombre : 2,4:1 sur fond clair */
+  --grad-green:linear-gradient(135deg,#0b8446,#076b38);
   --accent-soft:color-mix(in srgb, var(--green) 12%, transparent);
   --header-bg:rgba(244,241,232,.9); --chip-bg:rgba(255,255,255,.92); --chip-text:#202b35;
   --overlay-dim:rgba(60,55,40,.45);
@@ -997,3 +1000,15 @@ body.welcome-open{overflow:hidden}
 .notif-actions{display:flex; gap:8px; margin-top:8px}
 .notif[data-profile-user]{cursor:pointer}
 .pp-avatar .avatar{width:76px; height:76px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:28px; margin-bottom:14px; box-shadow:var(--sh-1)}
+
+/* ===== Cibles tactiles (WCAG 2.5.5 / 2.5.8) =====
+   Mesuré : la navigation faisait 35 px de haut avec 2 px entre onglets, les puces 28-31 px.
+   Sur écran tactile on impose 44 px ; à la souris, 32 px suffisent (2.5.8 demande 24 px). */
+#nav button, .chip, .btn, .btn.small, .seg button, .seg-mini button{ min-height:32px }
+.btn.icon{ min-width:32px }
+@media (hover:none), (pointer:coarse){
+  #nav button, .chip, .btn, .btn.small, .seg button, .seg-mini button{ min-height:44px }
+  .btn.icon, .x, .heart{ min-width:44px; min-height:44px }
+  #nav{ gap:6px }                       /* 2 px entre onglets = touches manquées */
+  .star-input .st{ padding:4px 5px }    /* étoiles : zone de frappe élargie sans changer la taille visuelle */
+}
