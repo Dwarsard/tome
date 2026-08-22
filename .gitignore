@@ -5,3 +5,6 @@ Thumbs.db
 # Éditeurs
 *.swp
 *~
+
+# Canevas de maquettes : artefact volumineux, regénéré par la skill design
+design/*-design.html
