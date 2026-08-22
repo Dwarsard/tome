@@ -20,8 +20,9 @@
   --bg:#f4f1e8; --bg2:#fbf9f1; --surface:#ffffff; --surface2:#ece7d9;
   --border:#dcd5c4; --border-hover:#c3b6a0; --text:#202b35; --muted:#556270; --faint:#5f6b78;
   /* verts assombris : #0c9d55 ne donnait que 3,1:1 en texte et 2,5:1 sous le blanc des boutons */
-  --green:#0a7d41; --green-strong:#086535; --on-green:#ffffff; --star:#b5790e; --star-off:#cfc8b6;
+  --green:#0a7d41; --green-strong:#086535; --on-green:#ffffff; --star:#8a5a06; --star-off:#cfc8b6;
   --red:#c0392b; --orange:#a35200;      /* rouge et orange du thème sombre : 2,4:1 sur fond clair */
+  --blue:#1667a8; --pink:#b02a58;       /* oubliés jusqu'ici : les valeurs sombres restaient sur fond clair */
   --grad-green:linear-gradient(135deg,#0b8446,#076b38);
   --accent-soft:color-mix(in srgb, var(--green) 12%, transparent);
   --header-bg:rgba(244,241,232,.9); --chip-bg:rgba(255,255,255,.92); --chip-text:#202b35;
@@ -34,7 +35,7 @@ html{scrollbar-color:var(--surface2) var(--bg)}
 body{
   background:var(--bg); color:var(--text);
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  font-size:15px; line-height:1.5; min-height:100vh;
+  font-size:16px; line-height:1.55; min-height:100vh;   /* 15px était sous le seuil de lisibilité */
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
   text-rendering:optimizeLegibility; font-feature-settings:'kern','liga'; letter-spacing:-.006em;
   overscroll-behavior-y:contain; /* évite le pull-to-refresh accidentel en PWA */
@@ -1012,3 +1013,20 @@ body.welcome-open{overflow:hidden}
   #nav{ gap:6px }                       /* 2 px entre onglets = touches manquées */
   .star-input .st{ padding:4px 5px }    /* étoiles : zone de frappe élargie sans changer la taille visuelle */
 }
+
+/* ===== Boutons stylés en lien =====
+   Ces commandes étaient des <a> sans href : invisibles au clavier et pour les lecteurs
+   d'écran, alors qu'elles portent la connexion, l'inscription, la récupération de compte
+   et l'accès aux mentions légales. Ce sont désormais de vrais boutons. */
+.linkish{background:none; border:none; padding:4px 2px; font:inherit; color:var(--green);
+  text-decoration:underline; text-underline-offset:2px; cursor:pointer; min-height:0}
+.linkish:hover{color:var(--green-strong)}
+
+/* ===== État désactivé =====
+   Six boutons passent en disabled pendant un appel réseau ; rien ne le montrait. */
+button:disabled, .btn:disabled, button[disabled]{opacity:.55; cursor:not-allowed; box-shadow:none}
+button:disabled:hover, .btn:disabled:hover{background:var(--surface); border-color:var(--border)}
+.btn.primary:disabled:hover{background:var(--grad-green)}
+
+/* Petites commandes textuelles sans rembourrage : sous le minimum de 24x24 px (WCAG 2.5.8) */
+.syn-more, .tagbtn, .clear-rate, .today-links button{min-height:24px; padding:3px 6px}

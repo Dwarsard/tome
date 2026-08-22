@@ -4242,7 +4242,7 @@ function renderFriends(){
   if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
   box.innerHTML = `
     ${social.tosOutdated ? `<div class="invite-banner" id="tos-banner">📄 Les mentions légales ont été mises à jour : ta bibliothèque est désormais enregistrée sur ton compte, pour la retrouver sur tous tes appareils (privée, exportable et supprimable à tout moment).
-      <a data-legal-view style="color:var(--green);cursor:pointer;text-decoration:underline">Les lire</a>
+      <button type="button" class="linkish" data-legal-view>Les lire</button>
       <button class="btn small primary" id="tos-accept" style="margin-left:8px">J'accepte</button></div>` : ''}
     <div class="me-bar">
       ${avatarHTML(social.me.displayName)}
@@ -4250,12 +4250,12 @@ function renderFriends(){
       <span class="spacer"></span>
       <button class="btn small" id="soc-logout">Se déconnecter</button>
     </div>
-    <div class="friends-sub">
-      <button data-tab="feed" class="${social.tab==='feed'?'on':''}">Fil</button>
-      <button data-tab="friends" class="${social.tab==='friends'?'on':''}">Amis</button>
-      <button data-tab="notifs" class="${social.tab==='notifs'?'on':''}" style="position:relative">🔔${social.unreadNotifs?`<span class="sub-badge">${social.unreadNotifs>9?'9+':social.unreadNotifs}</span>`:''}</button>
-      <button data-tab="me" class="${social.tab==='me'?'on':''}">Partage</button>
-      <button data-tab="account" class="${social.tab==='account'?'on':''}">Compte</button>
+    <div class="friends-sub" role="tablist" aria-label="Sections du réseau">
+      <button data-tab="feed" role="tab" aria-selected="${social.tab==='feed'}" class="${social.tab==='feed'?'on':''}">Fil</button>
+      <button data-tab="friends" role="tab" aria-selected="${social.tab==='friends'}" class="${social.tab==='friends'?'on':''}">Amis</button>
+      <button data-tab="notifs" role="tab" aria-selected="${social.tab==='notifs'}" aria-label="Notifications${social.unreadNotifs?` (${social.unreadNotifs} non lue${social.unreadNotifs>1?'s':''})`:''}" class="${social.tab==='notifs'?'on':''}" style="position:relative">🔔${social.unreadNotifs?`<span class="sub-badge" aria-hidden="true">${social.unreadNotifs>9?'9+':social.unreadNotifs}</span>`:''}</button>
+      <button data-tab="me" role="tab" aria-selected="${social.tab==='me'}" class="${social.tab==='me'?'on':''}">Partage</button>
+      <button data-tab="account" role="tab" aria-selected="${social.tab==='account'}" class="${social.tab==='account'?'on':''}">Compte</button>
     </div>
     <div id="soc-tab"></div>`;
   const tosA = $('#tos-accept');
@@ -4492,18 +4492,18 @@ function renderAuth(box, mode, errMsg=''){
       <h3>${mode==='login'?'Se connecter':'Créer un compte'}</h3>
       <p class="sub">Retrouve tes amis, compare vos lectures et suis leurs coups de cœur. Ta bibliothèque privée reste sur ton appareil ; seul ce que tu choisis de partager est synchronisé.</p>
       <label for="soc-user">Pseudo</label>
-      <input id="soc-user" autocomplete="username" placeholder="ex : lucas_bd">
+      <input id="soc-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex : lucas_bd">
       ${mode==='signup'?`<label for="soc-name">Nom affiché</label><input id="soc-name" placeholder="ex : Lucas">`:''}
       <label for="soc-pass">Mot de passe</label>
       <input id="soc-pass" type="password" maxlength="256" autocomplete="${mode==='login'?'current-password':'new-password'}" placeholder="8 caractères minimum">
       ${mode==='signup'?`<label class="consent-row" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);display:flex;gap:8px;align-items:flex-start;margin-top:12px">
         <input type="checkbox" id="soc-consent" style="width:auto;margin-top:3px">
-        <span>J'accepte les <a data-legal style="color:var(--green);cursor:pointer">mentions légales et la politique de confidentialité</a>.</span></label>`:''}
-      <div class="auth-err">${esc(errMsg)}</div>
+        <span>J'accepte les <button type="button" class="linkish" data-legal>mentions légales et la politique de confidentialité</button>.</span></label>`:''}
+      <div class="auth-err" role="alert" aria-live="assertive">${esc(errMsg)}</div>
       <button class="btn primary" id="soc-submit" style="width:100%; justify-content:center">${mode==='login'?'Connexion':'Créer mon compte'}</button>
       <div class="switch">${mode==='login'
-        ? `Pas encore de compte ? <a data-auth="signup">Créer un compte</a><br><a data-auth="recover" style="font-size:12.5px">Mot de passe oublié ?</a>`
-        : `Déjà inscrit ? <a data-auth="login">Se connecter</a>`}</div>
+        ? `Pas encore de compte ? <button type="button" class="linkish" data-auth="signup">Créer un compte</button><br><button type="button" class="linkish" data-auth="recover">Mot de passe oublié&nbsp;?</button>`
+        : `Déjà inscrit ? <button type="button" class="linkish" data-auth="login">Se connecter</button>`}</div>
     </div>`;
   // affiche l'erreur SANS re-render (préserve pseudo/mot de passe/nom/consentement déjà saisis)
   const showErr = m => { const e=$('#friends-body .auth-err'); if(e) e.textContent=m; const s=$('#soc-submit'); if(s){ s.disabled=false; s.textContent = mode==='login'?'Connexion':'Créer mon compte'; } };
@@ -4541,14 +4541,14 @@ function renderRecover(box, errMsg=''){
       <h3>Récupérer mon compte</h3>
       <p class="sub">Entre ton pseudo et ton code de secours (montré à la création du compte, ou régénéré depuis les réglages), puis choisis un nouveau mot de passe. Toutes tes sessions seront déconnectées et un nouveau code te sera remis.</p>
       <label for="rec-user">Pseudo</label>
-      <input id="rec-user" autocomplete="username" placeholder="ex : lucas_bd">
+      <input id="rec-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex : lucas_bd">
       <label for="rec-code">Code de secours</label>
-      <input id="rec-code" autocomplete="one-time-code" placeholder="TOME-XXXXX-XXXXX-XXXXX-XXXXX" style="text-transform:uppercase">
+      <input id="rec-code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" inputmode="text" placeholder="TOME-XXXXX-XXXXX-XXXXX-XXXXX" style="text-transform:uppercase">
       <label for="rec-pass">Nouveau mot de passe</label>
       <input id="rec-pass" type="password" maxlength="256" autocomplete="new-password" placeholder="8 caractères minimum">
-      <div class="auth-err">${esc(errMsg)}</div>
+      <div class="auth-err" role="alert" aria-live="assertive">${esc(errMsg)}</div>
       <button class="btn primary" id="rec-submit" style="width:100%; justify-content:center">Récupérer mon compte</button>
-      <div class="switch"><a data-auth="login">← Retour à la connexion</a></div>
+      <div class="switch"><button type="button" class="linkish" data-auth="login">← Retour à la connexion</button></div>
     </div>`;
   const showErr = m => { const e=$('#friends-body .auth-err'); if(e) e.textContent=m; const s=$('#rec-submit'); if(s){ s.disabled=false; s.textContent='Récupérer mon compte'; } };
   const submit = async ()=>{
