@@ -658,6 +658,10 @@ function todayMiniCards(reading){
   const gi = goalInfo(new Date().getFullYear());
   const next = reading ? dailyNextRead() : null;
   const cards = [];
+  const unrated = unratedBooks();
+  if(unrated.length) cards.push(`<button class="today-mini" data-today-rate>
+    <span class="today-mini-icon" aria-hidden="true">★</span><span><small>Sans note</small><b>${unrated.length} lecture${unrated.length>1?'s':''}</b><em>Les noter en moins d’une minute</em></span><span class="today-arrow" aria-hidden="true">→</span>
+  </button>`);
   if(due.length) cards.push(`<button class="today-mini" data-today-study>
     <span class="today-mini-icon study" aria-hidden="true">◫</span><span><small>À réviser</small><b>${due.length} carte${due.length>1?'s':''}</b><em>Session de moins de 5 min</em></span><span class="today-arrow" aria-hidden="true">→</span>
   </button>`);
@@ -776,6 +780,7 @@ $('#today-body').addEventListener('click', async e=>{
   }
   const finish=e.target.closest('[data-today-finish]'); if(finish){ const b=state.books.find(x=>x.id===finish.dataset.todayFinish); if(b){ markRead(b); save(); render(); } return; }
   const start=e.target.closest('[data-today-start]'); if(start){ const b=state.books.find(x=>x.id===start.dataset.todayStart); if(b){ b.status='reading'; if(b.currentPage==null)b.currentPage=0; save(); render(); toast('Bonne lecture 📖'); } return; }
+  if(e.target.closest('[data-today-rate]')){ openQuickRate(); return; }
   if(e.target.closest('[data-today-study]')){ startStudyReview(); return; }
   if(e.target.closest('[data-today-loans]')){ openTodayShelf('loan'); return; }
   if(e.target.closest('[data-today-goal]')){ await setGoal(new Date().getFullYear()); return; }
@@ -3346,6 +3351,83 @@ $('#btn-restore').addEventListener('click', async ()=>{
   }catch(_){ toast('Sauvegarde illisible'); }
 });
 
+/* =============== Notation rapide ===============
+   Une bibliothèque remplie rétrospectivement arrive souvent SANS notes (constaté chez le premier
+   utilisateur réel : 41 livres lus, 0 note) — or les notes nourrissent les stats, le récap, le fil
+   et les recommandations. On enchaîne donc les lectures non notées, une carte à la fois. */
+function unratedBooks(){
+  return state.books.filter(b => !b.rating && (b.status==='read' || (b.readings||[]).length))
+                    .sort((a,b)=> (lastReadDate(b)||'').localeCompare(lastReadDate(a)||''));  // les plus récentes d'abord
+}
+function lastReadDate(b){ return (b.readings||[]).map(r=>r.date).filter(Boolean).sort().pop() || ''; }
+let _qrQueue = [], _qrDone = 0, _qrTotal = 0;
+function openQuickRate(){
+  _qrQueue = unratedBooks(); _qrDone = 0; _qrTotal = _qrQueue.length;
+  if(!_qrTotal){ toast('Tout est déjà noté ✓'); return; }
+  renderQuickRate(); openOverlay('#ov-rate');
+}
+function renderQuickRate(){
+  const el = $('#rate-body'); if(!el) return;
+  const b = _qrQueue[0];
+  if(!b){                                            // file épuisée
+    const reste = unratedBooks().length;
+    el.innerHTML = `<div class="qr-done"><div class="big">✨</div>
+      <h4>${_qrDone ? `${_qrDone} lecture${_qrDone>1?'s':''} notée${_qrDone>1?'s':''}` : 'C\'est tout pour l\'instant'}</h4>
+      <p>${_qrDone ? 'Tes stats, ton récap et ton fil viennent de gagner en relief.' : 'Reviens quand tu auras terminé un livre.'}${reste?` Il reste ${reste} titre${reste>1?'s':''} à noter plus tard.`:''}</p>
+      <div class="qr-actions"><button class="btn primary" data-close>Terminer</button></div></div>`;
+    return;
+  }
+  const when = lastReadDate(b);
+  el.innerHTML = `
+    <div class="qr-prog"><div class="qr-bar"><i style="width:${Math.round(_qrDone/_qrTotal*100)}%"></i></div>
+      <span class="qr-count">${_qrDone} / ${_qrTotal}</span></div>
+    <div class="qr-card">
+      <div class="qr-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="" referrerpolicy="no-referrer"><div class="qr-ph">${esc(b.title)}</div>` : `<div class="qr-ph">${esc(b.title)}</div>`}</div>
+      <div class="qr-title">${esc(fullTitle(b))}</div>
+      <div class="qr-author">${esc(authorsStr(b))}</div>
+      ${when ? `<div class="qr-when">lu le ${fmtDate(when)}</div>` : ''}
+      <div class="star-input qr-stars" id="qr-stars" tabindex="0" role="slider" aria-label="Ma note"
+           aria-valuemin="0" aria-valuemax="5" aria-valuenow="0" aria-valuetext="non noté">${starInputHTML(0)}</div>
+      <div class="qr-hint">Touche la moitié gauche d'une étoile pour une demi-note</div>
+      <div class="qr-actions">
+        <button class="btn" id="qr-skip">Passer</button>
+        <button class="btn" id="qr-open">Ouvrir la fiche</button>
+        <button class="btn" data-close>Fermer</button>
+      </div>
+    </div>`;
+}
+function qrAdvance(){ _qrQueue.shift(); renderQuickRate(); }
+$('#rate-body').addEventListener('click', e=>{
+  const b = _qrQueue[0];
+  const st = e.target.closest('#qr-stars .st');
+  if(st && b){
+    b.rating = halfFromClick(st, e.clientX) ? +st.dataset.n-0.5 : +st.dataset.n;
+    // la note de l'unique lecture suit, pour que le journal reste cohérent avec la fiche
+    const rs = b.readings||[]; if(rs.length===1 && rs[0].rating==null) rs[0].rating = b.rating;
+    save(); _qrDone++;
+    $('#qr-stars').innerHTML = starInputHTML(b.rating);          // feedback avant d'enchaîner
+    $('#rate-body').querySelector('.qr-hint').textContent = `${starsTxt(b.rating)} — enregistré ✓`;
+    setTimeout(()=>{ qrAdvance(); scheduleRender(); }, 420);
+    return;
+  }
+  if(e.target.closest('#qr-skip')){ qrAdvance(); return; }
+  if(e.target.closest('#qr-open') && b){ closeOverlays(); openDetail(b.id); return; }
+});
+// clavier : ← → pour choisir, Entrée pour valider et enchaîner
+$('#rate-body').addEventListener('keydown', e=>{
+  const host = e.target.closest && e.target.closest('#qr-stars'); if(!host) return;
+  const b = _qrQueue[0]; if(!b) return;
+  let v = +host.getAttribute('aria-valuenow') || 0;
+  if(e.key==='ArrowRight'){ e.preventDefault(); v = Math.min(5, v+0.5); }
+  else if(e.key==='ArrowLeft'){ e.preventDefault(); v = Math.max(0, v-0.5); }
+  else if(e.key==='Enter' && v){ e.preventDefault(); b.rating = v;
+    const rs=b.readings||[]; if(rs.length===1 && rs[0].rating==null) rs[0].rating=v;
+    save(); _qrDone++; qrAdvance(); scheduleRender(); return; }
+  else return;
+  host.setAttribute('aria-valuenow', v); host.setAttribute('aria-valuetext', v?v+' étoiles':'non noté');
+  host.innerHTML = starInputHTML(v);
+});
+
 /* =============== Carte de partage =============== */
 function wrapText(ctx, text, x, y, maxW, lineH, maxLines){
   // pré-découpe les « mots » plus larges que maxW (URL collée, texte sans espaces…)
@@ -4792,6 +4874,21 @@ if(location.search.includes('selftest')){
   assert('today : progression bornée au nombre de pages', _progressBook.currentPage===120 && _progressBook.progressLog[1].page===120);
   updateBookProgress(_progressBook,-4,'2026-08-23');
   assert('today : progression jamais négative', _progressBook.currentPage===0);
+  // v12 : notation rapide — sélection des lectures à noter
+  const _sav = state.books;
+  state.books = [
+    {id:'a', title:'Lu sans note', status:'read', rating:null, readings:[{id:'r1', date:'2026-01-05', rating:null}]},
+    {id:'b', title:'Lu et noté', status:'read', rating:4, readings:[{id:'r2', date:'2026-03-01', rating:4}]},
+    {id:'c', title:'À lire', status:'wishlist', rating:null, readings:[]},
+    {id:'d', title:'Relu sans note', status:'reading', rating:null, readings:[{id:'r3', date:'2026-06-10', rating:null}]},
+  ];
+  const _u = unratedBooks();
+  assert('notation rapide : ne retient que les lectures sans note', _u.length===2 && _u.every(b=>!b.rating));
+  assert('notation rapide : ignore la pile « à lire » vierge', !_u.some(b=>b.id==='c'));
+  assert('notation rapide : inclut un livre en cours déjà lu une fois', _u.some(b=>b.id==='d'));
+  assert('notation rapide : les lectures les plus récentes en premier', _u[0].id==='d');
+  state.books = _sav;
+
   console.log(`Tome selftest — ${pass} ✓ / ${fail} ✗`);
   toast(`Selftest : ${pass} ✓ / ${fail} ✗`);
 }
