@@ -633,6 +633,11 @@ function applyTheme(t){
   $('#btn-theme').innerHTML = ic('contrast',18);
 }
 applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+// tant que l'utilisateur n'a pas choisi lui-même, le thème suit le réglage du système en direct
+// (passage auto clair/sombre au coucher du soleil sur mobile) ; son premier clic fige son choix
+matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', e=>{
+  if(!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? 'light' : 'dark');
+});
 $('#btn-theme').addEventListener('click', ()=>{
   const t = document.documentElement.dataset.theme==='light' ? 'dark' : 'light';
   try{ localStorage.setItem(THEME_KEY, t); }catch(_){}
@@ -2323,6 +2328,9 @@ $('#study-body').addEventListener('keydown',e=>{
 
 /* =============== Fiche détail =============== */
 function openDetail(id, opts={}){
+  // la fiche se reconstruit en innerHTML à chaque action (note, statut, ♥…) : sans ça, le
+  // focus clavier retombe sur <body> et il faut re-tabuler depuis le haut de la modale
+  const _prevFocus = (document.activeElement && document.activeElement.closest && document.activeElement.closest('#ov-detail')) ? document.activeElement.id : '';
   ui.detailId = id;
   const b = state.books.find(x=>x.id===id); if(!b) return;
   $('#detail-head').textContent = TYPE_LABEL[b.type] || 'Détail';
@@ -2463,6 +2471,8 @@ function openDetail(id, opts={}){
       </div>
     </div>`;
   openOverlay('#ov-detail');
+  // restaure le focus sur le contrôle qui vient d'être utilisé (même id après reconstruction)
+  if(_prevFocus){ const el = document.getElementById(_prevFocus); if(el) try{ el.focus(); }catch(_){ } }
   loadDetailFriends(b);
 }
 // « Chez tes amis » : lectures croisées sur la fiche — silencieux si déconnecté,
@@ -3883,10 +3893,19 @@ window.addEventListener('popstate', e=>{
   }
 });
 function openOverlay(sel){
-  ui.lastFocus = document.activeElement;
-  closeOverlays(false);
-  pushOverlayHistory();
-  const root=$(sel); root.classList.add('open'); syncModalIsolation();
+  const root=$(sel);
+  // Re-rendu de la modale déjà ouverte (noter, ♥, statut…) : ne pas toucher l'historique.
+  // L'ancien pop+push déclenchait un popstate asynchrone → applyHashView → closeOverlays :
+  // la fiche se refermait toute seule ~50 ms après chaque action.
+  const reRendu = root.classList.contains('open');
+  if(reRendu){
+    $$('.overlay.open').forEach(o=>{ if(o!==root) o.classList.remove('open'); });
+  }else{
+    ui.lastFocus = document.activeElement;
+    closeOverlays(false);
+    pushOverlayHistory();
+  }
+  root.classList.add('open'); syncModalIsolation();
   queueMicrotask(()=>{ if(!root.contains(document.activeElement)){ const first=modalFocusables(root)[0]; if(first) first.focus(); } });
 }
 function closeOverlays(restore=true){
