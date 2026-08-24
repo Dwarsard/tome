@@ -101,8 +101,8 @@
     <div class="header-actions">
       <span id="offline-badge" hidden>⚡ Hors ligne</span>
       <button class="btn icon" id="btn-streak" hidden>🔥<span id="streak-n"></span></button>
-      <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden>▶</button>
-      <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème">◐</button>
+      <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
+      <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg></button>
       <button class="btn primary" id="btn-open-search" aria-label="Ajouter un livre"><span aria-hidden="true">＋</span> <span class="lbl-txt">Ajouter</span></button>
     </div>
   </div>
@@ -133,7 +133,7 @@
         <button class="chip" data-status="wishlist" aria-pressed="false">À lire</button>
         <button class="chip" data-status="abandoned" aria-pressed="false">Abandonnés</button>
         <button class="chip" data-status="fav" aria-pressed="false">♥ Favoris</button>
-        <button class="chip" data-status="loan" aria-pressed="false">📤 Prêtés</button>
+        <button class="chip" data-status="loan" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:13px;height:13px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg> Prêtés</button>
       </div>
       <div class="chips" id="type-chips">
         <button class="chip t-livre" data-type="livre" aria-pressed="false">Livres</button>
@@ -151,10 +151,10 @@
         <option value="author">Auteur A→Z</option>
         <option value="year">Année de parution</option>
       </select>
-      <button class="btn small" id="btn-pick-next" hidden title="Choisir une prochaine lecture dans ma pile" aria-label="Choisir ma prochaine lecture">🎲 <span class="pick-label">Prochaine lecture</span></button>
+      <button class="btn small" id="btn-pick-next" hidden title="Choisir une prochaine lecture dans ma pile" aria-label="Choisir ma prochaine lecture"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h4v4"/><path d="M4 19 20 4"/><path d="M16 20h4v-4"/><path d="m14.5 14.5 5.5 5.5"/><path d="M4 5l4.5 4.5"/></svg> <span class="pick-label">Prochaine lecture</span></button>
       <button class="btn small" id="lib-savefilter" title="Enregistrer les filtres actuels comme collection">＋ Filtre</button>
-      <button class="btn small" id="lib-select" title="Sélectionner plusieurs titres">☑ Sélection</button>
-      <button class="btn small" id="lib-more" aria-expanded="false" title="Afficher tous les filtres et options">⚙ Filtres</button>
+      <button class="btn small" id="lib-select" title="Sélectionner plusieurs titres"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L15.5 10"/></svg> Sélection</button>
+      <button class="btn small" id="lib-more" aria-expanded="false" title="Afficher tous les filtres et options"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/></svg> Filtres</button>
     </div>
     <div class="chips smart-chips" id="smart-chips"></div>
     <div class="loan-alert" id="loan-alert" role="status" hidden></div>
@@ -226,12 +226,12 @@
       </p>
       <p style="font-size:12.5px; color:var(--faint); margin-bottom:12px" id="export-info"></p>
       <div class="data-actions">
-        <button class="btn" id="btn-export">⬇ Sauvegarde complète (JSON)</button>
-        <button class="btn" id="btn-export-csv">⬇ Mes livres (CSV)</button>
-        <button class="btn" id="btn-import">⬆ Importer (JSON)</button>
-        <button class="btn" id="btn-import-csv">⬆ Importer un CSV (Tome / Goodreads / StoryGraph)</button>
-        <button class="btn" id="btn-restore" hidden>♻ Restaurer une sauvegarde</button>
-        <button class="btn" id="btn-install" type="button" hidden>📲 Installer Tome</button>
+        <button class="btn" id="btn-export"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/></svg> Sauvegarde complète (JSON)</button>
+        <button class="btn" id="btn-export-csv"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/></svg> Mes livres (CSV)</button>
+        <button class="btn" id="btn-import"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V9M7.5 13.5 12 9l4.5 4.5"/><path d="M4 5h16"/></svg> Importer (JSON)</button>
+        <button class="btn" id="btn-import-csv"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V9M7.5 13.5 12 9l4.5 4.5"/><path d="M4 5h16"/></svg> Importer un CSV (Tome / Goodreads / StoryGraph)</button>
+        <button class="btn" id="btn-restore" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a8 8 0 1 1 .7 5"/><path d="M4 5v5h5"/></svg> Restaurer une sauvegarde</button>
+        <button class="btn" id="btn-install" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/></svg> Installer Tome</button>
         <input type="file" id="import-file" accept=".json" hidden aria-label="Fichier d'import JSON">
         <input type="file" id="import-csv-file" accept=".csv,text/csv" hidden aria-label="Fichier CSV">
       </div>

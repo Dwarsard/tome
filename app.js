@@ -48,6 +48,13 @@ const ICONS = {
   doc:'<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h4"/>',
   heart:'<path d="M12 20s-7-4.4-7-9.2A4 4 0 0 1 12 8a4 4 0 0 1 7 2.8C19 15.6 12 20 12 20z"/>',
   mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/>',
+  play:'<path d="M8 5.5v13l10.5-6.5z"/>',
+  contrast:'<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/>',
+  lend:'<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>',
+  shuffle:'<path d="M16 4h4v4"/><path d="M4 19 20 4"/><path d="M16 20h4v-4"/><path d="m14.5 14.5 5.5 5.5"/><path d="M4 5l4.5 4.5"/>',
+  filters:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
+  calendar:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 11h16"/>',
+  print:'<path d="M7 8V4h10v4"/><rect x="4" y="8" width="16" height="8" rx="1.5"/><path d="M7 13h10v7H7z"/>',
 };
 /* size en px ; le trait s'affine sur les grandes tailles pour rester léger */
 function ic(nom, size=18, extra=''){
@@ -623,7 +630,7 @@ async function setGoal(year){
 function applyTheme(t){
   document.documentElement.dataset.theme = t;
   $('#meta-theme').setAttribute('content', t==='light' ? '#f4f1e8' : '#12161a');
-  $('#btn-theme').textContent = t==='light' ? '◑' : '◐';
+  $('#btn-theme').innerHTML = ic('contrast',18);
 }
 applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
 $('#btn-theme').addEventListener('click', ()=>{
@@ -1101,7 +1108,7 @@ function renderLibrary(){
   // barre compacte : un tag choisi reste visible, et la pastille compte les filtres actifs repliables
   tagSel.classList.toggle('has-value', !!ui.tag);
   const nbActifs = (['abandoned','fav','loan'].includes(ui.status)?1:0) + ui.types.size + (ui.tag?1:0) + (ui.groupSeries?0:1);
-  $('#lib-more').textContent = nbActifs ? `⚙ Filtres · ${nbActifs}` : '⚙ Filtres';
+  $('#lib-more').innerHTML = ic('filters',14) + (nbActifs ? ` Filtres · ${nbActifs}` : ' Filtres');
   const arr = filteredBooks();
   const grid = $('#lib-grid'), emptyBox = $('#lib-empty');
   renderDemoBanner();
@@ -1186,7 +1193,7 @@ function renderLoanAlert(){
   if(overdue) parts.push(`${overdue} prêt${overdue>1?'s':''} en retard`);
   if(soon) parts.push(`${soon} retour${soon>1?'s':''} à prévoir`);
   box.hidden=false;
-  box.innerHTML=`<span>📤 <b>${parts.join(' · ')}</b></span><button class="btn small" id="loan-alert-open">Voir les prêts</button>`;
+  box.innerHTML=`<span>${ic('lend',15)} <b>${parts.join(' · ')}</b></span><button class="btn small" id="loan-alert-open">Voir les prêts</button>`;
   $('#loan-alert-open').onclick=()=>$('#status-chips [data-status="loan"]').click();
 }
 function resetFilters(){
@@ -1258,7 +1265,7 @@ async function chooseNextRead(){
     const pick=pickNextRead(seen); if(!pick) return;
     const b=pick.b;
     const action=await openDialog({
-      title:`🎲 ${fullTitle(b)}`,
+      title:`${fullTitle(b)}`,
       message:`${authorsStr(b)||TYPE_LABEL[b.type]}\n\nPourquoi ce choix : ${pick.why}.`,
       actions:[
         ...(total-seen.size>1 ? [{label:'Une autre', value:'again'}] : []),
@@ -1414,7 +1421,7 @@ function renderDiscover(){
 function bookCardHTML(b){
   const pct = b.status==='reading' ? progressPct(b) : null;
   let ribbon = '';
-  if(b.loan){ const due=loanDueInfo(b.loan); ribbon = `<span class="ribbon loan${due&&due.days<0?' overdue':''}">📤 ${due&&due.days<0?'retour en retard':'prêté'}</span>`; }
+  if(b.loan){ const due=loanDueInfo(b.loan); ribbon = `<span class="ribbon loan${due&&due.days<0?' overdue':''}">${ic('lend',11)} ${due&&due.days<0?'retour en retard':'prêté'}</span>`; }
   else if(b.status==='reading') ribbon = `<span class="ribbon reading">${pct!==null ? pct+' %' : 'En cours'}${pct!==null?`<i class="rp" style="width:${pct}%"></i>`:''}</span>`;
   else if(b.status!=='read') ribbon = `<span class="ribbon ${esc(b.status)}">${STATUS_LABEL[b.status]}</span>`;
   const sel = ui.selection.has(b.id);
@@ -1433,7 +1440,7 @@ function bookCardHTML(b){
       <div class="under">
         ${b.rating ? `<span class="stars">${starsTxt(b.rating)}</span>` : ''}
         ${b.favorite ? `<span class="fav">♥</span>` : ''}
-        ${b.review ? `<span class="rv">📝</span>` : ''}
+        ${b.review ? `<span class="rv">${ic('doc',13)}</span>` : ''}
         ${(b.quotes||[]).length ? `<span class="qmark" title="${b.quotes.length} passage(s)">❝</span>` : ''}
       </div>
     </div>`;
@@ -1721,7 +1728,7 @@ function renderJournal(){
   const _hi = new Date(_past); _hi.setDate(_hi.getDate()+15);
   const ago = entries.filter(e=>e.date>=dateKey(_lo) && e.date<=dateKey(_hi));
   if(ago.length){
-    html += `<div class="month ago-month"><h3>📅 À la même période l'an dernier</h3>` + ago.slice(0,6).map(e=>{
+    html += `<div class="month ago-month"><h3>${ic('calendar',15)} À la même période l'an dernier</h3>` + ago.slice(0,6).map(e=>{
       const b = e.b, d = new Date(e.date+'T12:00:00'), shown = e.rating ?? b.rating;
       return `<div class="entry" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, lu le ${fmtDate(e.date)}">
         <div class="day"><b>${d.getDate()}</b><span>${d.toLocaleDateString('fr-FR',{weekday:'short'})}</span></div>
@@ -1748,7 +1755,7 @@ function renderJournal(){
         </div>
         <div class="emeta">
           ${nth>0 ? `<span class="reread" title="Relecture n°${nth+1}">↻</span>` : ''}
-          ${b.review ? `<span class="rv" title="Critique">📝</span>` : ''}
+          ${b.review ? `<span class="rv" title="Critique">${ic('doc',13)}</span>` : ''}
           ${b.favorite ? `<span class="fav" style="color:var(--orange)">♥</span>` : ''}
           <span class="tbadge ${esc(b.type)}">${TYPE_LABEL[b.type]}</span>
           <span class="stars">${starsTxt(shown)}</span>
@@ -2110,9 +2117,9 @@ function renderStudyEditor(b, focus=''){
       <div class="study-stats"><div class="study-stat"><b>${c.cards}</b><span>cartes</span></div><div class="study-stat"><b>${c.due}</b><span>à revoir</span></div><div class="study-stat"><b>${c.mastery}%</b><span>maîtrise</span></div></div>
     </div>
     <div class="study-actions">
-      <button class="btn primary" data-study-review="${c.due?'due':'all'}">${c.due?`▶ Réviser ${c.due} carte${c.due>1?'s':''}`:'▶ S’entraîner'}</button>
-      <button class="btn" data-study-export="md">⬇ Markdown</button>
-      <button class="btn" data-study-export="print">🖨 Imprimer / PDF</button>
+      <button class="btn primary" data-study-review="${c.due?'due':'all'}">${ic('play',13)} ${c.due?`Réviser ${c.due} carte${c.due>1?'s':''}`:'S’entraîner'}</button>
+      <button class="btn" data-study-export="md">${ic('download',14)} Markdown</button>
+      <button class="btn" data-study-export="print">${ic('print',14)} Imprimer / PDF</button>
       <button class="btn" data-study-back>← Revenir au livre</button>
     </div>
     <details class="study-section" open><summary>🎯 Intention et résumé</summary><div class="study-inside">
@@ -2331,7 +2338,7 @@ function openDetail(id, opts={}){
       <div class="dmeta">${esc(meta)}${meta && tagsHtml ? ' · ' : ''}${tagsHtml}</div>
       ${b.synopsis
         ? `<div class="syn collapsed" id="d-syn">${esc(b.synopsis)}</div>${b.synopsis.length>180 ? '<button class="syn-more" id="d-syn-more">voir plus</button>' : ''}`
-        : `<button class="syn-more" id="d-syn-fetch">🔎 Chercher le synopsis</button>`}
+        : `<button class="syn-more" id="d-syn-fetch">${ic('search',13)} Chercher le synopsis</button>`}
 
       <div class="buy-row">
         <a class="btn buy amz" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow sponsored" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter</a>
@@ -2408,15 +2415,15 @@ function openDetail(id, opts={}){
         <label>Prêt</label>
         <div class="loan-row" id="d-loan">
           ${b.loan
-            ? `<span class="lnw">📤 Prêté à ${esc(b.loan.to)}</span><span style="color:var(--faint)">depuis le ${fmtDate(b.loan.since)}</span>${loanDue?`<span class="loan-due ${loanDue.level}">${esc(loanDue.text)}</span>`:'<span class="loan-due">sans date de retour</span>'}<button class="btn small" id="d-loan-date">📅 Date</button><button class="btn small" id="d-loan-back">Rendu ✓</button>`
-            : `<button class="btn small" id="d-loan-out">📤 Prêter à…</button>`}
+            ? `<span class="lnw">📤 Prêté à ${esc(b.loan.to)}</span><span style="color:var(--faint)">depuis le ${fmtDate(b.loan.since)}</span>${loanDue?`<span class="loan-due ${loanDue.level}">${esc(loanDue.text)}</span>`:'<span class="loan-due">sans date de retour</span>'}<button class="btn small" id="d-loan-date">${ic('calendar',13)} Date</button><button class="btn small" id="d-loan-back">Rendu ✓</button>`
+            : `<button class="btn small" id="d-loan-out">${ic('lend',13)} Prêter à…</button>`}
         </div>
       </div>
 
       <div class="dblock">
         <label>Lectures${readings.length>1 ? ` (${readings.length})` : ''}</label>
         <div class="readings">${readings.map(r =>
-          `<div class="reading-row">📅 ${fmtDate(r.date)}
+          `<div class="reading-row">${ic('calendar',13)} ${fmtDate(r.date)}
             <span class="rstars" data-rid="${esc(r.id)}" title="Note de cette lecture">${starInputHTML(r.rating, 'rst')}</span>
             <button class="del" data-rid="${esc(r.id)}" title="Supprimer cette date" aria-label="Supprimer cette date">✕</button>
           </div>`).join('') || '<span style="font-size:13px;color:var(--faint)">Aucune date enregistrée</span>'}</div>
@@ -2439,7 +2446,7 @@ function openDetail(id, opts={}){
 
       <div class="detail-footer">
         <button class="btn small" id="d-edit">✎ Modifier</button>
-        <button class="btn small" id="d-card" title="Générer une image à partager">🖼 Carte</button>
+        <button class="btn small" id="d-card" title="Générer une image à partager">${ic('image',13)} Carte</button>
         ${hasNext ? `<button class="btn small" id="d-next-tome">＋ Tome ${b.volume+1}</button>` : ''}
         <span class="spacer"></span>
         <button class="btn small danger" id="d-delete">Supprimer</button>
@@ -2724,7 +2731,7 @@ function openList(id){
   $('#list-body').innerHTML = `
     <div style="display:flex; gap:10px; margin-bottom:4px; flex-wrap:wrap">
       <button class="btn small" id="l-rename">✎ Renommer</button>
-      <button class="btn small" id="l-desc">📝 Décrire</button>
+      <button class="btn small" id="l-desc">${ic('doc',13)} Décrire</button>
       <span style="flex:1"></span>
       <button class="btn small danger" id="l-delete">Supprimer la liste</button>
     </div>
@@ -4449,10 +4456,10 @@ async function renderAccount(){
     <div id="acc-blocks"><p class="friends-empty" style="padding:8px 0">Chargement…</p></div>
     <h4>Mes données</h4>
     <div class="data-actions">
-      <button class="btn" id="acc-export">⬇ Exporter mes données (JSON)</button>
+      <button class="btn" id="acc-export">${ic('download',15)} Exporter mes données (JSON)</button>
       <button class="btn" id="acc-logoutall">Se déconnecter partout</button>
-      <button class="btn" id="acc-legal">📄 Mentions légales</button>
-      <button class="btn" id="acc-pledge">💚 Toujours gratuit</button>
+      <button class="btn" id="acc-legal">${ic('doc',15)} Mentions légales</button>
+      <button class="btn" id="acc-pledge">${ic('heart',15)} Toujours gratuit</button>
     </div>
     <h4 style="color:var(--red)">Zone danger</h4>
     <div class="danger-zone">
