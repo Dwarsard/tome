@@ -1,14 +1,34 @@
 /* Service worker de Tome — cache l'app pour l'usage hors ligne.
    Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
    qui affiche le bandeau « Nouvelle version — Recharger ». */
-const CACHE = 'tome-v2';
+const CACHE = 'tome-v10';
 const CACHE_PREFIX = 'tome-';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+// Caches d'AVANT l'éclatement du single-file (index.html contenait tout le CSS/JS).
+const PRE_SPLIT = /^tome-v[1-8]$/;
+const ASSETS = [
+  './',
+  './index.html',
+  './app.css',
+  './app.js',
+  './manifest.webmanifest',
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png',
+  './apple-touch-icon.png'
+];
 
 self.addEventListener('install', e => {
-  // NE PAS skipWaiting ici : le nouveau worker reste en attente jusqu'à ce que
-  // l'utilisateur clique « Recharger » (message SKIP_WAITING ci-dessous).
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+  // NE PAS skipWaiting en général : le nouveau worker attend que l'utilisateur clique
+  // « Recharger » (message SKIP_WAITING ci-dessous) — pas de rechargement surprise en pleine saisie.
+  // EXCEPTION, une seule fois : venant d'un cache d'avant l'éclatement, l'ancien worker met en
+  // cache le nouvel index.html SANS app.css/app.js (qu'il ne connaît pas) — hors ligne, la page
+  // serait alors vide. On prend donc le contrôle tout de suite pour réparer cet état incohérent.
+  e.waitUntil((async () => {
+    await (await caches.open(CACHE)).addAll(ASSETS);
+    const keys = await caches.keys();
+    if (keys.some(k => PRE_SPLIT.test(k))) await self.skipWaiting();
+  })());
 });
 self.addEventListener('message', e => {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
@@ -25,6 +45,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  // l'API (même origine en prod) ne doit JAMAIS passer par le cache : données privées et volatiles
+  if (url.pathname.startsWith('/api/')) return;
   // réseau d'abord (pour récupérer les mises à jour), cache en secours hors ligne
   e.respondWith(
     fetch(e.request)
@@ -40,4 +62,31 @@ self.addEventListener('fetch', e => {
         (e.request.mode === 'navigate' ? await caches.match('./index.html') : Response.error())
       )
   );
+});
+
+/* ---------- Notifications push ----------
+   Le message arrive chiffré ; le navigateur le déchiffre et nous donne un JSON. */
+self.addEventListener('push', e => {
+  let d = {};
+  try{ d = e.data ? e.data.json() : {}; }catch(_){ d = { body: e.data ? e.data.text() : '' }; }
+  const title = d.title || 'Tome';
+  e.waitUntil(self.registration.showNotification(title, {
+    body: d.body || 'Tu as du nouveau sur Tome',
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    tag: d.tag || 'tome',            // regroupe : pas d'empilement de notifications identiques
+    data: { url: d.url || '/#friends' },
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const cible = (e.notification.data && e.notification.data.url) || '/#friends';
+  // réutiliser un onglet déjà ouvert plutôt que d'en empiler un nouveau
+  e.waitUntil((async () => {
+    const clientsList = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
+    for(const c of clientsList){
+      if(new URL(c.url).origin === self.location.origin){ await c.focus(); if('navigate' in c) await c.navigate(cible); return; }
+    }
+    await self.clients.openWindow(cible);
+  })());
 });
