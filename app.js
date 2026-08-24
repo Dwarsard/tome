@@ -3688,7 +3688,7 @@ function wrapText(ctx, text, x, y, maxW, lineH, maxLines){
 }
 // Aperçu + partage d'une carte générée. Sur mobile, navigator.share({files}) ouvre la feuille
 // native (Instagram, WhatsApp…) — LE canal viral ; sinon repli sur le téléchargement.
-const SITE_URL = 'https://tome-social.lucas-marroig.workers.dev';
+const SITE_URL = 'https://montome.fr';
 let _cardUrl = ''; // blob-URL de l'aperçu courant, révoquée à la génération suivante
 function presentCard(cv, filename, shareText){
   cv.toBlob(blob=>{
@@ -3755,7 +3755,7 @@ function drawCard(b, coverImg){
   ctx.font = 'bold 34px system-ui, sans-serif'; ctx.fillStyle = '#2fc775';
   ctx.fillText('Tome.', W/2, H-88);
   ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#7fe0ab';
-  ctx.fillText('tome-social.lucas-marroig.workers.dev', W/2, H-52);
+  ctx.fillText('montome.fr', W/2, H-52);
   const lastR = (b.readings||[]).slice().sort((a,c)=>c.date.localeCompare(a.date))[0];
   if(lastR){
     ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#5c6b7a';
@@ -3843,7 +3843,7 @@ function drawYearCard(year, coverImg){
     ctx.fillStyle='#5c6b7a'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText(MONTHS_MINI[i], bx+bw/2, base+32);
   }
   ctx.textAlign='center'; ctx.fillStyle='#2fc775'; ctx.font='800 44px system-ui'; ctx.fillText('Tome.', W/2, H-84);
-  ctx.fillStyle='#7fe0ab'; ctx.font='26px system-ui'; ctx.fillText('tome-social.lucas-marroig.workers.dev', W/2, H-40);
+  ctx.fillStyle='#7fe0ab'; ctx.font='26px system-ui'; ctx.fillText('montome.fr', W/2, H-40);
   return cv;
 }
 function shareYearCard(year){
