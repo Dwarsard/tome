@@ -2015,9 +2015,19 @@ function openEdit(id){
   openOverlay('#ov-edit');
   setTimeout(()=>$('#f-title').focus(), 60);
 }
+function fieldError(inputSel, msg){
+  // le message vit SOUS le champ concerné (pas dans un toast à l'autre bout de l'écran),
+  // reste affiché jusqu'à la correction, et est annoncé aux lecteurs d'écran
+  const inp = $(inputSel); if(!inp) return;
+  let e = inp.parentElement.querySelector('.field-err');
+  if(!e){ e = document.createElement('div'); e.className='field-err'; e.setAttribute('role','alert'); inp.after(e); }
+  e.textContent = msg;
+  inp.classList.add('invalid'); inp.focus();
+  inp.addEventListener('input', ()=>{ e.remove(); inp.classList.remove('invalid'); }, {once:true});
+}
 $('#btn-save-edit').addEventListener('click', () => {
   const title = $('#f-title').value.trim();
-  if(!title){ toast('Le titre est obligatoire'); $('#f-title').focus(); return; }
+  if(!title){ fieldError('#f-title', 'Donne un titre à cette lecture.'); return; }
   const data = {
     title,
     authors: $('#f-authors').value.split(',').map(s=>s.trim()).filter(Boolean),
@@ -2246,16 +2256,16 @@ $('#study-body').addEventListener('click',e=>{
   if(add&&b){
     const s=touchStudy(b), kind=add.dataset.studyAdd;
     if(kind==='idea' || kind==='lesson'){
-      const input=$(kind==='idea'?'#st-idea':'#st-lesson'), text=cleanStudyText(input.value,4000); if(!text){input.focus();return;}
+      const input=$(kind==='idea'?'#st-idea':'#st-lesson'), text=cleanStudyText(input.value,4000); if(!text){fieldError(kind==='idea'?'#st-idea':'#st-lesson','Écris d’abord ton idée.');return;}
       s[kind==='idea'?'ideas':'lessons'].push({id:uid(),text});
     }else if(kind==='question'){
-      const question=cleanStudyText($('#st-question').value,4000), answer=cleanStudyText($('#st-answer').value,8000); if(!question){$('#st-question').focus();return;}
+      const question=cleanStudyText($('#st-question').value,4000), answer=cleanStudyText($('#st-answer').value,8000); if(!question){fieldError('#st-question','Pose d’abord la question.');return;}
       s.questions.push({id:uid(),question,answer});
     }else if(kind==='chapter'){
-      const title=cleanStudyText($('#st-chapter-title').value,500), notes=cleanStudyText($('#st-chapter-notes').value,12000); if(!title&&!notes){$('#st-chapter-title').focus();return;}
+      const title=cleanStudyText($('#st-chapter-title').value,500), notes=cleanStudyText($('#st-chapter-notes').value,12000); if(!title&&!notes){fieldError('#st-chapter-title','Donne un titre ou des notes au chapitre.');return;}
       s.chapters.push({id:uid(),title,notes});
     }else if(kind==='card'){
-      const front=cleanStudyText($('#st-card-front').value,4000), back=cleanStudyText($('#st-card-back').value,8000); if(!front||!back){$(front?'#st-card-back':'#st-card-front').focus();return;}
+      const front=cleanStudyText($('#st-card-front').value,4000), back=cleanStudyText($('#st-card-back').value,8000); if(!front||!back){fieldError(front?'#st-card-back':'#st-card-front', front?'Il manque la réponse (verso).':'Il manque la question (recto).');return;}
       s.cards.push({id:uid(),front,back,due:today(),interval:0,repetitions:0,lastReviewed:null});
     }
     const focus={lesson:'lessons',question:'questions',chapter:'chapters'}[kind]||'';
@@ -2499,7 +2509,10 @@ $('#detail-body').addEventListener('click', e => {
   const st = e.target.closest('#d-stars .st');
   if(st){
     const n = +st.dataset.n;
-    b.rating = halfFromClick(st, e.clientX) ? n-0.5 : n;
+    let v = halfFromClick(st, e.clientX) ? n-0.5 : n;
+    // re-taper la même étoile bascule pleine <-> demie : ajuster sans avoir à viser la moitié
+    if(b.rating===n) v = n-0.5; else if(b.rating===n-0.5) v = n;
+    b.rating = v;
     save(); openDetail(b.id); scheduleRender(); return;
   }
   const rst = e.target.closest('.rstars .rst');
@@ -2529,7 +2542,7 @@ $('#detail-body').addEventListener('click', e => {
   }
   if(e.target.closest('#d-quote-add')){
     const txt = $('#d-quote-text').value.trim();
-    if(!txt){ $('#d-quote-text').focus(); return; }
+    if(!txt){ fieldError('#d-quote-text','Colle ou écris d’abord le passage.'); return; }
     b.quotes = b.quotes||[];
     b.quotes.push({id:uid(), text:txt.slice(0,2000), page:numIn($('#d-quote-page').value, 0, 1000000)});
     save(); openDetail(b.id); scheduleRender(); toast('Passage ajouté ✓'); return;
@@ -3614,7 +3627,8 @@ $('#rate-body').addEventListener('click', e=>{
   const b = _qrQueue[0];
   const st = e.target.closest('#qr-stars .st');
   if(st && b){
-    b.rating = halfFromClick(st, e.clientX) ? +st.dataset.n-0.5 : +st.dataset.n;
+    const n = +st.dataset.n;
+    b.rating = halfFromClick(st, e.clientX) ? n-0.5 : n;
     // la note de l'unique lecture suit, pour que le journal reste cohérent avec la fiche
     const rs = b.readings||[]; if(rs.length===1 && rs[0].rating==null) rs[0].rating = b.rating;
     save(); _qrDone++;

@@ -1074,3 +1074,9 @@ body:has(.overlay.open) #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 .pp-fav-quote{margin-top:12px; font-family:var(--font-display); font-style:italic;
   font-size:var(--fs-xl); line-height:1.6; color:var(--text); max-width:52ch; border:none; padding:0}
 @media(max-width:560px){ .pp-fav{flex-direction:column; gap:16px} .pp-fav-cov{width:88px} }
+
+/* Erreur de champ : près du champ, persistante jusqu'à correction */
+.field-err{color:var(--red); font-size:var(--fs-sm); margin-top:5px; font-weight:600}
+input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px color-mix(in srgb, var(--red) 14%, transparent)}
+/* dans une grille de saisie (.study-add), l'erreur occupe sa propre ligne sans casser les colonnes */
+.study-add .field-err{grid-column:1 / -1; margin-top:0}
