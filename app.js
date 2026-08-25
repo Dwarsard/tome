@@ -813,7 +813,10 @@ function renderToday(){
   const sk=streaks(), streak=$('#today-streak');
   streak.hidden=sk.cur<1; streak.textContent=sk.cur?`🔥 ${sk.cur} jour${sk.cur>1?'s':''} d’affilée`:'';
   $('#today-body').innerHTML = `<div class="today-grid"><div>${todayFocusHTML(reading)}</div><aside class="today-side" aria-label="À ne pas oublier">${todayMiniCards(reading)}</aside></div>
+    <section class="today-card today-ideas" id="ideas-today-wrap" hidden aria-labelledby="ideas-today-title"><div class="today-section-head"><div><div class="today-kicker">Découvrir</div><h3 id="ideas-today-title">Idées du jour</h3></div></div><div id="ideas-today"></div></section>
     <section class="today-card today-social" aria-labelledby="today-social-title"><div class="today-section-head"><div><div class="today-kicker">Ton cercle de lecture</div><h3 id="today-social-title">Chez tes amis</h3></div><button data-today-friends>Voir le fil →</button></div><div id="today-social-feed"></div></section>`;
+  $('#ideas-today-wrap').addEventListener('click', onIdeaAdd);
+  renderDailyIdeas();
   renderTodaySocial();
 }
 let _todayFeedLoading=false;
@@ -1296,104 +1299,180 @@ const IDEAS_KEY = 'tome-ideas-v1';
 let _ideasLoading = false, _ideasNextTry = 0; // re-tentative throttlée si les API étaient indisponibles
 function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return Math.abs(h); }
 const bookLibKey = (title, author) => (title+'|'+(author||'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
-// Graines du jour : un auteur aimé (rotation quotidienne) + un tag partagé par ≥2 coups de cœur.
-function ideaSeeds(day){
-  const loved = state.books.filter(b=>b.rating>=4);
-  if(!loved.length) return [];
+// Graines du jour : suites de séries à jour, auteurs aimés (rotation quotidienne) et genres
+// partagés par ≥2 coups de cœur. `salt` varie le tirage (bouton « D'autres idées »).
+function ideaSeeds(day, salt=0){
+  const sel = k => hashStr(day+'|'+salt+'|'+k);
+  // « aimé » = noté ≥4, ou favori lu (les lecteurs qui ne notent pas ont aussi des goûts)
+  const loved = state.books.filter(b=>b.rating>=4 || (b.favorite && b.status==='read'));
   const out = [];
-  const authors = [...new Set(loved.flatMap(b=>b.authors||[]))].filter(Boolean).sort();
-  if(authors.length){
-    const a = authors[hashStr(day+'|a') % authors.length];
-    const ex = loved.find(b=>(b.authors||[]).includes(a));
-    out.push({ q:`inauthor:"${a}"`, fallback:a, label:`Parce que tu as aimé ${ex?fullTitle(ex):a}` });
+  // 1. La suite d'une série à jour — signal le plus fort : le dernier tome possédé est lu
+  const bySeries = new Map();
+  state.books.forEach(b=>{
+    if(!b.series || !b.volume) return;
+    const k = seriesKey(b);
+    if(!bySeries.has(k) || b.volume > bySeries.get(k).volume) bySeries.set(k, b);
+  });
+  const suites = [...bySeries.values()].filter(b=>b.status==='read');
+  if(suites.length){
+    const s2 = suites[sel('s') % suites.length];
+    out.push({ q:`intitle:"${s2.series}"`, fallback:`${s2.series} ${s2.volume+1}`, series:s2.series,
+               label:`La suite de ${s2.series}`, nextVol:s2.volume+1, take:2 });
   }
+  // 2. Deux auteurs aimés (rotation quotidienne, jamais deux fois le même)
+  const authors = [...new Set(loved.flatMap(b=>b.authors||[]))].filter(Boolean).sort();
+  const dejaA = new Set();
+  for(let i=0; i<2 && dejaA.size<authors.length; i++){
+    let a = authors[sel('a'+i) % authors.length], garde=0;
+    while(dejaA.has(a) && garde++ < authors.length) a = authors[(authors.indexOf(a)+1) % authors.length];
+    if(dejaA.has(a)) break;
+    dejaA.add(a);
+    const ex = loved.find(b=>(b.authors||[]).includes(a));
+    out.push({ q:`inauthor:"${a}"`, fallback:a, label:`Parce que tu as aimé ${ex?fullTitle(ex):a}`, take:3 });
+  }
+  // 3. Un genre partagé par au moins deux coups de cœur
   const byTag = new Map();
   loved.forEach(b=>(b.tags||[]).forEach(t=>{ if(t==='exemple') return; if(!byTag.has(t)) byTag.set(t,[]); byTag.get(t).push(b); }));
   const tags = [...byTag.keys()].filter(t=>byTag.get(t).length>=2).sort();
   if(tags.length){
-    const t = tags[hashStr(day+'|t') % tags.length];
+    const t = tags[sel('t') % tags.length];
     const pair = byTag.get(t);
-    out.push({ q:`subject:"${t}"`, fallback:t, label:`Comme ${fullTitle(pair[0])} et ${fullTitle(pair[1])}` });
+    out.push({ q:`subject:"${t}"`, fallback:t, lang:'fr', label:`Comme ${fullTitle(pair[0])} et ${fullTitle(pair[1])}`, take:3 });
   }
-  return out;
+  return out.slice(0,4);
 }
-async function fetchIdeas(){
+// « Pas pour moi » : suggestions écartées, jamais reproposées (local, plafonné à 300)
+const IDEAS_HIDDEN_KEY = 'tome-ideas-hidden-v1';
+function hiddenIdeas(){ try{ return new Set(JSON.parse(localStorage.getItem(IDEAS_HIDDEN_KEY)||'[]')); }catch(_){ return new Set(); } }
+function hideIdeaKey(k){ const l=[...hiddenIdeas()].filter(x=>x!==k); l.push(k); try{ localStorage.setItem(IDEAS_HIDDEN_KEY, JSON.stringify(l.slice(-300))); }catch(_){ } }
+async function fetchIdeas(salt=0){
   // null = pas de graines (aucun appel réseau effectué) ; [] = graines mais API muettes
-  const seeds = ideaSeeds(today()); if(!seeds.length) return null;
+  const seeds = ideaSeeds(today(), salt); if(!seeds.length) return null;
   const mine = new Set(state.books.map(b=>bookLibKey(b.title, (b.authors||[])[0])));
+  const ecartes = hiddenIdeas();
   const groups = [];
-  for(const s of seeds){
+  for(const s2 of seeds){
     let rs = [];
-    try{ rs = await searchGoogleBooks(s.q); }
-    catch(_){ try{ rs = await searchOpenLibrary(s.fallback); }catch(_2){ rs = []; } }
+    try{ rs = await searchGoogleBooks(s2.q, {lang:s2.lang}); }
+    // repli OpenLibrary sans filtre de langue : acceptable pour un auteur ou une série,
+    // mais pour un genre il ne ramène que du bruit anglophone — mieux vaut aucun groupe.
+    catch(_){ if(!s2.lang){ try{ rs = await searchOpenLibrary(s2.fallback); }catch(_2){ rs = []; } } }
+    // graine « suite » : ne proposer QUE le bon numéro de tome ET la bonne série — la requête
+    // intitle attrape aussi les homonymes (« Akira » Toriyama…)
+    if(s2.nextVol) rs = rs.filter(r=>(parseTome(r.title)||{}).volume === s2.nextVol &&
+                                     r.title.toLowerCase().includes(s2.series.toLowerCase()));
     const seen = new Set();
     const items = rs.filter(r=>{
       const k = bookLibKey(r.title, (r.authors||[])[0]);
-      if(mine.has(k) || seen.has(k) || !cleanCover(r.cover)) return false;
-      seen.add(k); mine.add(k);            // pas de doublon entre les deux groupes
+      if(mine.has(k) || seen.has(k) || ecartes.has(k) || !cleanCover(r.cover)) return false;
+      seen.add(k); mine.add(k);            // pas de doublon entre les groupes
       return true;
-    }).slice(0,3).map(r=>({ title:r.title, authors:r.authors||[], type:r.type||'livre', year:r.year||null,
+    }).slice(0, s2.take||3).map(r=>({ title:r.title, authors:r.authors||[], type:r.type||'livre', year:r.year||null,
                             pages:r.pages||null, cover:r.cover||'', description:r.description||'' }));
-    if(items.length) groups.push({ label:s.label, items });
+    if(items.length) groups.push({ label:s2.label, items });
   }
   return groups;
 }
+// Groupes du jour depuis le cache, re-filtrés bibliothèque + écartés ; null si pas prêts.
+function ideasData(){
+  let data = null;
+  try{ data = JSON.parse(localStorage.getItem(IDEAS_KEY)||'null'); }catch(_){ }
+  if(!data || data.date!==today() || !Array.isArray(data.groups)) return null;
+  const libKeys = new Set(state.books.map(b=>bookLibKey(b.title, (b.authors||[])[0])));
+  const ecartes = hiddenIdeas();
+  const groups = data.groups
+    .map(g=>({ label:g.label, items:(g.items||[]).filter(r=>{ const k=bookLibKey(r.title,(r.authors||[])[0]); return !libKeys.has(k) && !ecartes.has(k); }) }))
+    .filter(g=>g.items.length);
+  return { salt: data.salt||0, groups };
+}
+function ideasGroupsHTML(groups){
+  return groups.map((g,gi)=>`<div class="idea-group"><div class="ig-label">${esc(g.label)}</div><div class="ig-items">` +
+    g.items.map((r,i)=>{ const c = cleanCover(r.cover); return `<div class="idea-card">
+      <div class="mini">${c?`<img src="${esc(c)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
+      <div class="ii"><b>${esc(r.title)}</b><span>${esc((r.authors||[]).join(', '))}</span></div>
+      <button class="btn small" data-idea="${gi}:${i}" title="Ajouter à ma pile à lire">＋ À lire</button>
+      <button class="idea-x" data-idea-x="${gi}:${i}" title="Ne plus proposer" aria-label="Écarter ${esc(r.title)}">✕</button>
+    </div>`; }).join('') + `</div></div>`).join('');
+}
+const IDEAS_OPTIN_HTML = `<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques idées de lecture choisies d'après tes coups de cœur : les suites de tes séries, tes auteurs bien notés, tes genres favoris.
+      Pour ça, Tome enverra le nom d'un auteur, d'une série ou d'un tag que tu aimes à Google Books / Open Library (comme lors d'une recherche). Rien d'autre ne quitte ton appareil.</p>
+      <div style="display:flex;gap:8px"><button class="btn small primary" data-ideas-optin>Activer</button>
+      <button class="btn small" data-ideas-later>Pas maintenant</button></div>`;
 let _ideasAskMuted = false; // « Pas maintenant » : on reproposera à la prochaine session, pas avant
-async function renderDailyIdeas(){
+// Deux points de montage : le panneau de la Bibliothèque et la section de l'écran Aujourd'hui.
+function ideasBoxes(){
   let box = $('#daily-ideas');
-  if(!box){
+  const disc = $('#discover');
+  if(!box && disc){ // le panneau bibliothèque n'existe qu'une fois la vue Bibliothèque construite
     box = document.createElement('div'); box.id='daily-ideas'; box.className='ideas-panel'; box.hidden=true;
-    $('#discover').after(box);
+    disc.after(box);
     box.addEventListener('click', onIdeaAdd);
   }
-  if(ui.status!=='all' || ui.q || ui.tag || ui.types.size){ box.hidden=true; return; }
+  return [box, $('#ideas-today')].filter(Boolean);
+}
+function renderDailyIdeas(){
+  const boxes = ideasBoxes();
+  const peint = html => boxes.forEach(b=>{
+    const bib = b.id==='daily-ideas';
+    const wrap = bib ? null : b.closest('#ideas-today-wrap');
+    if(bib && (ui.status!=='all' || ui.q || ui.tag || ui.types.size)){ b.hidden=true; return; }
+    if(html===null){ b.hidden=true; if(wrap) wrap.hidden=true; return; }
+    b.hidden=false; if(wrap) wrap.hidden=false;
+    b.innerHTML = (bib ? `<div class="ideas-head">💡 Idées du jour <span>de nouvelles suggestions chaque jour</span></div>` : '') + html;
+  });
   // Opt-in OBLIGATOIRE : la fonctionnalité envoie des auteurs/tags aimés à des API externes —
   // rien ne part sans un accord explicite (la proposition, elle, est 100 % locale).
   if(ui.ideas!=='on'){
-    if(_ideasAskMuted || !ideaSeeds(today()).length){ box.hidden=true; return; }
-    box.hidden = false;
-    box.innerHTML = `<div class="ideas-head">💡 Idées du jour</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques livres à découvrir, choisis d'après tes coups de cœur.
-      Pour ça, Tome enverra le nom d'un auteur ou d'un tag que tu aimes à Google Books / Open Library (comme lors d'une recherche). Rien d'autre ne quitte ton appareil.</p>
-      <div style="display:flex;gap:8px"><button class="btn small primary" data-ideas-optin>Activer</button>
-      <button class="btn small" data-ideas-later>Pas maintenant</button></div>`;
+    peint(_ideasAskMuted || !ideaSeeds(today()).length ? null : IDEAS_OPTIN_HTML);
     return;
   }
-  let data = null;
-  try{ data = JSON.parse(localStorage.getItem(IDEAS_KEY)||'null'); }catch(_){}
-  if(!data || data.date!==today() || !Array.isArray(data.groups)){
+  const d = ideasData();
+  if(!d){
+    peint(null);
     if(_ideasLoading || Date.now() < _ideasNextTry) return;
     _ideasLoading = true;
-    fetchIdeas().then(groups=>{
+    fetchIdeas(0).then(groups=>{
       _ideasLoading = false;
       if(groups===null) return;                                  // pas de graines : aucun appel fait, rien à throttler
       // fournée vide (API indisponibles) : ne PAS figer la journée — on retentera dans 30 min
       if(!groups.length){ _ideasNextTry = Date.now() + 30*60*1000; return; }
-      try{ localStorage.setItem(IDEAS_KEY, JSON.stringify({date:today(), groups})); }catch(_){}
-      if(ui.view==='library') renderDailyIdeas();
+      try{ localStorage.setItem(IDEAS_KEY, JSON.stringify({date:today(), salt:0, groups})); }catch(_){}
+      if(ui.view==='library' || ui.view==='today') renderDailyIdeas();
     }).catch(()=>{ _ideasLoading = false; _ideasNextTry = Date.now() + 30*60*1000; });
-    return; // rien à montrer tant que la fournée du jour n'est pas prête
+    return;
   }
-  // filtre au RENDU contre la bibliothèque actuelle : un livre ajouté disparaît des idées
-  // (sinon le re-rendu ressusciterait son bouton « À lire » → doublons possibles)
-  const libKeys = new Set(state.books.map(b=>bookLibKey(b.title, (b.authors||[])[0])));
-  const groups = data.groups
-    .map(g=>({ label:g.label, items:(g.items||[]).filter(r=>!libKeys.has(bookLibKey(r.title, (r.authors||[])[0]))) }))
-    .filter(g=>g.items.length);
-  if(!groups.length){ box.hidden=true; return; }
-  window._ideaGroups = groups;
-  box.hidden = false;
-  box.innerHTML = `<div class="ideas-head">💡 Idées du jour <span>de nouvelles suggestions chaque jour</span></div>` +
-    groups.map((g,gi)=>`<div class="idea-group"><div class="ig-label">${esc(g.label)}</div><div class="ig-items">` +
-      g.items.map((r,i)=>{ const c = cleanCover(r.cover); return `<div class="idea-card">
-        <div class="mini">${c?`<img src="${esc(c)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
-        <div class="ii"><b>${esc(r.title)}</b><span>${esc((r.authors||[]).join(', '))}</span></div>
-        <button class="btn small" data-idea="${gi}:${i}" title="Ajouter à ma pile à lire">＋ À lire</button>
-      </div>`; }).join('') + `</div></div>`).join('');
+  if(!d.groups.length){ peint(null); return; }
+  window._ideaGroups = d.groups;
+  peint(ideasGroupsHTML(d.groups) +
+    `<div class="ideas-foot"><button class="btn small" data-ideas-more>↻ D'autres idées</button></div>`);
 }
 function onIdeaAdd(e){
   if(e.target.closest('[data-ideas-optin]')){ ui.ideas='on'; persistUI(); renderDailyIdeas(); return; }
   if(e.target.closest('[data-ideas-later]')){ _ideasAskMuted = true; renderDailyIdeas(); return; }
+  const more = e.target.closest('[data-ideas-more]');
+  if(more){                                     // nouveau tirage : autres graines, 1 fournée par clic
+    if(_ideasLoading) return;
+    more.disabled = true; more.textContent = 'Je cherche…';
+    const cur = ideasData();
+    const salt = (cur ? cur.salt : 0) + 1;
+    _ideasLoading = true;
+    fetchIdeas(salt).then(groups=>{
+      _ideasLoading = false;
+      if(groups && groups.length){
+        try{ localStorage.setItem(IDEAS_KEY, JSON.stringify({date:today(), salt, groups})); }catch(_){}
+      }else if(groups!==null){ toast('Rien de neuf trouvé pour aujourd\u2019hui'); }
+      renderDailyIdeas();
+    }).catch(()=>{ _ideasLoading = false; renderDailyIdeas(); });
+    return;
+  }
+  const x = e.target.closest('[data-idea-x]');
+  if(x){                                        // « pas pour moi » : mémorisé, jamais reproposé
+    const [gi, i] = x.dataset.ideaX.split(':').map(Number);
+    const r = ((window._ideaGroups||[])[gi]||{items:[]}).items[i]; if(!r) return;
+    hideIdeaKey(bookLibKey(r.title, (r.authors||[])[0]));
+    renderDailyIdeas();
+    return;
+  }
   const btn = e.target.closest('[data-idea]'); if(!btn || btn.disabled) return;
   const [gi, i] = btn.dataset.idea.split(':').map(Number);
   const r = ((window._ideaGroups||[])[gi]||{items:[]}).items[i]; if(!r) return;
@@ -1812,9 +1891,9 @@ function isbnOf(q){
   const n = q.replace(/[-\s]/g,'');
   return /^(?:\d{9}[\dX]|\d{13})$/i.test(n) ? n : null;
 }
-async function searchGoogleBooks(q){
+async function searchGoogleBooks(q, opts={}){
   const isbn = isbnOf(q);
-  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&maxResults=15&printType=books`;
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&maxResults=15&printType=books${opts.lang?'&langRestrict='+opts.lang:''}`;
   const data = await (await fetch(url)).json();
   if(data.error) throw new Error(data.error.message);
   return (data.items||[]).filter(it=>it.volumeInfo && it.volumeInfo.title).map(it => {
@@ -5267,6 +5346,27 @@ if(location.search.includes('selftest')){
   assert('notation rapide : inclut un livre en cours déjà lu une fois', _u.some(b=>b.id==='d'));
   assert('notation rapide : les lectures les plus récentes en premier', _u[0].id==='d');
   state.books = _sav;
+  // v13 : idées du jour — graines dérivées de la bibliothèque, écartés mémorisés
+  const _sav2 = state.books;
+  state.books = [
+    {id:'s1', title:'Saga T1', series:'Saga', volume:1, status:'read', rating:5, authors:['B. K. Vaughan'], tags:['sf','space-opera']},
+    {id:'s2', title:'Saga T2', series:'Saga', volume:2, status:'read', rating:4.5, authors:['B. K. Vaughan'], tags:['sf']},
+    {id:'s3', title:'Autre chose', status:'read', rating:4, authors:['Ursula K. Le Guin'], tags:['sf']},
+    {id:'s4', title:'Pas fini', series:'Berserk', volume:1, status:'reading', rating:null, authors:['Kentaro Miura'], tags:[]},
+  ];
+  const _seeds = ideaSeeds('2026-08-25');
+  assert('idées : propose la suite de la série à jour (T3, pas Berserk en cours)',
+         _seeds.some(x=>x.nextVol===3 && x.label.includes('Saga')) && !_seeds.some(x=>x.label.includes('Berserk')));
+  assert('idées : au moins un auteur aimé et le genre partagé sf',
+         _seeds.some(x=>x.q.startsWith('inauthor:')) && _seeds.some(x=>x.q==='subject:"sf"'));
+  assert('idées : un autre tirage change au moins une graine',
+         JSON.stringify(ideaSeeds('2026-08-25',1))!==JSON.stringify(_seeds) || _seeds.length<=1);
+  const _hidSav = localStorage.getItem(IDEAS_HIDDEN_KEY);
+  hideIdeaKey('titre-test|auteur'); hideIdeaKey('titre-test|auteur');
+  assert('idées : un écarté est mémorisé sans doublon',
+         hiddenIdeas().has('titre-test|auteur') && [...hiddenIdeas()].filter(k=>k==='titre-test|auteur').length===1);
+  if(_hidSav===null) localStorage.removeItem(IDEAS_HIDDEN_KEY); else localStorage.setItem(IDEAS_HIDDEN_KEY,_hidSav);
+  state.books = _sav2;
 
   console.log(`Tome selftest — ${pass} ✓ / ${fail} ✗`);
   toast(`Selftest : ${pass} ✓ / ${fail} ✗`);
