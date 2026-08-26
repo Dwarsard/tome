@@ -1031,8 +1031,9 @@ body.welcome-open{overflow:hidden}
 #nav button, .chip, .btn, .btn.small, .seg button, .seg-mini button{ min-height:32px }
 .btn.icon{ min-width:32px }
 @media (hover:none), (pointer:coarse){
-  #nav button, .chip, .btn, .btn.small, .seg button, .seg-mini button{ min-height:44px }
-  .btn.icon, .x, .heart{ min-width:44px; min-height:44px }
+  #nav button, .chip, .btn, .btn.small, .seg button, .seg-mini button, .bulkbar .bb-actions button{ min-height:44px }
+  .btn.icon, .x, .heart, .idea-x{ min-width:44px; min-height:44px }
+  .bulkbar .bb-actions{ gap:8px }       /* écarte « Supprimer » de « + Liste » pour éviter les mis-tap */
   #nav{ gap:6px }                       /* 2 px entre onglets = touches manquées */
   .star-input .st{ padding:4px 5px }    /* étoiles : zone de frappe élargie sans changer la taille visuelle */
 }
@@ -1103,10 +1104,11 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 .study-add .field-err{grid-column:1 / -1; margin-top:0}
 
 @media(max-width:640px){
-  /* les surcouches basses remontent au-dessus de la barre d'onglets */
-  #save-warning{bottom:calc(76px + env(safe-area-inset-bottom))}
-  #update-bar{bottom:calc(136px + env(safe-area-inset-bottom))}
-  #toast{bottom:calc(196px + env(safe-area-inset-bottom))}
+  /* les surcouches basses remontent au-dessus de la barre d'onglets ; la bannière « stockage
+     plein » passe AU-DESSUS de la bande du FAB (76→132 px) pour ne pas le rendre intouchable */
+  #save-warning{bottom:calc(144px + env(safe-area-inset-bottom))}
+  #update-bar{bottom:calc(204px + env(safe-area-inset-bottom))}
+  #toast{bottom:calc(264px + env(safe-area-inset-bottom))}
   body:has(.overlay.open) #toast{bottom:calc(80px + env(safe-area-inset-bottom))}
   .bulkbar{bottom:calc(52px + env(safe-area-inset-bottom))}
 }

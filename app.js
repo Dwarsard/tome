@@ -332,8 +332,20 @@ function cleanRating(v){
   const n = numOrNull(v);
   return (n!==null && n>=0.5 && n<=5) ? Math.round(n*2)/2 : null;
 }
+// Compat ascendante : préserve les champs INCONNUS d'un enregistrement (typiquement ajoutés par une
+// version PLUS RÉCENTE de l'app tournant sur un autre appareil) au lieu de les supprimer — sinon un
+// client en retard, en re-poussant, amputerait définitivement les données côté serveur (le serveur
+// stocke un blob opaque et accepte tout push au bon rev). Plafonné en taille : simple passe-plat.
+function carryUnknown(src, out, cap){
+  if(!src || typeof src!=='object') return out;
+  for(const k of Object.keys(src)){
+    if(k in out || k==='__proto__') continue;
+    try{ const s = JSON.stringify(src[k]); if(s && s.length<=cap) out[k] = JSON.parse(s); }catch(_){ }
+  }
+  return out;
+}
 function normalizeBook(b){
-  return {
+  const out = {
     id: ID_RE.test(String(b.id||'')) ? String(b.id) : uid(),
     title: String(b.title||'').slice(0,300),
     authors: Array.isArray(b.authors) ? b.authors.map(a=>String(a).slice(0,120)).slice(0,12) : [],
@@ -371,6 +383,7 @@ function normalizeBook(b){
     study: normalizeStudy(b.study),
     addedAt: cleanTimestamp(b.addedAt),
   };
+  return carryUnknown(b, out, 40000); // préserve les champs d'une version plus récente
 }
 function normalizeData(d){
   const out = {
@@ -450,7 +463,7 @@ function normalizeData(d){
   // purge des notes de série orphelines (plus aucun tome correspondant)
   const okSeries = new Set(out.books.map(seriesKey).filter(Boolean));
   for(const k of Object.keys(out.series)) if(!okSeries.has(k)) delete out.series[k];
-  return out;
+  return carryUnknown(d, out, 200000); // préserve les sections d'état d'une version plus récente
 }
 function load(){
   let notice = null, corrupted = false;
@@ -502,7 +515,15 @@ function save(skipCount){
   }catch(e){
     console.error('save failed', e);
     setSaveBroken(true); // bannière persistante tant que le stockage n'accepte pas d'écriture
-    toast('⚠ Sauvegarde impossible — stockage plein', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
+    // Le stockage local est plein, mais la sauvegarde SERVEUR, elle, ne dépend pas de localStorage
+    // (pushLibrary sérialise l'état en mémoire) : on la planifie quand même, sinon un utilisateur
+    // connecté perd ses deux filets d'un coup et croit à tort être sauvé « sur son compte ».
+    if(typeof scheduleLibPush==='function' && typeof social!=='undefined' && social.me){
+      scheduleLibPush();
+      toast('⚠ Stockage plein — sauvegardé sur ton compte, mais pense à exporter', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
+    }else{
+      toast('⚠ Sauvegarde impossible — stockage plein', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
+    }
     return false;
   }
 }
@@ -571,8 +592,12 @@ function halfFromClick(el, clientX){
   const rect = el.getBoundingClientRect();
   return (clientX - rect.left) < rect.width/2;
 }
+// Couvertures du catalogue (Google Books / Open Library) chargées en anonyme : coupe l'envoi des
+// cookies tiers (join du compte Google ↔ liste de lecture). Réservé au catalogue, qui supporte CORS ;
+// une couverture perso hébergée ailleurs reste sans crossorigin pour ne pas casser son affichage.
+function xorigin(u){ return SHAREABLE_COVER.test(u||'') ? ' crossorigin="anonymous"' : ''; }
 function coverHTML(b, mini=false){
-  if(b.cover) return `<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fb="${esc(b.id)}">`;
+  if(b.cover) return `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer" data-fb="${esc(b.id)}">`;
   return phHTML(b, mini);
 }
 function phHTML(b, mini=false){
@@ -843,7 +868,7 @@ function renderTodaySocial(){
   const feed=(social.todayFeed||[]).slice(0,3);
   if(!feed.length){ el.innerHTML=`<div class="today-social-empty"><p>Ton fil est encore calme. Invite un ami pour commencer à partager vos lectures.</p><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn primary" data-today-invite>${ic('link',16)} Inviter un ami</button><button class="btn" data-today-friends>Voir mes amis</button></div></div>`; return; }
   el.innerHTML=`<div class="today-feed">${feed.map(x=>`<button class="today-feed-row" data-today-friends>
-    <span class="today-feed-cover">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:'<span aria-hidden="true">📕</span>'}</span>
+    <span class="today-feed-cover">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy"${xorigin(x.cover)} referrerpolicy="no-referrer">`:'<span aria-hidden="true">📕</span>'}</span>
     <span class="today-feed-copy"><b>${social.me&&x.uid===social.me.id?'Toi':esc(x.display_name)}</b><span>a lu <strong>${esc(x.title)}</strong>${x.rating?` · <span class="stars">${starsTxt(x.rating)}</span>`:''}</span></span>
     <time>${x.read_date?esc(new Date(x.read_date+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})):''}</time>
   </button>`).join('')}</div>`;
@@ -1133,7 +1158,7 @@ function renderLibrary(){
       <div class="ob-or">ou tape parmi ces incontournables :</div>
       <div class="onboard-grid">
         ${ONBOARD_PICKS.map((p,i)=>`<button class="ob-pick" data-pick="${i}" aria-label="Ajouter ${esc(p.title)}">
-          <div class="ob-cov">${p.cover?`<img src="${esc(p.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"><div class="ob-ph">${esc(p.title)}</div>`:`<div class="ob-ph">${esc(p.title)}</div>`}</div>
+          <div class="ob-cov">${p.cover?`<img src="${esc(p.cover)}" alt="" loading="lazy"${xorigin(p.cover)} referrerpolicy="no-referrer"><div class="ob-ph">${esc(p.title)}</div>`:`<div class="ob-ph">${esc(p.title)}</div>`}</div>
           <div class="ob-t">${esc(p.title)}</div><div class="ob-check">✓ Ajouté</div>
         </button>`).join('')}
       </div>
@@ -1345,6 +1370,7 @@ function ideaSeeds(day, salt=0){
 const IDEAS_HIDDEN_KEY = 'tome-ideas-hidden-v1';
 function hiddenIdeas(){ try{ return new Set(JSON.parse(localStorage.getItem(IDEAS_HIDDEN_KEY)||'[]')); }catch(_){ return new Set(); } }
 function hideIdeaKey(k){ const l=[...hiddenIdeas()].filter(x=>x!==k); l.push(k); try{ localStorage.setItem(IDEAS_HIDDEN_KEY, JSON.stringify(l.slice(-300))); }catch(_){ } }
+function unhideIdeaKey(k){ const l=[...hiddenIdeas()].filter(x=>x!==k); try{ localStorage.setItem(IDEAS_HIDDEN_KEY, JSON.stringify(l)); }catch(_){ } }
 async function fetchIdeas(salt=0){
   // null = pas de graines (aucun appel réseau effectué) ; [] = graines mais API muettes
   const seeds = ideaSeeds(today(), salt); if(!seeds.length) return null;
@@ -1388,7 +1414,7 @@ function ideasData(){
 function ideasGroupsHTML(groups){
   return groups.map((g,gi)=>`<div class="idea-group"><div class="ig-label">${esc(g.label)}</div><div class="ig-items">` +
     g.items.map((r,i)=>{ const c = cleanCover(r.cover); return `<div class="idea-card">
-      <div class="mini">${c?`<img src="${esc(c)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
+      <div class="mini">${c?`<img src="${esc(c)}" alt="" loading="lazy"${xorigin(c)} referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
       <div class="ii"><b>${esc(r.title)}</b><span>${esc((r.authors||[]).join(', '))}</span></div>
       <button class="btn small" data-idea="${gi}:${i}" title="Ajouter à ma pile à lire">＋ À lire</button>
       <button class="idea-x" data-idea-x="${gi}:${i}" title="Ne plus proposer" aria-label="Écarter ${esc(r.title)}">✕</button>
@@ -1466,11 +1492,13 @@ function onIdeaAdd(e){
     return;
   }
   const x = e.target.closest('[data-idea-x]');
-  if(x){                                        // « pas pour moi » : mémorisé, jamais reproposé
+  if(x){                                        // « pas pour moi » : mémorisé, mais annulable
     const [gi, i] = x.dataset.ideaX.split(':').map(Number);
     const r = ((window._ideaGroups||[])[gi]||{items:[]}).items[i]; if(!r) return;
-    hideIdeaKey(bookLibKey(r.title, (r.authors||[])[0]));
+    const k = bookLibKey(r.title, (r.authors||[])[0]);
+    hideIdeaKey(k);
     renderDailyIdeas();
+    toast(`« ${r.title} » ne sera plus proposé`, { label:'Annuler', onAction:()=>{ unhideIdeaKey(k); renderDailyIdeas(); } });
     return;
   }
   const btn = e.target.closest('[data-idea]'); if(!btn || btn.disabled) return;
@@ -1949,7 +1977,7 @@ async function doSearch(q){
   }
   window._searchItems = items;
   box.innerHTML = items.map((r,i) => { const c = cleanCover(r.cover); return `<div class="sr">
-      <div class="mini">${c ? `<img src="${esc(c)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<div class="ph-mini">📕</div>`}</div>
+      <div class="mini">${c ? `<img src="${esc(c)}" alt="" loading="lazy"${xorigin(c)} referrerpolicy="no-referrer">` : `<div class="ph-mini">📕</div>`}</div>
       <div class="sri">
         <b>${esc(r.title)}</b>
         <span>${esc(r.authors.join(', '))}</span>
@@ -1990,9 +2018,9 @@ $('#search-results').addEventListener('click', e => {
   save(); scheduleRender();
   const row = btn.closest('.sr');
   if(row){ row.classList.add('added'); btn.textContent = 'Ajouté ✓'; btn.disabled = true; }
-  toast('Ajouté ✓', {label:'✎ Modifier', onAction:()=>{ closeOverlays(); openEdit(b.id); }});
+  toast('Ajouté ✓', {label:'✎ Modifier', onAction:()=>{ openEdit(b.id); }}); // openOverlay ferme la recherche
 });
-$('#btn-manual').addEventListener('click', ()=>{ ui.searchFromResult = null; closeOverlays(); openEdit(null); });
+$('#btn-manual').addEventListener('click', ()=>{ ui.searchFromResult = null; openEdit(null); });
 $('#search-status').addEventListener('click', e => {
   const b = e.target.closest('button[data-s]'); if(!b) return;
   ui.defaultStatus = b.dataset.s;
@@ -2408,8 +2436,19 @@ $('#study-body').addEventListener('keydown',e=>{
 /* =============== Fiche détail =============== */
 function openDetail(id, opts={}){
   // la fiche se reconstruit en innerHTML à chaque action (note, statut, ♥…) : sans ça, le
-  // focus clavier retombe sur <body> et il faut re-tabuler depuis le haut de la modale
-  const _prevFocus = (document.activeElement && document.activeElement.closest && document.activeElement.closest('#ov-detail')) ? document.activeElement.id : '';
+  // focus clavier retombe sur <body> et il faut re-tabuler depuis le haut de la modale.
+  // On mémorise le contrôle réutilisé par id, ou à défaut par son attribut data-* (statut,
+  // rythme… qui n'ont pas d'id), et la position de défilement pour éviter le saut en haut.
+  const _ae = document.activeElement;
+  let _prevFocus = '';
+  if(_ae && _ae.closest && _ae.closest('#ov-detail')){
+    if(_ae.id) _prevFocus = '#' + CSS.escape(_ae.id);
+    else for(const a of ['data-s','data-pace','data-mood']){
+      const v = _ae.getAttribute && _ae.getAttribute(a);
+      if(v!=null){ _prevFocus = `[${a}="${CSS.escape(v)}"]`; break; }
+    }
+  }
+  const _prevScroll = (($('#ov-detail')||{}).scrollTop) || 0;
   ui.detailId = id;
   const b = state.books.find(x=>x.id===id); if(!b) return;
   $('#detail-head').textContent = TYPE_LABEL[b.type] || 'Détail';
@@ -2438,9 +2477,9 @@ function openDetail(id, opts={}){
         : `<button class="syn-more" id="d-syn-fetch">${ic('search',13)} Chercher le synopsis</button>`}
 
       <div class="buy-row">
-        <a class="btn buy amz" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow sponsored" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter</a>
-        <a class="btn buy" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow sponsored" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle</a>
-        <span class="buy-note" tabindex="0" title="En tant que Partenaire Amazon, ce site perçoit une commission sur les achats remplissant les conditions requises. Aucun surcoût pour toi.">Partenaire Amazon</span>
+        <a class="btn buy amz" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter</a>
+        <a class="btn buy" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle</a>
+        ${AMAZON_TAG ? `<span class="buy-note" tabindex="0" title="En tant que Partenaire Amazon, ce site perçoit une commission sur les achats remplissant les conditions requises. Aucun surcoût pour toi.">Partenaire Amazon</span>` : ''}
       </div>
 
       <div class="seg" id="d-status" role="group" aria-label="Statut">
@@ -2550,8 +2589,9 @@ function openDetail(id, opts={}){
       </div>
     </div>`;
   openOverlay('#ov-detail');
-  // restaure le focus sur le contrôle qui vient d'être utilisé (même id après reconstruction)
-  if(_prevFocus){ const el = document.getElementById(_prevFocus); if(el) try{ el.focus(); }catch(_){ } }
+  // restaure la position de défilement puis le focus sur le contrôle qui vient d'être utilisé
+  const _ovd = $('#ov-detail'); if(_ovd) _ovd.scrollTop = _prevScroll;
+  if(_prevFocus){ const el = _ovd && _ovd.querySelector(_prevFocus); if(el) try{ el.focus({preventScroll:true}); }catch(_){ } }
   loadDetailFriends(b);
 }
 // « Chez tes amis » : lectures croisées sur la fiche — silencieux si déconnecté,
@@ -2694,7 +2734,7 @@ $('#detail-body').addEventListener('click', e => {
     return;
   }
   const os = e.target.closest('[data-open-series]');
-  if(os){ closeOverlays(); openSeries(os.dataset.openSeries); return; }
+  if(os){ openSeries(os.dataset.openSeries); return; }
   const sm = e.target.closest('#d-syn-more');
   if(sm){
     const s = $('#d-syn');
@@ -2718,7 +2758,7 @@ $('#detail-body').addEventListener('click', e => {
   if(e.target.closest('#d-card')){ shareCard(b); return; }
   if(e.target.closest('#d-study')){ openStudy(b.id); return; }
   if(e.target.closest('#d-next-tome')){ addNextTome(b.series, {openDetailAfter:true}); return; }
-  if(e.target.closest('#d-edit')){ closeOverlays(); openEdit(b.id); return; }
+  if(e.target.closest('#d-edit')){ openEdit(b.id); return; }
   if(e.target.closest('#d-delete')){
     const idx = state.books.indexOf(b);
     const memberOf = state.lists.filter(l=>l.bookIds.includes(b.id)).map(l=>l.id);
@@ -2866,7 +2906,7 @@ function openSeries(name){
     <div class="dblock" style="margin-bottom:16px">
       <label>Ma note de la série</label>
       <div class="rate-row" style="margin-bottom:10px">
-        <div class="star-input" id="s-stars" tabindex="0" role="slider" aria-label="Note de la série" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${rec.rating||0}">${starInputHTML(rec.rating||0)}</div>
+        <div class="star-input" id="s-stars" tabindex="0" role="slider" aria-label="Note de la série" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${rec.rating||0}" aria-valuetext="${rec.rating ? rec.rating+' étoiles' : 'non noté'}">${starInputHTML(rec.rating||0)}</div>
         ${rec.rating ? `<button class="clear-rate" id="s-clear">effacer</button>` : ''}
         <button class="heart ${rec.favorite?'on':''}" id="s-fav" title="Série favorite" aria-pressed="${rec.favorite}">♥</button>
       </div>
@@ -2893,6 +2933,17 @@ function pruneSeriesRec(name){
   const k = name.trim().toLowerCase(); const r = state.series[k];
   if(r && r.rating==null && !r.review && !r.favorite && !(r.moods||[]).length) delete state.series[k];
 }
+// Note de série au clavier (←/→) : même comportement que le slider de la fiche livre (#d-stars),
+// sinon le slider est focusable mais totalement inopérant au clavier et au lecteur d'écran.
+$('#list-body').addEventListener('keydown', e => {
+  if(ui.listMode!=='series' || !e.target.closest || !e.target.closest('#s-stars')) return;
+  const r = seriesRec(ui.seriesName);
+  if(e.key==='ArrowRight'){ e.preventDefault(); r.rating = Math.min(5, (r.rating||0)+0.5); }
+  else if(e.key==='ArrowLeft'){ e.preventDefault(); const v=(r.rating||0)-0.5; r.rating = v<0.5 ? null : v; if(r.rating==null) pruneSeriesRec(ui.seriesName); }
+  else return;
+  save(); openSeries(ui.seriesName); renderLibrary();
+  const el=$('#s-stars'); if(el) el.focus();
+});
 // Un seul écouteur délégué pour le panneau liste/série, résolu via ui.listId / ui.seriesName.
 $('#list-body').addEventListener('click', e => {
   if(ui.listMode==='series'){
@@ -2902,7 +2953,7 @@ $('#list-body').addEventListener('click', e => {
     if(e.target.closest('#s-fav')){ const r=seriesRec(ui.seriesName); r.favorite=!r.favorite; pruneSeriesRec(ui.seriesName); save(); openSeries(ui.seriesName); renderLibrary(); return; }
     if(e.target.closest('#s-next')){ addNextTome(ui.seriesName); return; }
     const row = e.target.closest('.tome-row');
-    if(row){ closeOverlays(); openDetail(row.dataset.id); }
+    if(row){ openDetail(row.dataset.id); }
     return;
   }
   if(ui.listMode==='recap'){
@@ -2944,7 +2995,7 @@ $('#list-body').addEventListener('click', e => {
   const rm = e.target.closest('[data-rm]');
   if(rm){ l.bookIds = l.bookIds.filter(x=>x!==rm.dataset.rm); save(); openList(l.id); renderLists(); return; }
   const item = e.target.closest('.ld-item');
-  if(item){ closeOverlays(); openDetail(item.dataset.id); }
+  if(item){ openDetail(item.dataset.id); }
 });
 // critique de série : sauvegarde au blur (comme la fiche), sans ré-ouvrir à chaque frappe
 $('#list-body').addEventListener('change', e => {
@@ -3644,7 +3695,7 @@ async function showPublicProfile(uname){
       </div>
     </header>
     ${coeur ? `<section class="pp-fav">
-      <div class="pp-fav-cov">${coeur.cover ? `<img src="${esc(coeur.cover)}" alt="" referrerpolicy="no-referrer"><div class="pp-ph">${esc(coeur.title)}</div>` : `<div class="pp-ph">${esc(coeur.title)}</div>`}</div>
+      <div class="pp-fav-cov">${coeur.cover ? `<img src="${esc(coeur.cover)}" alt=""${xorigin(coeur.cover)} referrerpolicy="no-referrer"><div class="pp-ph">${esc(coeur.title)}</div>` : `<div class="pp-ph">${esc(coeur.title)}</div>`}</div>
       <div class="pp-fav-txt">
         <div class="pp-fav-kicker">${ic('star',14)} Son coup de cœur</div>
         <div class="pp-fav-title">${esc(coeur.title)}</div>
@@ -3655,7 +3706,7 @@ async function showPublicProfile(uname){
     </section>` : ''}
     ${reste.length ? `<div class="pp-sec">${coeur ? 'Ses autres lectures' : 'Ses lectures'}</div>
       <div class="pp-grid">${reste.map(b=>`<div class="pp-item">
-        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"><div class="pp-ph">${esc(b.title)}</div>` : `<div class="pp-ph">${esc(b.title)}</div>`}</div>
+        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="pp-ph">${esc(b.title)}</div>` : `<div class="pp-ph">${esc(b.title)}</div>`}</div>
         <div class="pp-t">${esc(b.title)}</div>
         ${b.rating ? `<div class="pp-r">${starsTxt(b.rating)}</div>` : ''}
       </div>`).join('')}</div>` : `<div class="pp-empty">Ce lecteur n'a encore rien partagé.</div>`}
@@ -3697,7 +3748,7 @@ function renderQuickRate(){
     <div class="qr-prog"><div class="qr-bar"><i style="width:${Math.round(_qrDone/_qrTotal*100)}%"></i></div>
       <span class="qr-count">${_qrDone} / ${_qrTotal}</span></div>
     <div class="qr-card">
-      <div class="qr-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="" referrerpolicy="no-referrer"><div class="qr-ph">${esc(b.title)}</div>` : `<div class="qr-ph">${esc(b.title)}</div>`}</div>
+      <div class="qr-cover">${b.cover ? `<img src="${esc(b.cover)}" alt=""${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="qr-ph">${esc(b.title)}</div>` : `<div class="qr-ph">${esc(b.title)}</div>`}</div>
       <div class="qr-title">${esc(fullTitle(b))}</div>
       <div class="qr-author">${esc(authorsStr(b))}</div>
       ${when ? `<div class="qr-when">lu le ${fmtDate(when)}</div>` : ''}
@@ -3727,7 +3778,7 @@ $('#rate-body').addEventListener('click', e=>{
     return;
   }
   if(e.target.closest('#qr-skip')){ qrAdvance(); return; }
-  if(e.target.closest('#qr-open') && b){ closeOverlays(); openDetail(b.id); return; }
+  if(e.target.closest('#qr-open') && b){ openDetail(b.id); return; }
 });
 // clavier : ← → pour choisir, Entrée pour valider et enchaîner
 $('#rate-body').addEventListener('keydown', e=>{
@@ -3973,19 +4024,28 @@ window.addEventListener('popstate', e=>{
 });
 function openOverlay(sel){
   const root=$(sel);
-  // Re-rendu de la modale déjà ouverte (noter, ♥, statut…) : ne pas toucher l'historique.
-  // L'ancien pop+push déclenchait un popstate asynchrone → applyHashView → closeOverlays :
-  // la fiche se refermait toute seule ~50 ms après chaque action.
-  const reRendu = root.classList.contains('open');
-  if(reRendu){
+  // Sommes-nous déjà dans la pile de modales ? (root déjà ouverte = simple re-rendu ;
+  // une AUTRE overlay ouverte = transition A→B ; ou une entrée d'historique déjà posée.)
+  const dansPile = _overlayDepth > 0 || $$('.overlay.open').length > 0;
+  if(dansPile){
+    // Re-rendu OU transition modale→modale : on échange visuellement SANS toucher l'historique.
+    // L'ancien closeOverlays(false)+pushOverlayHistory faisait un history.back() ASYNCHRONE →
+    // popstate → applyHashView → closeOverlays, qui refermait la nouvelle modale ~50 ms après
+    // (aussi bien pour un re-rendu de la même fiche que pour une transition fiche→étude/édition).
     $$('.overlay.open').forEach(o=>{ if(o!==root) o.classList.remove('open'); });
+    // Ne PAS écraser la référence vers l'appelant d'origine (une carte hors modale) : sinon la
+    // restauration de focus à la fermeture viserait un bouton devenu display:none (retour <body>).
+    const ae = document.activeElement;
+    if(!(ae && ae.closest && ae.closest('.overlay'))) ui.lastFocus = ae;
+    if(_overlayDepth === 0) pushOverlayHistory(); // filet : une overlay ouverte sans entrée d'historique
   }else{
     ui.lastFocus = document.activeElement;
-    closeOverlays(false);
     pushOverlayHistory();
   }
   root.classList.add('open'); syncModalIsolation();
-  queueMicrotask(()=>{ if(!root.contains(document.activeElement)){ const first=modalFocusables(root)[0]; if(first) first.focus(); } });
+  // preventScroll : sans lui, focaliser le premier bouton (tout en haut de la modale) fait
+  // remonter le panneau au ré-affichage, à chaque clic sur un contrôle sans id (statut, rythme…).
+  queueMicrotask(()=>{ if(!root.contains(document.activeElement)){ const first=modalFocusables(root)[0]; if(first) first.focus({preventScroll:true}); } });
 }
 function closeOverlays(restore=true){
   stopScan();
@@ -4274,8 +4334,17 @@ const LIB_STATUS = { saving:'Sauvegarde…', saved:'Enregistré', offline:'Hors 
 function setLibStatus(s){ social.libStatus = s; const el = $('#lib-status'); if(el){ el.dataset.s = s; el.title = LIB_STATUS[s]||''; el.hidden = !s || s==='saved'; } }
 // mute state EN PLACE (const) à partir de données brutes (normalisées + sanitizées)
 function replaceState(raw){ const n = normalizeData(raw||{}); for(const k of Object.keys(state)) delete state[k]; Object.assign(state, n); invalidateCache(); }
-// horodate/suffixe pour ne pas écraser une sauvegarde de secours précédente
-function backupLocal(suffix){ try{ localStorage.setItem(LS_KEY+suffix, localStorage.getItem(LS_KEY)||''); }catch(_){ } }
+// Sauvegarde de secours locale avant un remplacement d'état. Renvoie false si l'écriture échoue
+// (quota plein) — précisément le cas où l'appelant doit proposer un téléchargement de secours.
+function backupLocal(suffix){ try{ localStorage.setItem(LS_KEY+suffix, localStorage.getItem(LS_KEY)||''); return true; }catch(_){ return false; } }
+// Filet ceinture-bretelles avant un EFFACEMENT total : si la copie localStorage échoue alors qu'il
+// existe de vraies données, on télécharge l'état courant pour qu'aucun effacement ne soit définitif.
+function backupBeforeWipe(suffix){
+  if(backupLocal(suffix)) return;
+  if((state.books||[]).some(b=>!(b.tags||[]).includes('exemple'))){
+    try{ downloadJSON(state, `tome-sauvegarde-${today()}.json`); toast('Stockage plein : ancienne bibliothèque téléchargée en secours', {ms:7000}); }catch(_){ }
+  }
+}
 // rattache la biblio locale au compte courant + à une révision serveur (persisté → survit au reload)
 function libTag(rev){ state.meta = state.meta || {}; if(social.me) state.meta.ownerId = social.me.id; if(rev!=null){ state.meta.libRev = rev; social.libRev = rev; } }
 function libPersist(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){ } }
@@ -4318,7 +4387,7 @@ async function pushLibrary(opts){
 // Adopte la bibliothèque du serveur (cas : appareil vierge, ou biblio d'un AUTRE compte à remplacer).
 function adoptServerLibrary(d){
   if(!d || !d.data) return;
-  backupLocal('-preacct');
+  backupBeforeWipe('-preacct');
   try{ replaceState(JSON.parse(d.data)); libTag(d.rev); libPersist(); scheduleRender(); }
   catch(e){ setLibStatus('error'); }
 }
@@ -4359,14 +4428,41 @@ function mergeLibraries(localSt, serverRaw){
   const byId = new Map(out.lists.map(l=>[l.id,l]));
   for(const l of (localSt.lists||[])){
     const mappedIds = (l.bookIds||[]).map(id=>localIdMap.get(id)||id);
-    if(byId.has(l.id)){ const t=byId.get(l.id); t.bookIds=[...new Set([...t.bookIds, ...mappedIds])]; }
+    if(byId.has(l.id)){
+      const t=byId.get(l.id);
+      t.bookIds=[...new Set([...t.bookIds, ...mappedIds])];
+      // un renommage / une description locale divergente ne doit pas disparaître : on préserve la
+      // version locale comme liste distincte (les livres, eux, sont déjà unionnés juste au-dessus).
+      if((l.name||'')!==(t.name||'') || (l.desc||'')!==(t.desc||'')){
+        out.lists.push({ ...l, id: uid(), name: (l.name||'Liste')+' (conflit-sync)', bookIds: mappedIds });
+        conflicts++;
+      }
+    }
     else out.lists.push({...l, bookIds:mappedIds});
   }
   for(const [y,v] of Object.entries(localSt.goals||{})) out.goals[y] = Math.max(out.goals[y]||0, +v||0);
-  out.series = Object.assign({}, localSt.series||{}, out.series);
-  // collections intelligentes : union par id (garder les locales absentes du serveur)
-  const scIds = new Set((out.smartCollections||[]).map(c=>c.id));
-  for(const c of (localSt.smartCollections||[])) if(!scIds.has(c.id)){ out.smartCollections.push(c); scIds.add(c.id); }
+  // séries : le serveur reste la valeur courante, mais on ne détruit JAMAIS une note/critique locale
+  // divergente — la critique est rattachée sous un marqueur de conflit, la note/favori récupérés si
+  // le serveur n'en a pas. (L'ancien Object.assign faisait gagner le serveur en silence.)
+  out.series = out.series || {};
+  for(const [name, loc] of Object.entries(localSt.series||{})){
+    const srv = out.series[name];
+    if(!srv){ out.series[name] = loc; continue; }
+    if(JSON.stringify(loc)===JSON.stringify(srv)) continue;
+    const locRev=(loc&&loc.review||'').trim(), srvRev=(srv&&srv.review||'').trim();
+    if(locRev && locRev!==srvRev){ srv.review = (srvRev?srvRev+'\n\n':'')+'⚠ conflit-sync : '+locRev; conflicts++; }
+    if(srv.rating==null && loc && loc.rating!=null) srv.rating = loc.rating;
+    if(!srv.favorite && loc && loc.favorite) srv.favorite = true;
+  }
+  // collections intelligentes : union par id ; une locale modifiée (même id, contenu différent)
+  // est préservée sous un nouvel id plutôt qu'ignorée silencieusement.
+  const scById = new Map((out.smartCollections||[]).map(c=>[c.id,c]));
+  const scStrip = c => JSON.stringify({ name:c.name||'', f:c.f||{} });
+  for(const c of (localSt.smartCollections||[])){
+    const t = scById.get(c.id);
+    if(!t){ out.smartCollections.push(c); scById.set(c.id,c); }
+    else if(scStrip(c)!==scStrip(t)){ out.smartCollections.push({ ...c, id: uid(), name: (c.name||'Collection')+' (conflit-sync)' }); conflicts++; }
+  }
   // compteur d'export : garder la date la plus récente
   if(localSt.meta && localSt.meta.lastExport && (!out.meta.lastExport || localSt.meta.lastExport > out.meta.lastExport)) out.meta.lastExport = localSt.meta.lastExport;
   out.meta.mergeConflicts = conflicts;
@@ -4385,7 +4481,7 @@ async function syncLibraryOnLogin(){
   catch(e){ setLibStatus('offline'); return; }                    // hors-ligne : on garde le local
   if(!localMine){
     // la biblio locale appartient à QUELQU'UN D'AUTRE (appareil partagé) → ne JAMAIS la mêler à ce compte
-    backupLocal('-autre');
+    backupBeforeWipe('-autre');
     if(d.exists) adoptServerLibrary(d);
     else { replaceState({}); libTag(0); libPersist(); scheduleRender(); }
     return;
@@ -4812,11 +4908,12 @@ function showPledge(){ openDialog({title:'💚 Toujours gratuit', message:FREE_P
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n'étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), et ton adresse IP (uniquement pour limiter les abus).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n'étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l'abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus).
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l'inscription).
-Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n'envoie jamais rien. Aucune publicité, aucun traceur, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
-Liens d'affiliation : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers Amazon. En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi. Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d'Amazon qui s'appliquent.
+Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n'envoie jamais rien. Exception si tu l'actives toi-même : « Ma page publique » (Amis → Mon compte) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
+Services tiers : Tome n'installe aucun traceur, mais pour afficher les couvertures et proposer des recherches de livres, ton navigateur contacte directement Google Books (googleapis.com, books.google.com) et Open Library (openlibrary.org, covers.openlibrary.org) — qui reçoivent alors ta requête ou l'identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n'a lieu que quand tu la déclenches ; les « Idées du jour » ne s'activent qu'avec ton accord explicite.
+Liens d'achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d'affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d'Amazon qui s'appliquent.
 Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
 Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil.`;
 async function renderFeed(){
@@ -4841,7 +4938,7 @@ async function renderFeed(){
       return `
       <div class="feed-cell">
       <div class="feed-item">
-        <div class="mini">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
+        <div class="mini">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy"${xorigin(x.cover)} referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
         <div class="fx">
           <div class="who">${isMe?'Toi':esc(x.display_name)} <span style="color:var(--muted);font-weight:400">${isMe?'as lu':'a lu'}</span></div>
           <div class="what">${esc(x.title)}${x.rating?` · ${starsTxt(x.rating)}`:''}</div>
@@ -5097,7 +5194,7 @@ function renderProfile(box, d){
       <div class="grid">${shelf.map(b=>`
         <div class="card"><div class="cover">
           <span class="badge ${esc(b.type)}">${TYPE_LABEL[b.type]||''}</span>
-          ${b.cover?`<img src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="ph" style="background:linear-gradient(160deg,hsl(${hues[b.type]??150},32%,26%),hsl(${hues[b.type]??150},38%,13%))"><div class="ph-t">${esc(b.title)}</div><div class="ph-a">${esc(b.authors)}</div></div>`}
+          ${b.cover?`<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer">`:`<div class="ph" style="background:linear-gradient(160deg,hsl(${hues[b.type]??150},32%,26%),hsl(${hues[b.type]??150},38%,13%))"><div class="ph-t">${esc(b.title)}</div><div class="ph-a">${esc(b.authors)}</div></div>`}
           ${mine.has(b.book_key)?`<span class="ribbon done">✓ toi aussi</span>`:''}
         </div><div class="under">${b.rating?`<span class="stars">${starsTxt(b.rating)}</span>`:''}</div></div>`).join('')}</div>`
       : `<p class="friends-empty">${esc(d.user.displayName)} ne partage rien pour le moment.</p>`)
