@@ -890,7 +890,18 @@ body.welcome-open{overflow:hidden}
   .lp-shelf{height:clamp(230px,38vh,300px)}
   .lp-features{grid-template-columns:repeat(2,1fr)}
 }
-@media(max-width:480px){ .lp-features{grid-template-columns:1fr} }
+@media(max-width:480px){
+  .lp-features{grid-template-columns:1fr}
+  /* L'éventail débordait des DEUX bords sur téléphone (couvertures extérieures tournées + décalées
+     vers l'extérieur → boîte projetée hors écran, rognée). On resserre : pan plus étroit, couvertures
+     rapprochées et moins inclinées. Ça tient dans la colonne sans rognage. */
+  .lp-shelf{width:min(300px,80vw); height:clamp(220px,36vh,290px)}
+  .lp-book{width:46%}
+  .lp-book.b1{left:3%; transform:rotate(-11deg)}
+  .lp-book.b2{left:19%; transform:rotate(-4deg)}
+  .lp-book.b3{right:19%; transform:rotate(4deg)}
+  .lp-book.b4{right:2%; transform:rotate(11deg)}
+}
 
 /* ---- Fil vivant : critiques + réactions ♥ ---- */
 .feed-item{align-items:flex-start}
@@ -1033,6 +1044,7 @@ body.welcome-open{overflow:hidden}
 @media (hover:none), (pointer:coarse){
   #nav button, .chip, .btn, .btn.small, .seg button, .seg-mini button, .bulkbar .bb-actions button{ min-height:44px }
   .btn.icon, .x, .heart, .idea-x{ min-width:44px; min-height:44px }
+  .lp-link{ min-height:44px; display:inline-flex; align-items:center }  /* CTA secondaires de l'accueil (Se connecter, Essayer d'abord) au standard tactile */
   .bulkbar .bb-actions{ gap:8px }       /* écarte « Supprimer » de « + Liste » pour éviter les mis-tap */
   #nav{ gap:6px }                       /* 2 px entre onglets = touches manquées */
   .star-input .st{ padding:4px 5px }    /* étoiles : zone de frappe élargie sans changer la taille visuelle */
