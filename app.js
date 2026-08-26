@@ -1467,7 +1467,13 @@ function renderDailyIdeas(){
     }).catch(()=>{ _ideasLoading = false; _ideasNextTry = Date.now() + 30*60*1000; });
     return;
   }
-  if(!d.groups.length){ peint(null); return; }
+  if(!d.groups.length){
+    // Tout le tirage du jour a été ajouté ou écarté : NE PAS cacher le panneau (ce serait un
+    // cul-de-sac jusqu'à demain). On garde la porte de sortie — un nouveau tirage (salt+1).
+    peint(`<p style="font-size:13px;color:var(--muted);margin:2px 0 10px">Tu as passé en revue les idées du jour.</p>`+
+      `<div class="ideas-foot"><button class="btn small" data-ideas-more>↻ D'autres idées</button></div>`);
+    return;
+  }
   window._ideaGroups = d.groups;
   peint(ideasGroupsHTML(d.groups) +
     `<div class="ideas-foot"><button class="btn small" data-ideas-more>↻ D'autres idées</button></div>`);
@@ -4934,6 +4940,9 @@ async function renderFeed(){
     }
     el.innerHTML = d.feed.map((x,fi)=>{
       const rv = String(x.review||'').trim();
+      // compteurs = COUNT(*) SQL (donc des nombres), mais on coerce pour tenir l'invariant
+      // « tout ce qui vient du réseau est neutralisé » si la forme de /api/feed changeait un jour.
+      x.hearts = Number(x.hearts) || 0; x.comments = Number(x.comments) || 0;
       const isMe = social.me && x.uid===social.me.id; // ma propre lecture : pas d'auto-cœur, mais je vois et modère les réponses
       return `
       <div class="feed-cell">

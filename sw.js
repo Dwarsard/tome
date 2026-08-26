@@ -80,7 +80,11 @@ self.addEventListener('push', e => {
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const cible = (e.notification.data && e.notification.data.url) || '/#friends';
+  let cible = (e.notification.data && e.notification.data.url) || '/#friends';
+  // N'accepter qu'une cible same-origin : le serveur n'envoie que '/#friends', mais un payload push
+  // compromis (fuite de clé VAPID) ne doit pas pouvoir naviguer l'onglet Tome vers un site tiers.
+  try{ if(new URL(cible, self.location.origin).origin !== self.location.origin) cible = '/#friends'; }
+  catch(_){ cible = '/#friends'; }
   // réutiliser un onglet déjà ouvert plutôt que d'en empiler un nouveau
   e.waitUntil((async () => {
     const clientsList = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
