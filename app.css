@@ -832,9 +832,16 @@ body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions g
 
 /* ======== Page d'accueil publique ======== */
 #welcome{position:fixed; inset:0; z-index:300; overflow-y:auto; background:var(--bg); color:var(--text);
-  padding:0 max(20px,env(safe-area-inset-left)) calc(40px + env(safe-area-inset-bottom)); animation:fadein .4s ease}
+  padding:0 max(20px,env(safe-area-inset-left)) calc(40px + env(safe-area-inset-bottom)); animation:fadein .4s ease;
+  /* Couche de compositing dédiée + scroll confiné : sans ça, certains GPU laissent des « images
+     fantômes » (double exposition) en défilant un overlay fixe à scroll interne. */
+  transform:translateZ(0); overscroll-behavior:contain}
 #welcome[hidden]{display:none}
 body.welcome-open{overflow:hidden}
+/* Ne pas PEINDRE l'app derrière l'overlay opaque (header sticky à backdrop-filter, barre mobile
+   fixe…) : leurs couches de compositing transparaissaient en fantôme pendant le défilement.
+   Enfants directs de body uniquement — #welcome contient son propre <header class=lp-hero>. */
+body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{visibility:hidden}
 .lp-nav{max-width:1080px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; padding:20px 0}
 .lp-nav .brand{font-family:var(--font-display); font-weight:700; font-size:var(--fs-3xl); display:flex; align-items:center; gap:9px}
 .lp-nav .brand .logo{width:26px; height:26px}
@@ -853,7 +860,7 @@ body.welcome-open{overflow:hidden}
 .lp-try{font-size:var(--fs-lg)}
 .lp-trust{font-size:var(--fs-md); color:var(--faint)}
 /* Étagère « en éventail » */
-.lp-hero-visual{display:flex; justify-content:center; perspective:1200px}
+.lp-hero-visual{display:flex; justify-content:center} /* perspective retirée : rotations 2D seulement, et un contexte 3D dans le conteneur qui défile provoquait des artefacts de peinture */
 .lp-shelf{position:relative; width:min(360px,80vw); height:clamp(300px,42vh,440px)}
 .lp-book{position:absolute; width:44%; aspect-ratio:2/3; border-radius:10px; padding:16px 15px;
   display:flex; flex-direction:column; justify-content:flex-start; gap:4px; color:#fff; transform-origin:bottom center;
