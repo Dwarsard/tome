@@ -3714,7 +3714,12 @@ async function showPublicProfile(uname){
   // noté — en préférant celui qui porte une critique, c'est ce qui fait la valeur d'un journal.
   const coeur = shelf.filter(b=>b.rating>=4.5).sort((a,b)=>
       ((b.review?1:0)-(a.review?1:0)) || (b.rating-a.rating))[0] || null;
-  const reste = coeur ? shelf.filter(b=>b!==coeur) : shelf;
+  // Les « 4 favoris » (le rituel de profil hérité de Letterboxd) : les mieux notés après le
+  // coup de cœur. Affichés seulement s'il y en a au moins 2 — une rangée d'un seul livre est triste.
+  const favoris = shelf.filter(b=>b!==coeur && b.rating>=4)
+      .sort((a,b)=>(b.rating-a.rating) || ((b.review?1:0)-(a.review?1:0))).slice(0,4);
+  const horsFav = new Set([coeur, ...favoris]);
+  const reste = shelf.filter(b=>!horsFav.has(b));
   document.title = `${u.displayName} — Tome`;
   body.innerHTML = `
     <header class="pp-head">
@@ -3729,7 +3734,7 @@ async function showPublicProfile(uname){
       </div>
     </header>
     ${coeur ? `<section class="pp-fav">
-      <div class="pp-fav-cov">${coeur.cover ? `<img src="${esc(coeur.cover)}" alt=""${xorigin(coeur.cover)} referrerpolicy="no-referrer"><div class="pp-ph">${esc(coeur.title)}</div>` : `<div class="pp-ph">${esc(coeur.title)}</div>`}</div>
+      <div class="pp-fav-cov">${coeur.cover ? `<img src="${esc(coeur.cover)}" alt=""${xorigin(coeur.cover)} referrerpolicy="no-referrer"><div class="pp-ph" style="background:${phInk({title:coeur.title, type:'livre'})}">${esc(coeur.title)}</div>` : `<div class="pp-ph" style="background:${phInk({title:coeur.title, type:'livre'})}">${esc(coeur.title)}</div>`}</div>
       <div class="pp-fav-txt">
         <div class="pp-fav-kicker">${ic('star',14)} Son coup de cœur</div>
         <div class="pp-fav-title">${esc(coeur.title)}</div>
@@ -3738,9 +3743,15 @@ async function showPublicProfile(uname){
         ${coeur.review ? `<blockquote class="pp-fav-quote">« ${esc(coeur.review)} »</blockquote>` : ''}
       </div>
     </section>` : ''}
-    ${reste.length ? `<div class="pp-sec">${coeur ? 'Ses autres lectures' : 'Ses lectures'}</div>
+    ${favoris.length>=2 ? `<div class="pp-sec">Ses favoris</div>
+      <div class="pp-favs">${favoris.map(b=>`<div class="pp-item">
+        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>` : `<div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>`}</div>
+        <div class="pp-t">${esc(b.title)}</div>
+        <div class="pp-r">${starsTxt(b.rating)}</div>
+      </div>`).join('')}</div>` : ''}
+    ${reste.length ? `<div class="pp-sec">${(coeur||favoris.length>=2) ? 'Ses autres lectures' : 'Ses lectures'}</div>
       <div class="pp-grid">${reste.map(b=>`<div class="pp-item">
-        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="pp-ph">${esc(b.title)}</div>` : `<div class="pp-ph">${esc(b.title)}</div>`}</div>
+        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>` : `<div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>`}</div>
         <div class="pp-t">${esc(b.title)}</div>
         ${b.rating ? `<div class="pp-r">${starsTxt(b.rating)}</div>` : ''}
       </div>`).join('')}</div>` : `<div class="pp-empty">Ce lecteur n'a encore rien partagé.</div>`}
@@ -4327,10 +4338,14 @@ const initials = s => {
 };
 // Couleur d'avatar dérivée du nom : chacun a la sienne, stable, sans rien stocker.
 // Dégradé saturé + texte blanc = lisible sur fond clair comme sombre.
+// Avatars sur la palette d'encres de l'identité (plus de roue chromatique à 360° : un magenta
+// aléatoire jurait avec l'encre et la dorure). Déterministe par pseudo, texte ivoire.
+const AVATAR_INKS = ['#1f4560','#2e4d38','#8a4a1f','#9c332a','#4a2b40','#41465a','#6d5416','#233c52'];
 function avatarStyle(seed){
   const s = String(seed||'?');
-  let h = 0; for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) % 360;
-  return `background:linear-gradient(135deg,hsl(${h},52%,46%),hsl(${(h+28)%360},54%,34%));color:#fff`;
+  let h = 0; for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i))|0;
+  const ink = AVATAR_INKS[Math.abs(h) % AVATAR_INKS.length];
+  return `background:${ink};color:#efe8d8`;
 }
 // markup complet d'un avatar (une seule source de vérité pour les 8 endroits qui en affichent)
 function avatarHTML(name, cls=''){

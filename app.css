@@ -28,6 +28,7 @@
   --font-display:"Fraunces","Iowan Old Style",Georgia,"Times New Roman",serif;
   --font-serif:"Newsreader","Iowan Old Style",Georgia,serif;
   --grad-green:linear-gradient(135deg,#dcb562,#bd9036);
+  --page:#e8dfc9; --page-edge:#c9bda0;   /* tranche de papier des « livres en volume » */
   --glow-green:0 8px 24px -8px color-mix(in srgb, var(--green) 55%, transparent);
 }
 :root[data-theme="light"]{
@@ -38,6 +39,7 @@
   --red:#b5372a; --orange:#9c5200;
   --blue:#1f5d8c; --pink:#a2385f;
   --grad-green:linear-gradient(135deg,#a83a2f,#872018);
+  --page:#f6f1e4; --page-edge:#d3c9ae;
   --accent-soft:color-mix(in srgb, var(--green) 12%, transparent);
   --header-bg:rgba(233,228,216,.9); --chip-bg:rgba(255,255,255,.82); --chip-text:#231d16;
   --overlay-dim:rgba(45,35,24,.5);
@@ -462,6 +464,11 @@ body.selecting .card:hover .qk{opacity:0}
   width:100%; max-width:600px; box-shadow:var(--shadow); animation:pop .16s ease;
 }
 @keyframes pop{from{transform:translateY(10px); opacity:0} to{transform:none; opacity:1}}
+/* Signature : la fiche livre s'ouvre comme une reliure (origine sur le dos, léger rotateY).
+   Une seule animation de marque, courte (260 ms), easing sortant — reduced-motion la coupe déjà. */
+@keyframes bookopen{from{transform:perspective(1400px) rotateY(-7deg) translateY(4px); opacity:0}
+  to{transform:none; opacity:1}}
+#ov-detail .modal{animation:bookopen .26s cubic-bezier(.23,1,.32,1); transform-origin:left center}
 .modal-head{display:flex; align-items:center; gap:10px; padding:16px 20px; border-bottom:1px solid var(--border)}
 .modal-head h3{font-size:var(--fs-xl); flex:1}
 .modal-head .x{color:var(--muted); font-size:var(--fs-2xl); padding:2px 8px; border-radius:6px}
@@ -513,7 +520,19 @@ body.selecting .card:hover .qk{opacity:0}
 
 /* Detail modal */
 .detail{display:flex; gap:20px}
-.detail .dcover{width:150px; flex-shrink:0}
+/* Le livre en volume (fiche + coup de cœur public) : légère ouverture 3D, tranche de pages
+   en ombres empilées, dos ombré. Se referme à plat au survol. Pur CSS, pas d'images. */
+.detail .dcover{width:150px; flex-shrink:0; perspective:900px}
+.detail .dcover .cover, .pp-fav-cov{
+  transform:rotateY(-9deg); transform-origin:left center;
+  transition:transform .35s cubic-bezier(.23,1,.32,1);
+  box-shadow:
+    2px 1px 0 0 var(--page), 3.5px 2px 0 0 var(--page-edge),
+    5px 3px 0 0 var(--page), 6.5px 4px 0 0 var(--page-edge),
+    inset 8px 0 14px -10px rgba(0,0,0,.4), var(--sh-2);
+}
+.detail .dcover:hover .cover, .pp-fav-cov:hover{transform:rotateY(0deg)}
+.pp-fav{perspective:900px}
 .detail .dcover .cover{cursor:default}
 .detail .dmain{flex:1; min-width:0}
 .detail h3.dt{font-family:var(--font-display); font-weight:700; font-size:var(--fs-3xl); line-height:1.2; letter-spacing:-.01em}
@@ -1077,7 +1096,7 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{v
 .pp-item{display:flex; flex-direction:column; gap:6px}
 .pp-cov{position:relative; aspect-ratio:2/3; border-radius:var(--r-sm); overflow:hidden; border:1px solid var(--border); box-shadow:var(--sh-1); background:var(--surface2)}
 .pp-cov img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
-.pp-ph{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:8px; font-size:var(--fs-sm); font-weight:700; line-height:1.25; color:#e8eef4; background:linear-gradient(160deg,#2f5b4a,#16242c); text-align:center}
+.pp-ph{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:8px; font-family:var(--font-display); font-size:var(--fs-sm); font-weight:600; line-height:1.22; color:#efe8d8; background:#2b2620; text-align:center; text-wrap:balance}
 .pp-t{font-size:var(--fs-md); line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
 .pp-r{font-size:var(--fs-sm); color:var(--star)}
 .pp-cta{margin:40px 0 0; padding:28px; border-radius:var(--r-lg); background:var(--surface); border:1px solid var(--border); box-shadow:var(--sh-1); text-align:center}
@@ -1146,6 +1165,8 @@ body:has(.overlay.open) #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 .ld-item .rm:focus-visible, .ld-item:focus-within .rm{display:flex}
 
 /* Coup de cœur mis en avant sur la page publique : un livre défendu vaut mieux qu'une grille */
+.pp-favs{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-top:6px}
+@media(max-width:560px){ .pp-favs{grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px} .pp-favs .pp-t{display:none} }
 .pp-fav{display:flex; gap:22px; align-items:flex-start; margin-top:28px; padding:22px;
   background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--sh-1)}
 .pp-fav-cov{position:relative; width:104px; aspect-ratio:2/3; flex-shrink:0; border-radius:var(--r-sm);
