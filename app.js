@@ -5436,6 +5436,7 @@ if(_pubUser) showPublicProfile(_pubUser);   // visiteur arrivé par un lien de b
 
 /* =============== Page d'accueil publique =============== */
 function showWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=false; document.body.classList.add('welcome-open');
+  try{ window.scrollTo(0,0); }catch(_){}
   // invité par un ami : le dire ici, sur la page qui explique le produit
   const who = social.invite || loadPendingInvite();
   const host = $('#lp-invite');
@@ -5443,6 +5444,7 @@ function showWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=false; do
   syncModalIsolation();
   const first=w.querySelector('[data-lp="signup"]'); if(first) try{ first.focus(); }catch(_){} }
 function hideWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=true; document.body.classList.remove('welcome-open'); syncModalIsolation();
+  try{ window.scrollTo(0,0); }catch(_){}  // la page de garde a pu faire defiler la fenetre : l'app repart en haut
   if(location.hash==='#welcome'){ try{ history.replaceState(history.state,'',location.pathname+location.search); }catch(_){} } }
 $('#welcome').addEventListener('click', e=>{
   const b = e.target.closest('[data-lp]'); if(!b) return;
