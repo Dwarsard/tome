@@ -1,7 +1,7 @@
 /* Service worker de Tome — cache l'app pour l'usage hors ligne.
    Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
    qui affiche le bandeau « Nouvelle version — Recharger ». */
-const CACHE = 'tome-v10';
+const CACHE = 'tome-v11';
 const CACHE_PREFIX = 'tome-';
 // Caches d'AVANT l'éclatement du single-file (index.html contenait tout le CSS/JS).
 const PRE_SPLIT = /^tome-v[1-8]$/;
@@ -47,21 +47,28 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   // l'API (même origine en prod) ne doit JAMAIS passer par le cache : données privées et volatiles
   if (url.pathname.startsWith('/api/')) return;
-  // réseau d'abord (pour récupérer les mises à jour), cache en secours hors ligne
-  e.respondWith(
-    fetch(e.request)
-      .then(res => {
-        if (res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-        }
-        return res;
-      })
-      .catch(async () =>
-        (await caches.match(e.request, { ignoreSearch: true })) ||
-        (e.request.mode === 'navigate' ? await caches.match('./index.html') : Response.error())
-      )
-  );
+  // Réseau d'abord (pour les mises à jour), cache en secours. Timeout de 4 s : sur un réseau
+  // très mauvais on bascule vite sur le cache au lieu d'attendre indéfiniment.
+  const fromCache = async () =>
+    (await caches.match(e.request, { ignoreSearch: true })) ||
+    (e.request.mode === 'navigate' ? await caches.match('./index.html') : Response.error());
+  e.respondWith((async () => {
+    let res;
+    try {
+      res = await Promise.race([
+        fetch(e.request),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+      ]);
+    } catch (_) {
+      return fromCache();
+    }
+    if (res && res.ok) {
+      const copy = res.clone();
+      // rattaché à waitUntil : le worker ne peut pas être tué avant la fin de l'écriture du cache
+      e.waitUntil(caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {}));
+    }
+    return res;
+  })());
 });
 
 /* ---------- Notifications push ----------
