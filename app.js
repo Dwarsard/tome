@@ -600,11 +600,22 @@ function coverHTML(b, mini=false){
   if(b.cover) return `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer" data-fb="${esc(b.id)}">`;
   return phHTML(b, mini);
 }
+// Couverture manquante : un « livre » d'éditeur à la Fitzcarraldo — aplat d'encre choisi
+// dans une petite palette par type (déterministe via le titre), titre composé en Fraunces,
+// filet intérieur et tranche en CSS. Le placeholder devient un objet de marque, pas une absence.
+const PH_INKS = {
+  livre: ['#1f4560', '#2e4d38', '#2b2620', '#41465a'],
+  bd:    ['#8a4a1f', '#9c332a', '#6d5416', '#374a24'],
+  manga: ['#4a2b40', '#9c332a', '#233c52', '#5c2323'],
+};
+function phInk(b){
+  const inks = PH_INKS[b.type] || PH_INKS.livre;
+  return inks[hashStr(String(b.title||'') + '|' + String((b.authors||[])[0]||'')) % inks.length];
+}
 function phHTML(b, mini=false){
-  const hues = {livre:205, bd:28, manga:340};
-  const h = hues[b.type] ?? 150;
-  if(mini) return `<div class="ph-mini" style="background:linear-gradient(160deg,hsl(${h},30%,24%),hsl(${h},35%,14%))">📕</div>`;
-  return `<div class="ph" style="background:linear-gradient(160deg,hsl(${h},32%,26%),hsl(${h},38%,13%))">
+  const ink = phInk(b);
+  if(mini) return `<div class="ph-mini" style="background:${ink}"><span>${esc((fullTitle(b)||'?').trim().charAt(0).toUpperCase())}</span></div>`;
+  return `<div class="ph" style="background:${ink}">
     <div class="ph-t">${esc(fullTitle(b))}</div><div class="ph-a">${esc(authorsStr(b))}</div></div>`;
 }
 // Fallback des couvertures cassées : un seul écouteur en phase de capture, pas de handler inline.
@@ -868,7 +879,7 @@ function renderTodaySocial(){
   const feed=(social.todayFeed||[]).slice(0,3);
   if(!feed.length){ el.innerHTML=`<div class="today-social-empty"><p>Ton fil est encore calme. Invite un ami pour commencer à partager vos lectures.</p><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn primary" data-today-invite>${ic('link',16)} Inviter un ami</button><button class="btn" data-today-friends>Voir mes amis</button></div></div>`; return; }
   el.innerHTML=`<div class="today-feed">${feed.map(x=>`<button class="today-feed-row" data-today-friends>
-    <span class="today-feed-cover">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy"${xorigin(x.cover)} referrerpolicy="no-referrer">`:'<span aria-hidden="true">📕</span>'}</span>
+    <span class="today-feed-cover">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy"${xorigin(x.cover)} referrerpolicy="no-referrer">`:phHTML({title:x.title, authors:[], type:x.type}, true)}</span>
     <span class="today-feed-copy"><b>${social.me&&x.uid===social.me.id?'Toi':esc(x.display_name)}</b><span>a lu <strong>${esc(x.title)}</strong>${x.rating?` · <span class="stars">${starsTxt(x.rating)}</span>`:''}</span></span>
     <time>${x.read_date?esc(new Date(x.read_date+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})):''}</time>
   </button>`).join('')}</div>`;
@@ -1208,7 +1219,7 @@ function renderLibrary(){
   $('#lib-count').textContent = `${nBooks} ouvrage${nBooks>1?'s':''}${nItems!==nBooks ? ` · ${nItems} carte${nItems>1?'s':''}` : ''}`;
   if(!arr.length){
     emptyBox.innerHTML = `<div class="empty"><div class="big">🔍</div>
-      <h3>Aucun résultat</h3><p>Aucun titre ne correspond à ces filtres.</p>
+      <h3>Rien sur cette étagère</h3><p>Ces filtres ne laissent passer aucun titre. Élargis, ou range-les.</p>
       <button class="btn" id="empty-reset">Réinitialiser les filtres</button></div>`;
     $('#empty-reset').addEventListener('click', resetFilters);
   }else emptyBox.innerHTML = '';
@@ -1414,7 +1425,7 @@ function ideasData(){
 function ideasGroupsHTML(groups){
   return groups.map((g,gi)=>`<div class="idea-group"><div class="ig-label">${esc(g.label)}</div><div class="ig-items">` +
     g.items.map((r,i)=>{ const c = cleanCover(r.cover); return `<div class="idea-card">
-      <div class="mini">${c?`<img src="${esc(c)}" alt="" loading="lazy"${xorigin(c)} referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
+      <div class="mini">${c?`<img src="${esc(c)}" alt="" loading="lazy"${xorigin(c)} referrerpolicy="no-referrer">`:phHTML({title:r.title, authors:r.authors, type:r.type}, true)}</div>
       <div class="ii"><b>${esc(r.title)}</b><span>${esc((r.authors||[]).join(', '))}</span></div>
       <button class="btn small" data-idea="${gi}:${i}" title="Ajouter à ma pile à lire">＋ À lire</button>
       <button class="idea-x" data-idea-x="${gi}:${i}" title="Ne plus proposer" aria-label="Écarter ${esc(r.title)}">✕</button>
@@ -1828,8 +1839,8 @@ function renderJournal(){
   const entries = allReadings().sort((a,b)=> b.date.localeCompare(a.date));
   const box = $('#journal-body');
   if(!entries.length){
-    box.innerHTML = `<div class="empty"><div class="big">🗓️</div><h3>Journal vide</h3>
-      <p>Quand tu marques un titre comme « Lu » (ou que tu ajoutes une date de lecture), il apparaît ici, mois par mois — relectures comprises.</p></div>`;
+    box.innerHTML = `<div class="empty"><div class="big">🗓️</div><h3>Ton journal attend sa première page</h3>
+      <p>Marque un titre comme « Lu » et il viendra s'inscrire ici, mois par mois — relectures comprises. Dans un an, ce sera ta plus belle liste.</p></div>`;
     return;
   }
   const groups = new Map();
@@ -1983,7 +1994,7 @@ async function doSearch(q){
   }
   window._searchItems = items;
   box.innerHTML = items.map((r,i) => { const c = cleanCover(r.cover); return `<div class="sr">
-      <div class="mini">${c ? `<img src="${esc(c)}" alt="" loading="lazy"${xorigin(c)} referrerpolicy="no-referrer">` : `<div class="ph-mini">📕</div>`}</div>
+      <div class="mini">${c ? `<img src="${esc(c)}" alt="" loading="lazy"${xorigin(c)} referrerpolicy="no-referrer">` : phHTML({title:r.title, authors:r.authors, type:r.type}, true)}</div>
       <div class="sri">
         <b>${esc(r.title)}</b>
         <span>${esc(r.authors.join(', '))}</span>
@@ -2133,6 +2144,23 @@ function openEdit(id){
   openOverlay('#ov-edit');
   setTimeout(()=>$('#f-title').focus(), 60);
 }
+// Micro-typographie française : appliquée à la SAISIE des textes de lecture (critique, passages,
+// avis de série, bio). Conservateur : guillemets « », apostrophe typographique, points de
+// suspension, espace insécable (U+00A0 — la fine U+202F se rend mal sur certains Safari) avant
+// ;!?» et après «. Les deux-points sont épargnés (heures, URLs). Les données déjà enregistrées
+// ne sont jamais retouchées : seule la nouvelle saisie passe ici.
+function frTypo(t){
+  if(!t) return t;
+  return String(t)
+    .replace(/\.{3}/g, '\u2026')
+    .replace(/'/g, '\u2019')
+    .replace(/"([^"\n]{1,500}?)"/g, '\u00AB\u00A0$1\u00A0\u00BB')
+    .replace(/\u00AB /g, '\u00AB\u00A0')
+    .replace(/ \u00BB/g, '\u00A0\u00BB')
+    .replace(/ +([;!?\u00BB])/g, '\u00A0$1')
+    .replace(/([^\s>])([;!?])/g, '$1\u00A0$2');
+}
+
 function fieldError(inputSel, msg){
   // le message vit SOUS le champ concerné (pas dans un toast à l'autre bout de l'écran),
   // reste affiché jusqu'à la correction, et est annoncé aux lecteurs d'écran
@@ -2676,7 +2704,7 @@ $('#detail-body').addEventListener('click', e => {
     save(); openDetail(b.id); scheduleRender(); return;
   }
   if(e.target.closest('#d-quote-add')){
-    const txt = $('#d-quote-text').value.trim();
+    const txt = frTypo($('#d-quote-text').value.trim());
     if(!txt){ fieldError('#d-quote-text','Colle ou écris d’abord le passage.'); return; }
     b.quotes = b.quotes||[];
     b.quotes.push({id:uid(), text:txt.slice(0,2000), page:numIn($('#d-quote-page').value, 0, 1000000)});
@@ -2782,7 +2810,7 @@ $('#detail-body').addEventListener('click', e => {
 $('#detail-body').addEventListener('change', e => {
   const b = state.books.find(x=>x.id===ui.detailId); if(!b) return;
   if(e.target.id==='d-review'){
-    b.review = e.target.value.trim();
+    b.review = frTypo(e.target.value.trim());
     save(); scheduleRender(); toast('Critique enregistrée ✓');
   }else if(e.target.id==='d-page'){
     const p = numOrNull(e.target.value);
@@ -3006,7 +3034,7 @@ $('#list-body').addEventListener('click', e => {
 // critique de série : sauvegarde au blur (comme la fiche), sans ré-ouvrir à chaque frappe
 $('#list-body').addEventListener('change', e => {
   if(ui.listMode==='series' && e.target.id==='s-review'){
-    seriesRec(ui.seriesName).review = e.target.value.trim();
+    seriesRec(ui.seriesName).review = frTypo(e.target.value.trim());
     pruneSeriesRec(ui.seriesName); save(); renderLibrary();
     toast('Critique de série enregistrée ✓');
   }
@@ -4694,7 +4722,7 @@ async function renderAccount(){
     </div>
   </div>`;
   $('#acc-save').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
-    try{ const d = await api('/api/account/profile', {method:'POST', body:{displayName:$('#acc-dn').value, bio:$('#acc-bio').value}}); social.me=d.user; toast('Profil mis à jour ✓'); renderFriends(); }
+    try{ const d = await api('/api/account/profile', {method:'POST', body:{displayName:$('#acc-dn').value, bio:frTypo($('#acc-bio').value)}}); social.me=d.user; toast('Profil mis à jour ✓'); renderFriends(); }
     catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); b.disabled=false; } };
   $('#acc-pw').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
     try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé — autres appareils déconnectés ✓'); }
@@ -4959,7 +4987,7 @@ async function renderFeed(){
       return `
       <div class="feed-cell">
       <div class="feed-item">
-        <div class="mini">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy"${xorigin(x.cover)} referrerpolicy="no-referrer">`:`<div class="ph-mini">📕</div>`}</div>
+        <div class="mini">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy"${xorigin(x.cover)} referrerpolicy="no-referrer">`:phHTML({title:x.title, authors:[x.authors||''].flat(), type:x.type}, true)}</div>
         <div class="fx">
           <div class="who">${isMe?'Toi':esc(x.display_name)} <span style="color:var(--muted);font-weight:400">${isMe?'as lu':'a lu'}</span></div>
           <div class="what">${esc(x.title)}${x.rating?` · ${starsTxt(x.rating)}`:''}</div>
@@ -5352,6 +5380,13 @@ if(location.search.includes('selftest')){
   assert('normalize volume floor', nb.volume===0);
   assert('normalize pages null on infinity', nb.pages===null);
   assert('normalize moods filter', eq(nb.moods,['sombre']));
+  // micro-typographie française (frTypo)
+  assert('frTypo guillemets', frTypo('"super"') === '\u00AB\u00A0super\u00A0\u00BB');
+  assert('frTypo apostrophe', frTypo("c'est") === 'c\u2019est');
+  assert('frTypo insecable !', frTypo('Bravo !') === 'Bravo\u00A0!');
+  assert('frTypo colle ?', frTypo('Vraiment?') === 'Vraiment\u00A0?');
+  assert('frTypo deux-points epargnes', frTypo('12:30 et http://a.fr') === '12:30 et http://a.fr');
+  assert('frTypo suspension', frTypo('bof...') === 'bof\u2026');
   assert('normalize pace null', nb.pace===null);
   const nloan=normalizeBook({title:'x', loan:{to:'Alice', since:'2026-08-01', due:'2026-09-01'}});
   assert('normalize loan due date', nloan.loan && nloan.loan.due==='2026-09-01');
