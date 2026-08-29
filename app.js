@@ -530,7 +530,7 @@ function save(skipCount){
 $('#save-warning-export').addEventListener('click', ()=>$('#btn-export').click());
 
 const ui = {
-  view:'today', status:'all', types:new Set(), q:'', tag:'', sort:'added', groupSeries:true,
+  view:'today', status:'all', types:new Set(), q:'', tag:'', sort:'added', groupSeries:true, libLayout:'grid',
   defaultStatus:'wishlist', typeMetric:'count',
   ideas:'ask',                             // idées du jour : 'ask' (proposer) | 'on' (activées) — jamais d'appel API sans opt-in
   selectMode:false, selection:new Set(),   // transitoires : jamais persistés ni sérialisés
@@ -543,7 +543,7 @@ function persistUI(){
   try{
     localStorage.setItem(UI_KEY, JSON.stringify({
       status:ui.status, types:[...ui.types], tag:ui.tag, sort:ui.sort,
-      groupSeries:ui.groupSeries, view:ui.view, defaultStatus:ui.defaultStatus, typeMetric:ui.typeMetric,
+      groupSeries:ui.groupSeries, view:ui.view, defaultStatus:ui.defaultStatus, typeMetric:ui.typeMetric, libLayout:ui.libLayout,
       ideas:ui.ideas,
     }));
   }catch(_){}
@@ -1223,7 +1223,11 @@ function renderLibrary(){
       <button class="btn" id="empty-reset">Réinitialiser les filtres</button></div>`;
     $('#empty-reset').addEventListener('click', resetFilters);
   }else emptyBox.innerHTML = '';
-  grid.innerHTML = items.map(it => it.kind==='series' ? seriesCardHTML(it) : bookCardHTML(it.book)).join('');
+  grid.classList.toggle('list-mode', ui.libLayout==='list');
+  syncLibLayoutBtn();
+  grid.innerHTML = ui.libLayout==='list'
+    ? items.map(it => it.kind==='series' ? seriesRowHTML(it) : bookRowHTML(it.book)).join('')
+    : items.map(it => it.kind==='series' ? seriesCardHTML(it) : bookCardHTML(it.book)).join('');
   renderSmartChips();
   updateBulkBar();
 }
@@ -1574,6 +1578,51 @@ function bookCardHTML(b){
       </div>
     </div>`;
 }
+// ---- Mode liste de la bibliotheque (bascule grille/affiches <-> rangees lisibles) ----
+// Meme classe .card + data-id : toute la delegation (clic, selection, clavier) marche telle quelle.
+function bookRowHTML(b){
+  const sel = ui.selection.has(b.id);
+  const pct = b.status==='reading' ? progressPct(b) : null;
+  const statut = b.status==='read' ? '' :
+    `<span class="rstat ${esc(b.status)}">${b.status==='reading' && pct!==null ? pct+'\u00A0%' : STATUS_LABEL[b.status]}</span>`;
+  return `
+    <div class="card lrow${sel?' selected':''}" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}${b.authors.length?', '+esc(authorsStr(b)):''}">
+      <button class="selbox${sel?' on':''}" data-select="${esc(b.id)}" role="checkbox" aria-checked="${sel}" aria-label="Selectionner">${sel?'\u2713':''}</button>
+      <div class="lcov">${coverHTML(b, true)}</div>
+      <div class="ri"><b class="rt">${esc(fullTitle(b))}</b><span class="ra">${esc(authorsStr(b))}</span></div>
+      <div class="rmeta">
+        ${statut}
+        ${b.rating ? `<span class="stars">${starsTxt(b.rating)}</span>` : ''}
+        ${b.favorite ? `<span class="fav">\u2665</span>` : ''}
+        ${b.review ? `<span class="rv">${ic('doc',13)}</span>` : ''}
+      </div>
+    </div>`;
+}
+function seriesRowHTML(it){
+  const total = Math.max(...it.books.map(b=>b.seriesTotal||0)) || null;
+  const read = readCount(it.books);
+  const withCover = it.books.filter(b=>b.cover).sort((a,b)=>(b.volume??0)-(a.volume??0));
+  const rep = withCover[0] || it.books[it.books.length-1];
+  const rec = state.series[it.name.trim().toLowerCase()];
+  const ratings = it.books.filter(b=>b.rating);
+  const avg = ratings.length ? ratings.reduce((x,b)=>x+b.rating,0)/ratings.length : null;
+  const shown = (rec && rec.rating!=null) ? rec.rating : avg;
+  return `
+    <div class="card lrow series" data-series="${esc(it.name)}" role="button" tabindex="0" aria-label="Serie ${esc(it.name)}">
+      <div class="lcov">${coverHTML(rep, true)}</div>
+      <div class="ri"><b class="rt">${esc(it.name)}</b><span class="ra">${read}/${total||it.books.length} lus \u00B7 ${it.books.length} tome${it.books.length>1?'s':''}</span></div>
+      <div class="rmeta">${shown ? `<span class="stars">${starsTxt(shown)}</span>` : ''}</div>
+    </div>`;
+}
+function syncLibLayoutBtn(){
+  const btn = $('#lib-layout'); if(!btn) return;
+  const liste = ui.libLayout==='list';
+  btn.setAttribute('aria-pressed', liste);
+  btn.title = liste ? 'Passer en grille' : 'Passer en liste';
+  btn.innerHTML = liste
+    ? `<svg viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg> Grille`
+    : `<svg viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><rect x="4" y="4.6" width="2.8" height="2.8" rx="1"/><rect x="4" y="10.6" width="2.8" height="2.8" rx="1"/><rect x="4" y="16.6" width="2.8" height="2.8" rx="1"/></svg> Liste`;
+}
 function seriesCardHTML(it){
   const total = Math.max(...it.books.map(b=>b.seriesTotal||0)) || null;
   const read = readCount(it.books);
@@ -1701,6 +1750,10 @@ function updateBulkBar(){
       <button data-bulk="exit" title="Quitter la sélection">✕</button>
     </div>`;
 }
+$('#lib-layout').addEventListener('click', ()=>{
+  ui.libLayout = ui.libLayout==='list' ? 'grid' : 'list';
+  persistUI(); renderLibrary();
+});
 $('#lib-select').addEventListener('click', ()=>{
   if(ui.selectMode){ clearSelection(); }
   else { ui.selectMode = true; document.body.classList.add('selecting'); }
@@ -3904,6 +3957,33 @@ function presentCard(cv, filename, shareText){
 }
 // Le canvas ne rend une police QUE si elle est déjà chargée : on précharge les graisses
 // utilisées par les cartes avant de tracer (sinon repli serif système silencieux).
+// Tramage ordonne (matrice de Bayer 4x4, 5 niveaux/canal, point visible x2) : donne aux
+// couvertures des cartes de partage une texture d'impression \u00AB riso \u00BB. Echoue en silence
+// si le canvas est souille (couverture sans CORS) : la carte reste nette, jamais cassee.
+function ditherRegion(ctx, x, y, w, h, r){
+  try{
+    const f=2, tw=Math.max(1,Math.round(w/f)), th=Math.max(1,Math.round(h/f));
+    const t=document.createElement('canvas'); t.width=tw; t.height=th;
+    const tc=t.getContext('2d');
+    tc.drawImage(ctx.canvas, x, y, w, h, 0, 0, tw, th);
+    const id=tc.getImageData(0,0,tw,th), d=id.data;
+    const M=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]], L=6;
+    for(let py=0; py<th; py++) for(let px=0; px<tw; px++){
+      const i=(py*tw+px)*4, thr=(M[py&3][px&3]+0.5)/16;
+      for(let c=0;c<3;c++){
+        const q=Math.min(L-1, Math.floor(d[i+c]/255*(L-1)+thr));
+        d[i+c]=Math.round(q*255/(L-1));
+      }
+    }
+    tc.putImageData(id,0,0);
+    ctx.save();
+    if(ctx.roundRect && r){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.clip(); }
+    ctx.imageSmoothingEnabled=false;
+    ctx.globalAlpha=.5;                       // fondu : texture d'impression, pas un damier
+    ctx.drawImage(t, 0,0,tw,th, x,y,w,h);
+    ctx.restore();
+  }catch(_){ }
+}
 async function ensureCardFonts(){
   if(!(document.fonts && document.fonts.load)) return;
   try{ await Promise.all([
@@ -3933,6 +4013,7 @@ function drawCard(b, coverImg){
     wrapText(ctx, fullTitle(b), cx+cw/2, cy+ch/2-20, cw-60, 34, 4);
   }
   ctx.restore();
+  if(coverImg) ditherRegion(ctx, cx, cy, cw, ch, 16);
   if(ctx.roundRect){ ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.roundRect(cx,cy,cw,ch,16); ctx.stroke(); }
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ece3d1'; ctx.font = '600 46px Fraunces, Georgia, serif';
@@ -4007,6 +4088,7 @@ function drawYearCard(year, coverImg){
     if(coverImg) ctx.drawImage(coverImg, cx, cy, cw, ch);
     else{ const hu={livre:205,bd:28,manga:340}[r.best.type]??150; const pg=ctx.createLinearGradient(cx,cy,cx+cw,cy+ch); pg.addColorStop(0,`hsl(${hu},32%,26%)`); pg.addColorStop(1,`hsl(${hu},38%,13%)`); ctx.fillStyle=pg; ctx.fillRect(cx,cy,cw,ch); }
     ctx.restore();
+    if(coverImg) ditherRegion(ctx, cx, cy, cw, ch, 14);
     const tx=cx+cw+40;
     ctx.fillStyle='#cba351'; ctx.font='700 26px system-ui'; ctx.fillText('COUP DE CŒUR', tx, cy+42);
     ctx.fillStyle='#ece3d1'; ctx.font='600 44px Fraunces, Georgia, serif'; const aT=wrapText(ctx, fullTitle(r.best), tx, cy+100, W-PAD-tx, 50, 2);
@@ -5304,6 +5386,7 @@ $('#friends-body').addEventListener('click', async e => {
     if(['wishlist','reading','read'].includes(saved.defaultStatus)) ui.defaultStatus = saved.defaultStatus;
     if(['ask','on'].includes(saved.ideas)) ui.ideas = saved.ideas;
     if(['count','pages'].includes(saved.typeMetric)) ui.typeMetric = saved.typeMetric;
+    if(['grid','list'].includes(saved.libLayout)) ui.libLayout = saved.libLayout;
     if(['today','library','journal','lists','stats','friends'].includes(saved.view)) ui.view = saved.view;
   }
   // refléter dans le DOM
