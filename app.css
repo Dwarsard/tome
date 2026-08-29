@@ -55,6 +55,12 @@ body{
   overscroll-behavior-y:contain; /* évite le pull-to-refresh accidentel en PWA */
 }
 button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
+/* Grain de papier/cuir : très subtil, sur le fond de page uniquement (pseudo hors flux DOM,
+   donc jamais neutralisé par l'isolation inert des modales). Texture l'aplat « numérique ». */
+body::before{content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+:root[data-theme="light"] body::before{opacity:.07; mix-blend-mode:multiply}
+@media (prefers-reduced-motion:reduce){ body::before{opacity:.035} }
 input,select,textarea{font:inherit; color:var(--text); background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:9px 12px; outline:none; width:100%; transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease}
 input:hover,select:hover,textarea:hover{border-color:var(--border-hover)}
 input:focus,select:focus,textarea:focus{border-color:var(--green); box-shadow:0 0 0 3px var(--accent-soft)}

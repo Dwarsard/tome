@@ -654,7 +654,7 @@ async function setGoal(year){
 /* =============== Thème =============== */
 function applyTheme(t){
   document.documentElement.dataset.theme = t;
-  $('#meta-theme').setAttribute('content', t==='light' ? '#f4f1e8' : '#12161a');
+  $('#meta-theme').setAttribute('content', t==='light' ? '#e9e4d8' : '#15120d');
   $('#btn-theme').innerHTML = ic('contrast',18);
 }
 applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
@@ -3863,12 +3863,22 @@ function presentCard(cv, filename, shareText){
     syncModalIsolation(); // sinon la carte reste inerte : clics traversés vers la fiche → données modifiées
   }, 'image/png');
 }
+// Le canvas ne rend une police QUE si elle est déjà chargée : on précharge les graisses
+// utilisées par les cartes avant de tracer (sinon repli serif système silencieux).
+async function ensureCardFonts(){
+  if(!(document.fonts && document.fonts.load)) return;
+  try{ await Promise.all([
+    document.fonts.load('600 46px Fraunces'), document.fonts.load('700 46px Fraunces'),
+    document.fonts.load('700 128px Fraunces'), document.fonts.load('700 165px Fraunces'),
+    document.fonts.load('italic 400 26px Newsreader'),
+  ]); }catch(_){ }
+}
 function drawCard(b, coverImg){
   const W = 1000, H = 1250;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
   const g = ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'#161c22'); g.addColorStop(1,'#0d1114');
+  g.addColorStop(0,'#1e1810'); g.addColorStop(1,'#0f0b07');
   ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
   const cw = 340, ch = 510, cx = (W-cw)/2, cy = 90;
   ctx.save();
@@ -3879,37 +3889,38 @@ function drawCard(b, coverImg){
     const pg = ctx.createLinearGradient(cx,cy,cx+cw,cy+ch);
     pg.addColorStop(0,`hsl(${h},32%,26%)`); pg.addColorStop(1,`hsl(${h},38%,13%)`);
     ctx.fillStyle = pg; ctx.fillRect(cx,cy,cw,ch);
-    ctx.fillStyle = '#e8eef4'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#ece3d1'; ctx.textAlign = 'center';
     ctx.font = 'bold 26px system-ui, sans-serif';
     wrapText(ctx, fullTitle(b), cx+cw/2, cy+ch/2-20, cw-60, 34, 4);
   }
   ctx.restore();
   if(ctx.roundRect){ ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.roundRect(cx,cy,cw,ch,16); ctx.stroke(); }
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#e8eef4'; ctx.font = 'bold 46px system-ui, sans-serif';
+  ctx.fillStyle = '#ece3d1'; ctx.font = '600 46px Fraunces, Georgia, serif';
   let y = wrapText(ctx, fullTitle(b), W/2, cy+ch+84, W-160, 56, 2);
-  ctx.font = '28px system-ui, sans-serif'; ctx.fillStyle = '#8fa1b3';
+  ctx.font = '28px system-ui, sans-serif'; ctx.fillStyle = '#a2977e';
   y = wrapText(ctx, authorsStr(b), W/2, y+4, W-200, 36, 1);
   if(b.rating){
-    ctx.font = '44px system-ui, sans-serif'; ctx.fillStyle = '#f5c14e';
+    ctx.font = '44px system-ui, sans-serif'; ctx.fillStyle = '#cba351';
     ctx.fillText(starsTxt(b.rating), W/2, y+30); y += 74;
   }
   if(b.review){
-    ctx.font = 'italic 26px Georgia, serif'; ctx.fillStyle = '#b9c6d2';
+    ctx.font = 'italic 400 26px Newsreader, Georgia, serif'; ctx.fillStyle = '#c7bda6';
     y = wrapText(ctx, '« '+b.review+' »', W/2, y+26, W-200, 38, 5);
   }
-  ctx.font = 'bold 34px system-ui, sans-serif'; ctx.fillStyle = '#2fc775';
+  ctx.font = '700 34px Fraunces, Georgia, serif'; ctx.fillStyle = '#cba351';
   ctx.fillText('Tome.', W/2, H-88);
-  ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#7fe0ab';
+  ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#c9b892';
   ctx.fillText('montome.fr', W/2, H-52);
   const lastR = (b.readings||[]).slice().sort((a,c)=>c.date.localeCompare(a.date))[0];
   if(lastR){
-    ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#5c6b7a';
+    ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#7c7360';
     ctx.fillText('lu le '+fmtDate(lastR.date), W/2, H-20);
   }
   return cv;
 }
-function shareCard(b){
+async function shareCard(b){
+  await ensureCardFonts();
   const generate = (img)=>{
     try{
       const cv = drawCard(b, img);
@@ -3936,20 +3947,20 @@ function drawYearCard(year, coverImg){
   const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
   const ctx = cv.getContext('2d');
   const g = ctx.createLinearGradient(0,0,W*0.4,H);
-  g.addColorStop(0,'#1c3327'); g.addColorStop(.5,'#141b21'); g.addColorStop(1,'#0c1013');
+  g.addColorStop(0,'#241d12'); g.addColorStop(.5,'#17110a'); g.addColorStop(1,'#0e0b06');
   ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
   const halo = ctx.createRadialGradient(W*0.28,150,30,W*0.28,150,560);
-  halo.addColorStop(0,'rgba(47,199,117,.2)'); halo.addColorStop(1,'rgba(47,199,117,0)');
+  halo.addColorStop(0,'rgba(203,163,81,.18)'); halo.addColorStop(1,'rgba(203,163,81,0)');
   ctx.fillStyle=halo; ctx.fillRect(0,0,W,H);
   const PAD=88; ctx.textAlign='left';
-  ctx.fillStyle='#8fa1b3'; ctx.font='600 32px system-ui'; ctx.fillText('MA RÉTRO LECTURE', PAD, 128);
-  ctx.fillStyle='#e8eef4'; ctx.font='800 165px system-ui'; ctx.fillText(String(r.year), PAD, 300);
+  ctx.fillStyle='#a2977e'; ctx.font='600 32px system-ui'; ctx.fillText('MA RÉTRO LECTURE', PAD, 128);
+  ctx.fillStyle='#ece3d1'; ctx.font='700 165px Fraunces, Georgia, serif'; ctx.fillText(String(r.year), PAD, 300);
   const hY=430;
-  ctx.fillStyle='#2fc775'; ctx.font='800 128px system-ui'; ctx.fillText(String(r.count), PAD, hY);
-  ctx.fillStyle='#8fa1b3'; ctx.font='600 32px system-ui'; ctx.fillText(r.count>1?'lectures':'lecture', PAD, hY+44);
-  const c2=W*0.52; ctx.fillStyle='#e8eef4'; ctx.font='800 128px system-ui';
+  ctx.fillStyle='#cba351'; ctx.font='700 128px Fraunces, Georgia, serif'; ctx.fillText(String(r.count), PAD, hY);
+  ctx.fillStyle='#a2977e'; ctx.font='600 32px system-ui'; ctx.fillText(r.count>1?'lectures':'lecture', PAD, hY+44);
+  const c2=W*0.52; ctx.fillStyle='#ece3d1'; ctx.font='700 128px Fraunces, Georgia, serif';
   ctx.fillText(r.pages?r.pages.toLocaleString('fr-FR'):'—', c2, hY);
-  ctx.fillStyle='#8fa1b3'; ctx.font='600 32px system-ui'; ctx.fillText('pages lues', c2, hY+44);
+  ctx.fillStyle='#a2977e'; ctx.font='600 32px system-ui'; ctx.fillText('pages lues', c2, hY+44);
   let y=560;
   if(r.best){
     const cw=170, ch=255, cx=PAD, cy=y; ctx.save();
@@ -3958,10 +3969,10 @@ function drawYearCard(year, coverImg){
     else{ const hu={livre:205,bd:28,manga:340}[r.best.type]??150; const pg=ctx.createLinearGradient(cx,cy,cx+cw,cy+ch); pg.addColorStop(0,`hsl(${hu},32%,26%)`); pg.addColorStop(1,`hsl(${hu},38%,13%)`); ctx.fillStyle=pg; ctx.fillRect(cx,cy,cw,ch); }
     ctx.restore();
     const tx=cx+cw+40;
-    ctx.fillStyle='#f5c14e'; ctx.font='700 26px system-ui'; ctx.fillText('COUP DE CŒUR', tx, cy+42);
-    ctx.fillStyle='#e8eef4'; ctx.font='700 44px system-ui'; const aT=wrapText(ctx, fullTitle(r.best), tx, cy+100, W-PAD-tx, 50, 2);
-    ctx.fillStyle='#8fa1b3'; ctx.font='28px system-ui'; const aA=wrapText(ctx, authorsStr(r.best), tx, aT+6, W-PAD-tx, 34, 1);
-    ctx.fillStyle='#f5c14e'; ctx.font='36px system-ui'; ctx.fillText(starsTxt(r.best.rating), tx, aA+34);
+    ctx.fillStyle='#cba351'; ctx.font='700 26px system-ui'; ctx.fillText('COUP DE CŒUR', tx, cy+42);
+    ctx.fillStyle='#ece3d1'; ctx.font='600 44px Fraunces, Georgia, serif'; const aT=wrapText(ctx, fullTitle(r.best), tx, cy+100, W-PAD-tx, 50, 2);
+    ctx.fillStyle='#a2977e'; ctx.font='28px system-ui'; const aA=wrapText(ctx, authorsStr(r.best), tx, aT+6, W-PAD-tx, 34, 1);
+    ctx.fillStyle='#cba351'; ctx.font='36px system-ui'; ctx.fillText(starsTxt(r.best.rating), tx, aA+34);
     y=cy+ch+76;
   }
   const rows=[];
@@ -3970,8 +3981,8 @@ function drawYearCard(year, coverImg){
   if(r.avg) rows.push(['Note moyenne', r.avg.toFixed(1).replace('.',',')+' ★']);
   if(r.readingDays) rows.push(['Jours de lecture', r.readingDays+' j']);
   for(const [lbl,val] of rows.slice(0,3)){ // 3 max : le graphique et le pied de carte doivent tenir
-    ctx.textAlign='left'; ctx.fillStyle='#8fa1b3'; ctx.font='500 30px system-ui'; ctx.fillText(lbl, PAD, y);
-    ctx.textAlign='right'; ctx.fillStyle='#e8eef4'; ctx.font='700 32px system-ui';
+    ctx.textAlign='left'; ctx.fillStyle='#a2977e'; ctx.font='500 30px system-ui'; ctx.fillText(lbl, PAD, y);
+    ctx.textAlign='right'; ctx.fillStyle='#ece3d1'; ctx.font='700 32px system-ui';
     let v=String(val); while(ctx.measureText(v).width>W-2*PAD-300 && v.length>1) v=v.slice(0,-1);
     ctx.fillText(v===String(val)?v:v+'…', W-PAD, y); y+=36;
     ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.beginPath(); ctx.moveTo(PAD,y); ctx.lineTo(W-PAD,y); ctx.stroke(); y+=26;
@@ -3979,22 +3990,23 @@ function drawYearCard(year, coverImg){
   // rythme mensuel ancré au-dessus du pied de carte, hauteur adaptée à la place restante :
   // impossible de déborder sur « Tome. » + URL quel que soit le contenu au-dessus
   ctx.textAlign='left'; y+=16;
-  ctx.fillStyle='#8fa1b3'; ctx.font='600 28px system-ui'; ctx.fillText('RYTHME MOIS PAR MOIS', PAD, y);
+  ctx.fillStyle='#a2977e'; ctx.font='600 28px system-ui'; ctx.fillText('RYTHME MOIS PAR MOIS', PAD, y);
   const barsTop = y+22, maxBarH = Math.max(60, Math.min(150, (H-176)-barsTop)), base = barsTop+maxBarH;
   const bm=r.byMonth||Array(12).fill(0), bmax=Math.max(...bm,1), cW=W-2*PAD, gap=14, bw=(cW-gap*11)/12;
   for(let i=0;i<12;i++){
     const bh=Math.max(bm[i]/bmax*maxBarH, bm[i]?6:2), bx=PAD+i*(bw+gap);
-    ctx.fillStyle=bm[i]?'#2fc775':'#242e39';
+    ctx.fillStyle=bm[i]?'#cba351':'#2a2418';
     if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(bx, base-bh, bw, bh, 5); ctx.fill(); } else ctx.fillRect(bx, base-bh, bw, bh);
-    ctx.fillStyle='#5c6b7a'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText(MONTHS_MINI[i], bx+bw/2, base+32);
+    ctx.fillStyle='#7c7360'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText(MONTHS_MINI[i], bx+bw/2, base+32);
   }
-  ctx.textAlign='center'; ctx.fillStyle='#2fc775'; ctx.font='800 44px system-ui'; ctx.fillText('Tome.', W/2, H-84);
-  ctx.fillStyle='#7fe0ab'; ctx.font='26px system-ui'; ctx.fillText('montome.fr', W/2, H-40);
+  ctx.textAlign='center'; ctx.fillStyle='#cba351'; ctx.font='700 44px Fraunces, Georgia, serif'; ctx.fillText('Tome.', W/2, H-84);
+  ctx.fillStyle='#c9b892'; ctx.font='26px system-ui'; ctx.fillText('montome.fr', W/2, H-40);
   return cv;
 }
-function shareYearCard(year){
+async function shareYearCard(year){
   const r = yearRecap(year);
   if(!r.count){ toast('Rien à mettre sur la carte pour cette année'); return; }
+  await ensureCardFonts();
   const generate = (img)=>{
     try{
       presentCard(drawYearCard(year, img), `tome-retro-${year}.png`, `Ma rétro lecture ${year} 📚 · ${SITE_URL}`);
