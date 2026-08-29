@@ -1010,7 +1010,8 @@ function renderNowReading(){
   strip.hidden = false;
   strip.innerHTML = reading.map(b=>{
     const pct = progressPct(b);
-    return `<div class="now-card" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="En cours : ${esc(fullTitle(b))}">
+    return `<div class="now-card" data-id="${esc(b.id)}">
+      <button type="button" class="now-hit" aria-label="Ouvrir la lecture en cours : ${esc(fullTitle(b))}"></button>
       <div class="mini">${coverHTML(b, true)}</div>
       <div class="ni">
         <div class="nt">${esc(fullTitle(b))}</div>
@@ -1546,7 +1547,8 @@ function renderDiscover(){
   if(!recs.length){ strip.hidden=true; strip.innerHTML=''; return; }
   strip.hidden=false;
   strip.innerHTML = `<div style="flex:0 0 auto; align-self:center; font-size:12px; color:var(--faint); text-transform:uppercase; letter-spacing:.08em; padding-right:4px">À découvrir</div>` +
-    recs.map(({b,why})=>`<div class="now-card" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="Suggestion : ${esc(fullTitle(b))}">
+    recs.map(({b,why})=>`<div class="now-card" data-id="${esc(b.id)}">
+      <button type="button" class="now-hit" aria-label="Ouvrir la suggestion : ${esc(fullTitle(b))}"></button>
       <div class="mini">${coverHTML(b, true)}</div>
       <div class="ni"><div class="nt">${esc(fullTitle(b))}</div><div class="disco-note">${esc(why)}</div></div>
     </div>`).join('');
@@ -1558,8 +1560,10 @@ function bookCardHTML(b){
   else if(b.status==='reading') ribbon = `<span class="ribbon reading">${pct!==null ? pct+' %' : 'En cours'}${pct!==null?`<i class="rp" style="width:${pct}%"></i>`:''}</span>`;
   else if(b.status!=='read') ribbon = `<span class="ribbon ${esc(b.status)}">${STATUS_LABEL[b.status]}</span>`;
   const sel = ui.selection.has(b.id);
+  const hitLabel = ui.selectMode ? `${sel?'Désélectionner':'Sélectionner'} ${fullTitle(b)}` : `Ouvrir ${fullTitle(b)}${b.authors.length?', '+authorsStr(b):''}`;
   return `
-    <div class="card${sel?' selected':''}" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}${b.authors.length?', '+esc(authorsStr(b)):''}">
+    <div class="card${sel?' selected':''}" data-id="${esc(b.id)}">
+      <button type="button" class="card-hit" aria-label="${esc(hitLabel)}"${ui.selectMode?` aria-pressed="${sel}"`:''}></button>
       <div class="cover">
         <span class="badge ${esc(b.type)}">${TYPE_LABEL[b.type]||''}</span>
         <button class="selbox${sel?' on':''}" data-select="${esc(b.id)}" role="checkbox" aria-checked="${sel}" aria-label="Sélectionner">${sel?'✓':''}</button>
@@ -1585,8 +1589,10 @@ function bookRowHTML(b){
   const pct = b.status==='reading' ? progressPct(b) : null;
   const statut = b.status==='read' ? '' :
     `<span class="rstat ${esc(b.status)}">${b.status==='reading' && pct!==null ? pct+'\u00A0%' : STATUS_LABEL[b.status]}</span>`;
+  const hitLabel = ui.selectMode ? `${sel?'Désélectionner':'Sélectionner'} ${fullTitle(b)}` : `Ouvrir ${fullTitle(b)}${b.authors.length?', '+authorsStr(b):''}`;
   return `
-    <div class="card lrow${sel?' selected':''}" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}${b.authors.length?', '+esc(authorsStr(b)):''}">
+    <div class="card lrow${sel?' selected':''}" data-id="${esc(b.id)}">
+      <button type="button" class="card-hit" aria-label="${esc(hitLabel)}"${ui.selectMode?` aria-pressed="${sel}"`:''}></button>
       <button class="selbox${sel?' on':''}" data-select="${esc(b.id)}" role="checkbox" aria-checked="${sel}" aria-label="Selectionner">${sel?'\u2713':''}</button>
       <div class="lcov">${coverHTML(b, true)}</div>
       <div class="ri"><b class="rt">${esc(fullTitle(b))}</b><span class="ra">${esc(authorsStr(b))}</span></div>
@@ -1607,8 +1613,13 @@ function seriesRowHTML(it){
   const ratings = it.books.filter(b=>b.rating);
   const avg = ratings.length ? ratings.reduce((x,b)=>x+b.rating,0)/ratings.length : null;
   const shown = (rec && rec.rating!=null) ? rec.rating : avg;
+  const ids = it.books.map(b=>b.id), allSel = ids.length>0 && ids.every(id=>ui.selection.has(id));
+  const hitLabel = ui.selectMode
+    ? `${allSel?'Désélectionner':'Sélectionner'} la série ${it.name}`
+    : `Ouvrir la série ${it.name}`;
   return `
-    <div class="card lrow series" data-series="${esc(it.name)}" role="button" tabindex="0" aria-label="Serie ${esc(it.name)}">
+    <div class="card lrow series${allSel?' selected':''}" data-series="${esc(it.name)}">
+      <button type="button" class="card-hit" aria-label="${esc(hitLabel)}"${ui.selectMode?` aria-pressed="${allSel}"`:''}></button>
       <div class="lcov">${coverHTML(rep, true)}</div>
       <div class="ri"><b class="rt">${esc(it.name)}</b><span class="ra">${read}/${total||it.books.length} lus \u00B7 ${it.books.length} tome${it.books.length>1?'s':''}</span></div>
       <div class="rmeta">${shown ? `<span class="stars">${starsTxt(shown)}</span>` : ''}</div>
@@ -1637,8 +1648,12 @@ function seriesCardHTML(it){
   const ids = it.books.map(b=>b.id);
   const nSel = ids.filter(id=>ui.selection.has(id)).length;
   const allSel = nSel===ids.length && nSel>0, someSel = nSel>0 && nSel<ids.length;
+  const hitLabel = ui.selectMode
+    ? `${allSel?'Désélectionner':'Sélectionner'} la série ${it.name}`
+    : `Ouvrir la série ${it.name}, ${read} lus sur ${total||it.books.length}`;
   return `
-    <div class="card series${allSel?' selected':''}" ${someSel?'data-indet="1"':''} data-series="${esc(it.name)}" role="button" tabindex="0" aria-label="Série ${esc(it.name)}, ${read} lus sur ${total||it.books.length}">
+    <div class="card series${allSel?' selected':''}" ${someSel?'data-indet="1"':''} data-series="${esc(it.name)}">
+      <button type="button" class="card-hit" aria-label="${esc(hitLabel)}"${ui.selectMode?` aria-pressed="${allSel}"`:''}></button>
       <div class="cover">
         <span class="badge ${esc(rep.type)}">${TYPE_LABEL[rep.type]||''}</span>
         <button class="selbox${allSel?' on':''}" data-select-series="${esc(it.name)}" role="checkbox" aria-checked="${allSel}" aria-label="Sélectionner la série">${allSel?'✓':(someSel?'–':'')}</button>
@@ -1652,13 +1667,36 @@ function seriesCardHTML(it){
     </div>`;
 }
 // ===== Sélection multiple =====
-function enterSelect(){ if(!ui.selectMode){ ui.selectMode = true; document.body.classList.add('selecting'); } }
 // une carte série ne représente QUE les tomes visibles sous le filtre courant
 function visibleSeriesBooks(name){ const k = name.trim().toLowerCase(); return filteredBooks().filter(b=>seriesKey(b)===k); }
+function syncSelectionHits(){
+  $$('#lib-grid .card').forEach(card=>{
+    const hit=card.querySelector('.card-hit'); if(!hit) return;
+    if(card.dataset.series){
+      const ids=visibleSeriesBooks(card.dataset.series).map(b=>b.id), all=ids.length>0 && ids.every(id=>ui.selection.has(id));
+      hit.setAttribute('aria-label', `${all?'Désélectionner':'Sélectionner'} la série ${card.dataset.series}`);
+      hit.setAttribute('aria-pressed', String(all));
+    }else{
+      const b=state.books.find(x=>x.id===card.dataset.id); if(!b) return;
+      const selected=ui.selection.has(b.id);
+      hit.setAttribute('aria-label', `${selected?'Désélectionner':'Sélectionner'} ${fullTitle(b)}`);
+      hit.setAttribute('aria-pressed', String(selected));
+    }
+  });
+}
+function enterSelect(){
+  if(ui.selectMode) return;
+  ui.selectMode = true; document.body.classList.add('selecting'); syncSelectionHits();
+}
 function reflectCard(cardEl){
   if(!cardEl) return;
-  if(cardEl.dataset.series){ cardEl.outerHTML = seriesCardHTML({name:cardEl.dataset.series.trim(), books:visibleSeriesBooks(cardEl.dataset.series)}); }
-  else if(cardEl.dataset.id){ const b = state.books.find(x=>x.id===cardEl.dataset.id); if(b) cardEl.outerHTML = bookCardHTML(b); }
+  if(cardEl.dataset.series){
+    const it={name:cardEl.dataset.series.trim(), books:visibleSeriesBooks(cardEl.dataset.series)};
+    cardEl.outerHTML = ui.libLayout==='list' ? seriesRowHTML(it) : seriesCardHTML(it);
+  }else if(cardEl.dataset.id){
+    const b = state.books.find(x=>x.id===cardEl.dataset.id);
+    if(b) cardEl.outerHTML = ui.libLayout==='list' ? bookRowHTML(b) : bookCardHTML(b);
+  }
 }
 function toggleId(id, cardEl){
   ui.selection.has(id) ? ui.selection.delete(id) : ui.selection.add(id);
@@ -1719,6 +1757,7 @@ $('#lib-grid').addEventListener('pointermove', e => {
 // Navigation clavier entre les couvertures (flèches)
 $('#lib-grid').addEventListener('keydown', e => {
   if(!['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Home','End'].includes(e.key)) return;
+  if(!e.target.matches('.card-hit')) return;
   const cards = [...$('#lib-grid').querySelectorAll('.card')];
   if(!cards.length) return;
   const cur = cards.indexOf(document.activeElement.closest('.card'));
@@ -1733,7 +1772,8 @@ $('#lib-grid').addEventListener('keydown', e => {
   else if(e.key==='ArrowUp') n = Math.max(0, cur-cols);
   else if(e.key==='Home') n = 0;
   else if(e.key==='End') n = cards.length-1;
-  cards[n].focus();
+  const target = cards[n].querySelector('.card-hit');
+  if(target) target.focus();
 });
 
 /* =============== Actions en masse =============== */
@@ -2552,7 +2592,9 @@ function openDetail(id, opts={}){
   const study = studyCounts(b);
 
   $('#detail-body').innerHTML = `
-    <div class="dcover"><div class="cover${b.cover?' zoomable':''}"${b.cover?' data-zoom="1"':''}>${coverHTML(b)}</div></div>
+    <div class="dcover">${b.cover
+      ? `<button type="button" class="cover zoomable" data-zoom="1" aria-label="Agrandir la couverture de ${esc(fullTitle(b))}">${coverHTML(b)}</button>`
+      : `<div class="cover">${coverHTML(b)}</div>`}</div>
     <div class="dmain">
       <h3 class="dt" id="detail-title">${esc(fullTitle(b))}</h3>
       <div class="da">${esc(authorsStr(b))}</div>
@@ -2966,7 +3008,8 @@ function openList(id){
     </div>
     ${l.desc ? `<p class="list-desc">${esc(l.desc)}</p>` : ''}
     ${books.length ? `<div class="ld-grid">${books.map((b,i)=>`
-      <div class="ld-item" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, position ${i+1}">
+      <div class="ld-item" data-id="${esc(b.id)}">
+        <button type="button" class="ld-hit" aria-label="Ouvrir ${esc(fullTitle(b))}, position ${i+1}"></button>
         <span class="idx">${i+1}</span>
         <div class="cover">${coverHTML(b)}</div>
         <button class="rm" data-rm="${esc(b.id)}" title="Retirer" aria-label="Retirer de la liste">✕</button>
@@ -3000,12 +3043,12 @@ function openSeries(name){
       <textarea id="s-review" aria-label="Mon avis sur la série" rows="2" placeholder="Ton avis sur la série dans son ensemble…">${esc(rec.review||'')}</textarea>
     </div>
     ${books.map(b=>`
-      <div class="tome-row" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, ${STATUS_LABEL[b.status]}">
+      <button type="button" class="tome-row" data-id="${esc(b.id)}" aria-label="Ouvrir ${esc(fullTitle(b))}, ${STATUS_LABEL[b.status]}">
         <div class="mini">${coverHTML(b, true)}</div>
         <div class="ti"><b>${b.volume!=null ? 'T.'+b.volume : '—'}</b>${b.title && b.title.toLowerCase()!==name.toLowerCase() ? ' · '+esc(b.title) : ''}</div>
         ${b.rating ? `<span class="stars" style="font-size:12px">${starsTxt(b.rating)}</span>` : ''}
         <span class="st-tag ${esc(b.status)}">${STATUS_LABEL[b.status]}</span>
-      </div>`).join('')}
+      </button>`).join('')}
     <div style="display:flex; margin-top:12px">
       ${!complete ? `<button class="btn small" id="s-next">＋ Tome ${maxVol+1}</button>` : `<span style="font-size:13px;color:var(--green);font-weight:600">Série complète 🎉</span>`}
       <span style="flex:1"></span>
@@ -3168,16 +3211,16 @@ function renderStats(){
   // Objectif annuel
   const gi = goalInfo(yr);
   const recapBtn = `<button class="btn small" id="recap-btn" style="margin-top:12px">🎉 Rétro ${yr}</button>`;
-  $('#goal-panel').innerHTML = (gi ? `
-    <h4>Objectif ${yr}</h4>
+  const goalContent = gi ? `
+    <span class="goal-title">Objectif ${yr}</span>
     <div class="goal-big">
       <span class="gnum">${gi.done}<small> / ${gi.goal} lectures</small></span>
       <div class="gbar"><div class="fill" style="width:${Math.min(100, gi.done/gi.goal*100)}%"></div></div>
       ${paceHTML(gi)}
     </div>` : `
-    <h4>Objectif ${yr}</h4>
-    <p style="font-size:14px; color:var(--muted)">🎯 Aucun objectif défini — clique ici pour te lancer un défi de lectures pour ${yr}.</p>`) + recapBtn;
-  $('#goal-panel').setAttribute('aria-label', `Objectif ${yr} — cliquer pour modifier`);
+    <span class="goal-title">Objectif ${yr}</span>
+    <span style="display:block;font-size:14px; color:var(--muted)">Aucun objectif défini — active un défi de lectures pour ${yr}.</span>`;
+  $('#goal-panel').innerHTML = `<button type="button" class="goal-edit" aria-label="Modifier l’objectif de lecture ${yr}">${goalContent}</button>${recapBtn}`;
 
   // Heatmap
   const yearsInData = [...new Set([...Object.keys(activityByDay()).map(d=>+d.slice(0,4)), yr])].sort((a,b)=>b-a).slice(0,5);
@@ -3286,17 +3329,21 @@ function renderHeat(){
   const first = new Date(y, 0, 1);
   const offset = (first.getDay()+6)%7; // lundi = 0
   const cells = [];
+  let total=0, activeDays=0, run=0, maxRun=0;
   for(let i=0;i<offset;i++) cells.push('<i style="visibility:hidden"></i>');
   const d = new Date(y,0,1);
   while(d.getFullYear()===y){
     const key = dateKey(d);
     const n = act[key]||0;
+    total += n;
+    if(n){ activeDays++; run++; maxRun=Math.max(maxRun,run); } else run=0;
     const lvl = n===0 ? '' : n===1 ? 'l1' : n===2 ? 'l2' : 'l3';
     const label = d.toLocaleDateString('fr-FR', {day:'numeric', month:'short'});
     cells.push(`<i class="${lvl}" title="${label} — ${n} activité${n>1?'s':''}"></i>`);
     d.setDate(d.getDate()+1);
   }
   $('#heat').innerHTML = cells.join('');
+  $('#heat-summary').textContent = `${y} : ${total} activité${total===1?'':'s'} répartie${total===1?'':'s'} sur ${activeDays} jour${activeDays===1?'':'s'}. Série maximale : ${maxRun} jour${maxRun===1?'':'s'}.`;
 }
 $('#heat-years').addEventListener('click', e => {
   const c = e.target.closest('[data-hy]'); if(!c) return;
@@ -3310,7 +3357,7 @@ $('#type-metric').addEventListener('click', e => {
 });
 $('#goal-panel').addEventListener('click', e=>{
   if(e.target.closest('#recap-btn')){ showRecap(new Date().getFullYear()); return; }
-  setGoal(new Date().getFullYear());
+  if(e.target.closest('.goal-edit')) setGoal(new Date().getFullYear());
 });
 // Rétrospective annuelle (« Wrapped ») — pure agrégation en lecture
 function yearRecap(year){
@@ -4196,13 +4243,28 @@ function closeOverlays(restore=true){
   if(restore && ui.lastFocus && document.contains(ui.lastFocus)){ try{ ui.lastFocus.focus(); }catch(_){} }
   if(_dirtyBg){ _dirtyBg=false; render(); } // rattrape le rendu de fond différé pendant la modale
 }
+let _coverLastFocus = null;
+function closeCover(restore=true){
+  const ov = $('#ov-cover');
+  if(!ov.classList.contains('open')) return;
+  ov.classList.remove('open');
+  syncModalIsolation();
+  if(restore && _coverLastFocus && document.contains(_coverLastFocus)){
+    try{ _coverLastFocus.focus(); }catch(_){ }
+  }
+  _coverLastFocus = null;
+}
 function openCover(url){
   const ov = $('#ov-cover');
+  _coverLastFocus = document.activeElement;
   ov.querySelector('img').src = url;
   ov.classList.add('open');
   syncModalIsolation();
+  queueMicrotask(()=>$('#cover-close').focus({preventScroll:true}));
 }
-$('#ov-cover').addEventListener('click', ()=>{ $('#ov-cover').classList.remove('open'); syncModalIsolation(); });
+$('#ov-cover').addEventListener('click', e=>{
+  if(e.target===$('#ov-cover') || e.target.closest('#cover-close')) closeCover();
+});
 $('#ov-card').addEventListener('click', e=>{ // se ferme seul, sans fermer la modale en dessous
   if(e.target===$('#ov-card') || e.target.closest('#card-close')){ $('#ov-card').classList.remove('open'); syncModalIsolation(); }
 });
@@ -4213,7 +4275,7 @@ $$('.overlay').forEach(o => o.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if(e.key!=='Escape') return;
   const cov = $('#ov-cover');
-  if(cov.classList.contains('open')){ cov.classList.remove('open'); syncModalIsolation(); return; } // ferme d'abord le lightbox
+  if(cov.classList.contains('open')){ closeCover(); return; } // ferme d'abord le lightbox
   const ocd = $('#ov-card');
   if(ocd.classList.contains('open')){ ocd.classList.remove('open'); syncModalIsolation(); return; } // puis l'aperçu de carte
   if($$('.overlay.open').length){ closeOverlays(); return; }
@@ -4365,15 +4427,24 @@ function refreshResume(){
 $('#btn-resume').addEventListener('click', ()=>{ const b = lastReadingBook(); if(b) openDetail(b.id); });
 $('#fab').addEventListener('click', ()=>{ ui.view==='lists' ? $('#btn-new-list').click() : openSearch(); });
 
+$('#btn-open-search').setAttribute('aria-keyshortcuts','Alt+A Alt+N');
+$('#fab').setAttribute('aria-keyshortcuts','Alt+A Alt+N');
+$('#btn-resume').setAttribute('aria-keyshortcuts','Alt+R');
+$('#lib-q').setAttribute('aria-keyshortcuts','Alt+/');
+$$('#nav button').forEach((btn,i)=>btn.setAttribute('aria-keyshortcuts',`Alt+${i+1}`));
+
 document.addEventListener('keydown', e => {
   if(e.target.matches && e.target.matches('input, textarea, select, [contenteditable]')) return;
   if($$('.overlay.open').length) return; // Escape est géré ailleurs
-  if(e.metaKey || e.ctrlKey || e.altKey) return;
+  // Un modificateur est obligatoire : les raccourcis à caractère seul perturbent notamment
+  // la commande vocale et sont interdits par WCAG 2.1.4 sans mécanisme de désactivation.
+  if(!e.altKey || e.metaKey || e.ctrlKey) return;
   const k = e.key.toLowerCase();
+  const digit = (e.code||'').match(/^Digit([1-6])$/);
   if(k==='a' || k==='n'){ e.preventDefault(); openSearch(); }
-  else if(k==='/'){ e.preventDefault(); selectView('library'); $('#lib-q').focus(); }
+  else if(k==='/' || e.code==='Slash'){ e.preventDefault(); selectView('library'); $('#lib-q').focus(); }
   else if(k==='r'){ const b = lastReadingBook(); if(b){ e.preventDefault(); openDetail(b.id); } }
-  else if(k>='1' && k<='6'){ const btns=$$('#nav button'); if(btns[+k-1]){ e.preventDefault(); selectView(btns[+k-1].dataset.view); } }
+  else if(digit){ const btns=$$('#nav button'), n=+digit[1]; if(btns[n-1]){ e.preventDefault(); selectView(btns[n-1].dataset.view); } }
 });
 
 /* =============== Amis (Tome Social) =============== */
@@ -4669,7 +4740,7 @@ function shelfHash(s){ let h = 5381; for(let i=0;i<s.length;i++) h = ((h<<5)+h+s
 function shelfTag(mode, payload){ return (social.me?social.me.id:'')+':'+mode+':'+payload.length+':'+shelfHash(JSON.stringify(payload)); }
 function rememberShelfTag(tag){ try{ localStorage.setItem(SHELF_TAG_KEY, tag); }catch(_){ } }
 function scheduleShelfPush(delay=25000){
-  if(!social.me || social.tosOutdated || (social.me.shareMode||'all')==='none') return;
+  if(!social.me || social.tosOutdated || (social.me.shareMode||'none')==='none') return;
   _shelfDirty = true; clearTimeout(_shelfTimer); _shelfTimer=0;
   if(!navigator.onLine) return;
   _shelfTimer = setTimeout(()=>{ _shelfTimer=0; pushShelf(); }, delay);
@@ -4677,7 +4748,7 @@ function scheduleShelfPush(delay=25000){
 async function pushShelf(){
   if(!social.me || social.tosOutdated) return;
   if(_shelfPushing){ _shelfDirty = true; return; }
-  const mode = social.me.shareMode||'all'; if(mode==='none') return;
+  const mode = social.me.shareMode||'none'; if(mode==='none') return;
   const payload = shelfPayload(mode); const tag = shelfTag(mode, payload);
   let prev = ''; try{ prev = localStorage.getItem(SHELF_TAG_KEY)||''; }catch(_){ }
   if(tag===prev){ _shelfDirty = false; return; }
@@ -4814,7 +4885,7 @@ async function renderAccount(){
     </div>
     <h4 style="color:var(--red)">Zone danger</h4>
     <div class="danger-zone">
-      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La suppression est <b>définitive</b> : ton profil, tes amis et ta bibliothèque partagée seront effacés du serveur. Ta bibliothèque locale, elle, reste sur cet appareil.</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La suppression est <b>définitive</b> : ton profil, tes amis, ta bibliothèque privée sauvegardée et ton étagère partagée seront effacés du serveur. Ta bibliothèque locale, elle, reste sur cet appareil.</p>
       <button class="btn danger" id="acc-delete">Supprimer définitivement mon compte</button>
     </div>
   </div>`;
@@ -4874,7 +4945,7 @@ async function renderAccount(){
     try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); renderFriends();
     toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici — les autres appareils n\'ont pas pu être joints'); };
   $('#acc-delete').onclick = async ()=>{
-    if(!await uiConfirm({title:'Supprimer ton compte ?', message:'Action IRRÉVERSIBLE. Ton profil, tes amis et ta bibliothèque partagée seront effacés du serveur. Ta bibliothèque locale reste sur cet appareil.', okLabel:'Continuer', danger:true})) return;
+    if(!await uiConfirm({title:'Supprimer ton compte ?', message:'Action IRRÉVERSIBLE. Ton profil, tes amis, ta bibliothèque privée sauvegardée et ton étagère partagée seront effacés du serveur. Ta bibliothèque locale reste sur cet appareil.', okLabel:'Continuer', danger:true})) return;
     const pw = await uiPrompt({title:'Confirme avec ton mot de passe', message:'Tape ton mot de passe pour supprimer définitivement le compte.', type:'password', okLabel:'Supprimer'});
     if(pw==null) return;
     try{ await api('/api/account/delete', {method:'POST', body:{password:pw}});
@@ -4949,13 +5020,22 @@ function renderAuth(box, mode, errMsg=''){
     ${social.invite ? `<div class="invite-banner">💌 <b>@${esc(social.invite)}</b> t'invite sur Tome — connecte-toi ou crée un compte pour l'ajouter en ami.</div>` : ''}
     <div class="auth-card">
       <h3>${mode==='login'?'Se connecter':'Créer un compte'}</h3>
-      <p class="sub">Retrouve tes amis, compare vos lectures et suis leurs coups de cœur. Ta bibliothèque privée reste sur ton appareil ; seul ce que tu choisis de partager est synchronisé.</p>
+      <p class="sub">${mode==='login'
+        ? 'Retrouve ta bibliothèque privée sur tes appareils et les lectures que tes amis ont choisi de partager.'
+        : 'Ta bibliothèque complète sera sauvegardée de façon privée sur ton compte pour la retrouver sur tes appareils. Le partage avec tes amis est séparé et désactivé par défaut.'}</p>
       <label for="soc-user">Pseudo</label>
       <input id="soc-user" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex : lucas_bd">
       ${mode==='signup'?`<label for="soc-name">Nom affiché</label><input id="soc-name" placeholder="ex : Lucas">`:''}
       <label for="soc-pass">Mot de passe</label>
       <input id="soc-pass" type="password" maxlength="256" autocomplete="${mode==='login'?'current-password':'new-password'}" placeholder="8 caractères minimum">
-      ${mode==='signup'?`<label class="consent-row" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);display:flex;gap:8px;align-items:flex-start;margin-top:12px">
+      ${mode==='signup'?`<fieldset class="share-options signup-share" id="signup-share" aria-describedby="signup-share-help">
+        <legend>Ce que mes amis pourront voir</legend>
+        <p id="signup-share-help">Ce réglage concerne seulement ton étagère sociale, jamais ta sauvegarde privée.</p>
+        <label><input type="radio" name="signup-share" value="none" checked><span><b>Rien</b><small>Privé par défaut</small></span></label>
+        <label><input type="radio" name="signup-share" value="ratings"><span><b>Notes seules</b><small>Sans tes critiques</small></span></label>
+        <label><input type="radio" name="signup-share" value="all"><span><b>Tout</b><small>Titres, notes et critiques</small></span></label>
+      </fieldset>
+      <label class="consent-row" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);display:flex;gap:8px;align-items:flex-start;margin-top:12px">
         <input type="checkbox" id="soc-consent" style="width:auto;margin-top:3px">
         <span>J'accepte les <button type="button" class="linkish" data-legal>mentions légales et la politique de confidentialité</button>.</span></label>`:''}
       <div class="auth-err" role="alert" aria-live="assertive">${esc(errMsg)}</div>
@@ -4974,7 +5054,8 @@ function renderAuth(box, mode, errMsg=''){
     if(mode==='signup' && !$('#soc-consent').checked){ showErr('Tu dois accepter les mentions légales pour créer un compte.'); return; }
     $('#soc-submit').textContent = '…'; $('#soc-submit').disabled = true;
     try{
-      const body = mode==='login' ? {username, password} : {username, password, displayName, consent:true};
+      const shareMode = mode==='signup' ? ($('#signup-share input:checked')?.value || 'none') : undefined;
+      const body = mode==='login' ? {username, password} : {username, password, displayName, consent:true, shareMode};
       const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
       localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tosOutdated = mode!=='signup'; social.tab='feed'; social.view=null;
       try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d'accueil
@@ -5054,7 +5135,7 @@ Responsable de traitement : Lucas Marroig (lucas.marroig@essec.edu).
 Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n'étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l'abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus).
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l'inscription).
-Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n'envoie jamais rien. Exception si tu l'actives toi-même : « Ma page publique » (Amis → Mon compte) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
+Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Le partage social est réglé sur « Rien » par défaut. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n'envoie jamais rien. Exception si tu l'actives toi-même : « Ma page publique » (Amis → Mon compte) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
 Services tiers : Tome n'installe aucun traceur, mais pour afficher les couvertures et proposer des recherches de livres, ton navigateur contacte directement Google Books (googleapis.com, books.google.com) et Open Library (openlibrary.org, covers.openlibrary.org) — qui reçoivent alors ta requête ou l'identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n'a lieu que quand tu la déclenches ; les « Idées du jour » ne s'activent qu'avec ton accord explicite.
 Liens d'achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d'affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d'Amazon qui s'appliquent.
 Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
@@ -5267,7 +5348,7 @@ async function loadFriendLists(){
 }
 async function renderMyShare(){
   const el = $('#soc-tab');
-  const mode = social.me.shareMode || 'all';
+  const mode = social.me.shareMode || 'none';
   const shareable = shareableBooks();
   el.innerHTML = `
     <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">Choisis ce que tes amis peuvent voir — ton étagère se synchronise ensuite automatiquement. ${shareable.length} titre(s) partageables (lus ou notés).${(()=>{
@@ -5276,16 +5357,16 @@ async function renderMyShare(){
       const n = shareable.filter(b=>b.cover && !SHAREABLE_COVER.test(b.cover)).length;
       return n ? ` <span style="color:var(--faint)">${n} couverture(s) ne seront pas partagée(s) — image hors catalogue, le titre reste visible.</span>` : '';
     })()}</p>
-    <div class="seg" id="share-mode" style="margin-bottom:14px">
-      <button data-mode="all" class="${mode==='all'?'on':''}">Tout</button>
-      <button data-mode="ratings" class="${mode==='ratings'?'on':''}">Notes seules</button>
-      <button data-mode="none" class="${mode==='none'?'on':''}">Rien</button>
-    </div>
-    <p style="font-size:12.5px;color:var(--faint);margin-bottom:16px">« Tout » : titres, notes, critiques, dates. « Notes seules » : sans tes critiques. « Rien » : profil masqué — ton étagère partagée et les ♥ reçus sont effacés du serveur.</p>
+    <fieldset class="share-options" id="share-mode">
+      <legend>Visibilité de mon étagère</legend>
+      <label><input type="radio" name="my-share" value="none" ${mode==='none'?'checked':''}><span><b>Rien</b><small>Profil masqué, étagère sociale effacée</small></span></label>
+      <label><input type="radio" name="my-share" value="ratings" ${mode==='ratings'?'checked':''}><span><b>Notes seules</b><small>Titres, notes et dates, sans critiques</small></span></label>
+      <label><input type="radio" name="my-share" value="all" ${mode==='all'?'checked':''}><span><b>Tout</b><small>Titres, notes, critiques et dates</small></span></label>
+    </fieldset>
     <button class="btn primary" id="share-sync">↻ Appliquer et synchroniser maintenant</button>
-    <div id="share-status" style="font-size:13px;color:var(--muted);margin-top:12px"></div>`;
+    <div id="share-status" role="status" aria-live="polite" style="font-size:13px;color:var(--muted);margin-top:12px"></div>`;
   let chosen = mode;
-  $$('#share-mode button').forEach(btn=>btn.addEventListener('click', ()=>{ chosen=btn.dataset.mode; $$('#share-mode button').forEach(b=>b.classList.toggle('on', b===btn)); }));
+  $$('#share-mode input').forEach(input=>input.addEventListener('change', ()=>{ chosen=input.value; }));
   $('#share-sync').addEventListener('click', async (ev)=>{
     const btn = ev.currentTarget; if(btn.disabled) return; btn.disabled = true;
     $('#share-status').textContent = 'Synchronisation…';

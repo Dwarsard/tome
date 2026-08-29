@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Aller au contenu</a>
 
 <!-- ======== PAGE D'ACCUEIL PUBLIQUE (visiteurs) ======== -->
 <div id="welcome" hidden role="dialog" aria-modal="true" aria-label="Bienvenue sur Tome">
@@ -53,7 +54,7 @@
       <div class="invite-banner" id="lp-invite" hidden></div>
       <div class="lp-eyebrow">Livres · BD · Manga</div>
       <h1 class="lp-title">Ta bibliothèque,<br>ton <em>journal</em> de lecture.</h1>
-      <p class="lp-sub">Note ce que tu lis, retrouve tes coups de cœur, suis ta progression et découvre les lectures de tes amis. Ta collection te suit partout, sur tous tes appareils.</p>
+      <p class="lp-sub">Note ce que tu lis, retrouve tes coups de cœur, suis ta progression et découvre les lectures de tes amis. Avec un compte, ta collection te suit partout, sur tous tes appareils.</p>
       <div class="lp-cta">
         <button class="btn primary lp-big" data-lp="signup">Créer mon compte — c'est gratuit</button>
         <button class="lp-link lp-try" data-lp="try">Essayer d'abord →</button>
@@ -134,7 +135,7 @@
 </header>
 <button class="fab" id="fab" aria-label="Ajouter" title="Ajouter">＋</button>
 
-<main>
+<main id="main-content" tabindex="-1">
   <!-- ======== AUJOURD'HUI ======== -->
   <section class="view active" id="view-today" aria-labelledby="today-title">
     <div class="today-hero">
@@ -149,7 +150,8 @@
   </section>
 
   <!-- ======== BIBLIOTHÈQUE ======== -->
-  <section class="view" id="view-library">
+  <section class="view" id="view-library" aria-labelledby="library-title">
+    <h2 id="library-title" class="sr-only">Bibliothèque</h2>
     <div class="filterbar compact" id="filterbar">
       <div class="chips" id="status-chips">
         <button class="chip active" data-status="all" aria-pressed="true">Tout</button>
@@ -213,11 +215,12 @@
   <section class="view" id="view-stats">
     <h2 class="section">Statistiques</h2>
     <div class="stat-tiles" id="stat-tiles"></div>
-    <div class="panel clickable" id="goal-panel" role="button" tabindex="0"></div>
+    <div class="panel clickable" id="goal-panel"></div>
     <div class="panel">
       <h4>Régularité</h4>
       <div class="heat-years chips" id="heat-years"></div>
-      <div class="heat-wrap"><div class="heat" id="heat"></div></div>
+      <p class="heat-summary" id="heat-summary" role="status" aria-live="polite"></p>
+      <div class="heat-wrap" aria-hidden="true"><div class="heat" id="heat"></div></div>
     </div>
     <div class="panel"><h4>Rythme mois par mois</h4><div class="rating-histo" id="month-bars"></div></div>
     <div class="stat-cols">
@@ -384,7 +387,10 @@
 </div>
 
 <!-- ======== LIGHTBOX COUVERTURE ======== -->
-<div class="overlay" id="ov-cover" role="dialog" aria-modal="true" aria-label="Agrandissement de la couverture"><img alt="Couverture" referrerpolicy="no-referrer"></div>
+<div class="overlay" id="ov-cover" role="dialog" aria-modal="true" aria-label="Agrandissement de la couverture">
+  <button type="button" class="cover-close" id="cover-close" aria-label="Fermer l’agrandissement">✕</button>
+  <img alt="Couverture" referrerpolicy="no-referrer">
+</div>
 
 <!-- ======== BANDEAU MISE À JOUR PWA ======== -->
 <div id="update-bar" role="status" data-modal-exempt><span>✨ Nouvelle version disponible</span><button class="btn small primary" id="update-reload">Recharger</button></div>
