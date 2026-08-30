@@ -28,6 +28,24 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="format-detection" content="telephone=no">
 <title>Tome — Journal de lecture</title>
+<!-- Données structurées : dit aux moteurs ce qu'est Tome. Un script type ld+json n'est pas
+     exécutable — la CSP script-src 'self' ne s'applique pas aux blocs de données. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Tome",
+  "alternateName": "Tome — Journal de lecture",
+  "url": "https://montome.fr/",
+  "description": "Ta bibliothèque et ton journal de lecture pour les livres, BD et manga : note, collectionne, suis tes séries et partage avec tes amis. Gratuit, sans publicité.",
+  "applicationCategory": "LifestyleApplication",
+  "operatingSystem": "Any",
+  "inLanguage": "fr",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  "publisher": { "@type": "Person", "name": "Lucas Marroig" }
+}
+</script>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180">
 <link rel="manifest" href="manifest.webmanifest">
@@ -106,7 +124,7 @@
       <p class="lp-colo-sub">Un compte gratuit, ta première fiche en trente secondes — et ce journal sera à toi pour longtemps.</p>
       <button class="btn primary lp-big" data-lp="signup">Créer mon compte</button>
     </div>
-    <div class="lp-foot"><span>Tome</span> · <button type="button" class="linkish" data-lp="legal">Confidentialité</button> · fait avec ❤ pour les lecteurs</div>
+    <div class="lp-foot"><span>Tome</span> · <a href="/confidentialite">Confidentialité</a> · fait avec ❤ pour les lecteurs</div>
   </div>
 </div>
 
