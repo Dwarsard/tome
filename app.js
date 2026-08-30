@@ -562,7 +562,11 @@ function fullTitle(b){
    Pour TOUCHER une commission : mets ton identifiant Amazon Partenaires dans AMAZON_TAG
    (ex : 'lucasm-21'), obtenu sur https://partenaires.amazon.fr. Sans identifiant, les boutons
    fonctionnent quand même mais ne rapportent rien. Lien de RECHERCHE (pas d'API à gérer). */
-const AMAZON_TAG = '';                 // ← ton tag Amazon Partenaires ici (ex : 'lucasm-21')
+const AMAZON_TAG = '';
+/* ---- Soutien volontaire ----
+   Colle ici ton lien Ko-fi ou Liberapay (ex : 'https://ko-fi.com/lucastome') : le bouton
+   « Soutenir Tome » apparaîtra dans Mon compte. Vide = aucun bouton nulle part. */
+const SUPPORT_URL = '';                 // ← ton tag Amazon Partenaires ici (ex : 'lucasm-21')
 const AMAZON_HOST = 'www.amazon.fr';
 function amazonUrl(b, kindle){
   const q = [fullTitle(b), (b.authors||[])[0]||''].filter(Boolean).join(' ');
@@ -3855,11 +3859,14 @@ async function showPublicProfile(uname){
         <div class="pp-t">${esc(b.title)}</div>
         ${b.rating ? `<div class="pp-r">${starsTxt(b.rating)}</div>` : ''}
       </div>`).join('')}</div>` : `<div class="pp-empty">Ce lecteur n'a encore rien partagé.</div>`}
+    <div style="text-align:center;margin-top:26px"><button type="button" class="linkish" data-pp-report="${esc(u.username)}" style="font-size:var(--fs-sm);color:var(--faint)">\u2690 Signaler ce profil</button></div>
     <section class="pp-cta">
       <h3>Et toi, tu lis quoi ?</h3>
       <p>Note tes livres, BD et manga, garde la trace de tes lectures et compare avec tes amis. Gratuit, sans publicité.</p>
       <a class="btn primary lp-big" href="/">Créer ma bibliothèque</a>
     </section>`;
+  const ppRep = body.querySelector('[data-pp-report]');
+  if(ppRep) ppRep.addEventListener('click', ()=>reportContent('profile', ppRep.dataset.ppReport));
 }
 
 /* =============== Notation rapide ===============
@@ -4031,6 +4038,18 @@ function ditherRegion(ctx, x, y, w, h, r){
     ctx.restore();
   }catch(_){ }
 }
+// Mesure première partie des clics sortants (agrégat jour\u00d7type, aucun identifiant —
+// exempt de consentement). sendBeacon : jamais bloquant pour la navigation.
+document.addEventListener('click', e => {
+  const buy = e.target.closest && e.target.closest('a.btn.buy');
+  if(!buy) return;
+  try{
+    const kind = buy.classList.contains('amz') ? 'amazon' : 'kindle';
+    const blob = new Blob([JSON.stringify({ kind })], { type:'application/json' });
+    navigator.sendBeacon(API_BASE + '/api/out', blob);
+  }catch(_){ }
+});
+
 async function ensureCardFonts(){
   if(!(document.fonts && document.fonts.load)) return;
   try{ await Promise.all([
@@ -4882,6 +4901,7 @@ async function renderAccount(){
       <button class="btn" id="acc-logoutall">Se déconnecter partout</button>
       <button class="btn" id="acc-legal">${ic('doc',15)} Mentions légales</button>
       <button class="btn" id="acc-pledge">${ic('heart',15)} Toujours gratuit</button>
+      ${SUPPORT_URL ? `<a class="btn" id="acc-support" href="${SUPPORT_URL}" target="_blank" rel="noopener">\u2665 Soutenir Tome</a>` : ''}
     </div>
     <h4 style="color:var(--red)">Zone danger</h4>
     <div class="danger-zone">
@@ -5037,7 +5057,7 @@ function renderAuth(box, mode, errMsg=''){
       </fieldset>
       <label class="consent-row" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);display:flex;gap:8px;align-items:flex-start;margin-top:12px">
         <input type="checkbox" id="soc-consent" style="width:auto;margin-top:3px">
-        <span>J'accepte les <button type="button" class="linkish" data-legal>mentions légales et la politique de confidentialité</button>.</span></label>`:''}
+        <span>J'accepte les <button type="button" class="linkish" data-legal>mentions légales et la politique de confidentialité</button> et les <button type="button" class="linkish" data-cgu>conditions d'utilisation</button>.</span></label>`:''}
       <div class="auth-err" role="alert" aria-live="assertive">${esc(errMsg)}</div>
       <button class="btn primary" id="soc-submit" style="width:100%; justify-content:center">${mode==='login'?'Connexion':'Créer mon compte'}</button>
       <div class="switch">${mode==='login'
@@ -5072,6 +5092,7 @@ function renderAuth(box, mode, errMsg=''){
   $('#soc-submit').addEventListener('click', submit);
   $('#soc-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
   const legal = $('#friends-body [data-legal]'); if(legal) legal.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
+  const cgu = $('#friends-body [data-cgu]'); if(cgu) cgu.addEventListener('click', ()=>openDialog({title:"Conditions d'utilisation", message:TERMS_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
   $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>a.dataset.auth==='recover' ? renderRecover(box) : renderAuth(box, a.dataset.auth)));
 }
 // Récupération de compte par code de secours (« mot de passe oublié »)
@@ -5128,6 +5149,23 @@ Et trois « jamais » :
 • Jamais de limite rétroactive : ce qui est gratuit aujourd'hui le reste.
 
 Si des options payantes arrivent, ce sera du confort EN PLUS (statistiques avancées, personnalisation, soutien) — jamais une rançon sur ce que tu utilises déjà.`;
+
+/* ---- Signalement de contenu (canal « notice and action ») ---- */
+async function reportContent(targetType, targetKey){
+  const reason = await openDialog({
+    title:'Signaler ce contenu',
+    message:'Explique en une phrase ce qui pose problème (contenu illicite, harcèlement, spam\u2026). Ton signalement est transmis au responsable du site.',
+    input:{ multiline:true, placeholder:'Ce contenu\u2026' },
+    actions:[{label:'Annuler', value:null, cancel:true},{label:'Envoyer le signalement', returnsInput:true, default:true}],
+  });
+  if(reason==null) return;                       // annulé (le dialogue purge ses champs à la fermeture)
+  const txt = String(reason).trim();
+  if(txt.length<5){ toast('Décris le problème en quelques mots.'); return; }
+  try{
+    await api('/api/report', { method:'POST', body:{ targetType, targetKey, reason:txt } });
+    toast('Signalement envoyé — merci, il sera examiné.');
+  }catch(e){ toast(e && e.message==='offline' ? 'Hors ligne — réessaie plus tard.' : (e.message||'Envoi impossible')); }
+}
 function showPledge(){ openDialog({title:'💚 Toujours gratuit', message:FREE_PLEDGE, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
@@ -5143,6 +5181,19 @@ Hébergement et transferts : Cloudflare, Inc. (101 Townsend St, San Francisco, �
 Liens d'achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d'affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d'Amazon qui s'appliquent.
 Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
 Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil. Si tu estimes que tes droits ne sont pas respectés, tu peux adresser une réclamation à la CNIL (cnil.fr).`;
+
+const TERMS_TEXT = `Tome — conditions d'utilisation.
+
+L'essentiel : Tome est un journal de lecture. Sois honnête, sois correct, et tout ira bien.
+
+Le service : Tome te permet de tenir ta bibliothèque, de noter et critiquer tes lectures, et de les partager avec des amis si tu le décides. Le cœur du service est gratuit (voir « Toujours gratuit »).
+Ton compte : tu es responsable de ce qui se passe avec ton compte et de la garde de ton mot de passe et de ton code de secours. Un compte = une personne réelle.
+Tes contenus : tes critiques, avis et listes restent les tiens. En les partageant (amis ou page publique), tu autorises Tome à les afficher aux personnes que TU as choisies — rien d'autre, aucune revente, aucune utilisation publicitaire.
+Contenus interdits : contenus illégaux, harcèlement, haine, spam, usurpation d'identité, ou toute utilisation visant à nuire au service ou à ses membres.
+Signalement : chaque critique, commentaire et profil public peut être signalé (bouton « Signaler »). Les signalements sont examinés rapidement ; un contenu manifestement illicite est retiré, et l'auteur peut en discuter par email.
+Modération et résiliation : en cas d'abus, Tome peut retirer un contenu, suspendre ou fermer un compte — avec explication, sauf obligation légale contraire. Tu peux supprimer ton compte à tout moment (Mon compte), ce qui efface tes données du serveur.
+Disponibilité : Tome est un projet indépendant, fourni « en l'état », sans garantie de disponibilité permanente — l'export de ta bibliothèque est là pour que tes données ne dépendent jamais du service.
+Droit applicable : droit français. Contact : lucas.marroig@essec.edu.`;
 async function renderFeed(){
   const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
   try{
@@ -5182,6 +5233,7 @@ async function renderFeed(){
               aria-pressed="${x.i_hearted?'true':'false'}" title="J'aime" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts||''}</span></button>`}
             <button class="heart-btn cmt-btn" data-thread="${esc(x.username)}" data-key="${esc(x.book_key)}"
               aria-expanded="false" aria-controls="feed-thread-${fi}" title="Réponses" aria-label="${x.comments?`Réponses — ${x.comments}`:'Répondre'}">💬<span class="hn">${x.comments||''}</span></button>
+            ${!isMe ? `<button class="heart-btn rep-btn" data-report-review="${esc(x.username)}|${esc(x.book_key)}" title="Signaler cette critique" aria-label="Signaler cette critique">\u2690</button>` : ''}
           </div>
         </div>
       </div>
@@ -5204,6 +5256,10 @@ function onFeedClick(e){
   if(tb) return toggleThread(tb);
   const send = e.target.closest('.cmt-send');
   if(send) return sendComment(send.closest('.feed-thread').querySelector('.cmt-input'));
+  const rep = e.target.closest('[data-report-review]');
+  if(rep){ reportContent('review', rep.dataset.reportReview); return; }
+  const repc = e.target.closest('[data-report-comment]');
+  if(repc){ reportContent('comment', repc.dataset.reportComment); return; }
   const del = e.target.closest('[data-cmt-del]');
   if(del) return deleteComment(del);
 }
@@ -5215,6 +5271,7 @@ function threadHTML(d){
       <div class="cmt-body"><b>${esc(c.displayName)}</b> ${esc(c.text)}
         <span class="cmt-date">${new Date(c.at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span></div>
       ${(c.mine || d.canModerate) ? `<button class="cmt-del" data-cmt-del="${esc(c.id)}" title="Supprimer" aria-label="Supprimer ce commentaire">×</button>` : ''}
+      ${!c.mine ? `<button class="cmt-del" data-report-comment="${esc(c.id)}" title="Signaler" aria-label="Signaler ce commentaire">\u2690</button>` : ''}
     </div>`).join('');
   return (rows || `<p class="cmt-none">Sois le premier à répondre.</p>`) + `
     <div class="cmt-compose">
@@ -5538,7 +5595,12 @@ $('#welcome').addEventListener('click', e=>{
   try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus l'imposer au prochain lancement
   hideWelcome();
   if(a==='signup' || a==='login'){ selectView('friends'); if(!social.me) renderAuth($('#friends-body'), a==='signup'?'signup':'login'); }
-  // a==='try' : on entre simplement dans l'app (local, sans compte)
+  // « Essayer d'abord » sur une bibliothèque vide : on sème la démo pour montrer l'app
+  // habitée plutôt qu'un écran nu (le bandeau « Tout effacer » permet de repartir à zéro).
+  if(a==='try' && !state.books.length){
+    loadDemo();
+    toast('Bac à sable : fouille, note, supprime — « Tout effacer » quand tu veux.', { ms:6000 });
+  }
 });
 // couvertures de l'éventail : si une image ne charge pas (hors-ligne, 404), on la retire → la carte
 // dégradée avec le titre reste en repli élégant
