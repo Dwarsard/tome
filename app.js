@@ -16,8 +16,8 @@ const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;'
 const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
 
 /* =============== Icônes =================================================
-   Un emoji change de dessin selon l'appareil (le 📚 d'un iPhone n'est pas celui d'Android),
-   ne prend pas la couleur du thème et ne s'aligne jamais tout à fait. Ces icônes sont dessinées
+   Un emoji change de dessin selon l’appareil (le 📚 d’un iPhone n’est pas celui d’Android),
+   ne prend pas la couleur du thème et ne s’aligne jamais tout à fait. Ces icônes sont dessinées
    sur une grille de 24, épaisseur constante, et héritent de currentColor.
    Les emoji restent là où ils sont EXPRESSIFS (réactions ♥, récap 🎉, notifications 👋). */
 const ICONS = {
@@ -56,7 +56,7 @@ const ICONS = {
   calendar:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 11h16"/>',
   print:'<path d="M7 8V4h10v4"/><rect x="4" y="8" width="16" height="8" rx="1.5"/><path d="M7 13h10v7H7z"/>',
 };
-/* size en px ; le trait s'affine sur les grandes tailles pour rester léger */
+/* size en px ; le trait s’affine sur les grandes tailles pour rester léger */
 function ic(nom, size=18, extra=''){
   const d = ICONS[nom]; if(!d) return '';
   const w = size >= 30 ? 1.5 : 1.75;
@@ -65,16 +65,16 @@ function ic(nom, size=18, extra=''){
 }
 
 /* Isolation accessible des surfaces modales : le fond devient réellement indisponible au clavier
-   et aux lecteurs d'écran, quel que soit le type de modale ouvert. */
+   et aux lecteurs d’écran, quel que soit le type de modale ouvert. */
 const _modalHidden = new Map();
 function activeModalRoot(){
   const dlg=$('#ov-dialog'); if(dlg && dlg.classList.contains('open')) return dlg;
-  const pub=$('#pubprofile'); if(pub && !pub.hidden) return pub;   // page publique : couvre tout l'écran
+  const pub=$('#pubprofile'); if(pub && !pub.hidden) return pub;   // page publique : couvre tout l’écran
   const welcome=$('#welcome'); if(welcome && !welcome.hidden) return welcome;
   const overlays=$$('.overlay.open');
   if(!overlays.length) return null;
-  // La modale active est celle qui s'affiche AU-DESSUS : z-index d'abord, ordre DOM pour départager.
-  // (#ov-card s'empile volontairement sur une modale déjà ouverte alors qu'il la précède dans le DOM ;
+  // La modale active est celle qui s’affiche AU-DESSUS : z-index d’abord, ordre DOM pour départager.
+  // (#ov-card s’empile volontairement sur une modale déjà ouverte alors qu’il la précède dans le DOM ;
   // se fier au seul ordre DOM le laisserait inerte — donc visible mais impossible à cliquer.)
   const z = el => +getComputedStyle(el).zIndex || 0;
   return overlays.reduce((top, el)=> z(el) >= z(top) ? el : top);
@@ -125,7 +125,7 @@ function _dlgClose(val){
   ov.classList.remove('open');
   syncModalIsolation();
   // purge le contenu : un dialogue peut afficher un secret (code de secours) — il ne doit pas
-  // rester lisible dans le DOM d'un appareil partagé après fermeture
+  // rester lisible dans le DOM d’un appareil partagé après fermeture
   $('#dialog-msg').textContent=''; $('#dialog-title').textContent=''; $('#dialog-input').value='';
   document.removeEventListener('keydown', _dlgKey, true);
   const r = _dlgResolve; _dlgResolve = null;
@@ -259,8 +259,8 @@ function cleanTimestamp(v){
   if(typeof v==='string'){ const t = Date.parse(v); if(!Number.isNaN(t)) return new Date(t).toISOString(); }
   return new Date().toISOString();
 }
-// Les synopsis des API arrivent souvent avec du HTML (<p>, <b>…) : on n'en garde que le texte.
-// DOMParser ne charge aucune ressource et n'exécute aucun script.
+// Les synopsis des API arrivent souvent avec du HTML (<p>, <b>…) : on n’en garde que le texte.
+// DOMParser ne charge aucune ressource et n’exécute aucun script.
 function cleanSynopsis(v){
   if(typeof v!=='string' || !v) return '';
   let s = v;
@@ -332,8 +332,8 @@ function cleanRating(v){
   const n = numOrNull(v);
   return (n!==null && n>=0.5 && n<=5) ? Math.round(n*2)/2 : null;
 }
-// Compat ascendante : préserve les champs INCONNUS d'un enregistrement (typiquement ajoutés par une
-// version PLUS RÉCENTE de l'app tournant sur un autre appareil) au lieu de les supprimer — sinon un
+// Compat ascendante : préserve les champs INCONNUS d’un enregistrement (typiquement ajoutés par une
+// version PLUS RÉCENTE de l’app tournant sur un autre appareil) au lieu de les supprimer — sinon un
 // client en retard, en re-poussant, amputerait définitivement les données côté serveur (le serveur
 // stocke un blob opaque et accepte tout push au bon rev). Plafonné en taille : simple passe-plat.
 function carryUnknown(src, out, cap){
@@ -383,7 +383,7 @@ function normalizeBook(b){
     study: normalizeStudy(b.study),
     addedAt: cleanTimestamp(b.addedAt),
   };
-  return carryUnknown(b, out, 40000); // préserve les champs d'une version plus récente
+  return carryUnknown(b, out, 40000); // préserve les champs d’une version plus récente
 }
 function normalizeData(d){
   const out = {
@@ -463,11 +463,11 @@ function normalizeData(d){
   // purge des notes de série orphelines (plus aucun tome correspondant)
   const okSeries = new Set(out.books.map(seriesKey).filter(Boolean));
   for(const k of Object.keys(out.series)) if(!okSeries.has(k)) delete out.series[k];
-  return carryUnknown(d, out, 200000); // préserve les sections d'état d'une version plus récente
+  return carryUnknown(d, out, 200000); // préserve les sections d’état d’une version plus récente
 }
 function load(){
   let notice = null, corrupted = false;
-  // clés lues dans l'ordre : courante, sauvegarde d'avant-import, ancienne appli
+  // clés lues dans l’ordre : courante, sauvegarde d’avant-import, ancienne appli
   for(const key of [LS_KEY, LS_KEY+'-backup', ...LEGACY_KEYS]){
     const raw = localStorage.getItem(key);
     if(!raw) continue;
@@ -490,7 +490,7 @@ const state = _loaded.data;
 let _cacheReadings = null, _cacheActivity = null;
 function invalidateCache(){ _cacheReadings = null; _cacheActivity = null; }
 let _saveBroken = false;
-// Affiche/masque la bannière persistante d'échec de sauvegarde (stockage plein).
+// Affiche/masque la bannière persistante d’échec de sauvegarde (stockage plein).
 function setSaveBroken(broken){
   if(broken === _saveBroken) return;
   _saveBroken = broken;
@@ -503,7 +503,7 @@ function save(skipCount){
     state.meta = state.meta || {changes:0, lastExport:null};
     if(!skipCount) state.meta.changes++;
     localStorage.setItem(LS_KEY, JSON.stringify(state));
-    setSaveBroken(false); // une écriture a réussi : on lève l'alerte
+    setSaveBroken(false); // une écriture a réussi : on lève l’alerte
     // toute mutation de données peut changer la série de jours — les chemins rapides
     // (patchCard, actions rapides) ne repassent pas par render(), donc on rafraîchit ici
     if(typeof updateStreakPill==='function') updateStreakPill();
@@ -514,10 +514,10 @@ function save(skipCount){
     return true;
   }catch(e){
     console.error('save failed', e);
-    setSaveBroken(true); // bannière persistante tant que le stockage n'accepte pas d'écriture
+    setSaveBroken(true); // bannière persistante tant que le stockage n’accepte pas d’écriture
     // Le stockage local est plein, mais la sauvegarde SERVEUR, elle, ne dépend pas de localStorage
-    // (pushLibrary sérialise l'état en mémoire) : on la planifie quand même, sinon un utilisateur
-    // connecté perd ses deux filets d'un coup et croit à tort être sauvé « sur son compte ».
+    // (pushLibrary sérialise l’état en mémoire) : on la planifie quand même, sinon un utilisateur
+    // connecté perd ses deux filets d’un coup et croit à tort être sauvé « sur son compte ».
     if(typeof scheduleLibPush==='function' && typeof social!=='undefined' && social.me){
       scheduleLibPush();
       toast('⚠ Stockage plein — sauvegardé sur ton compte, mais pense à exporter', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
@@ -532,13 +532,13 @@ $('#save-warning-export').addEventListener('click', ()=>$('#btn-export').click()
 const ui = {
   view:'today', status:'all', types:new Set(), q:'', tag:'', sort:'added', groupSeries:true, libLayout:'grid',
   defaultStatus:'wishlist', typeMetric:'count',
-  ideas:'ask',                             // idées du jour : 'ask' (proposer) | 'on' (activées) — jamais d'appel API sans opt-in
+  ideas:'ask',                             // idées du jour : 'ask' (proposer) | 'on' (activées) — jamais d’appel API sans opt-in
   selectMode:false, selection:new Set(),   // transitoires : jamais persistés ni sérialisés
   editId:null, detailId:null, listId:null, listMode:'list', seriesName:'', recapYear:new Date().getFullYear(),
   searchFromResult:null, heatYear:new Date().getFullYear(), lastFocus:null,
 };
 function clearSelection(){ ui.selection.clear(); ui.selectMode = false; document.body.classList.remove('selecting'); }
-// Persistance des préférences d'affichage (filtres, tri, onglet)
+// Persistance des préférences d’affichage (filtres, tri, onglet)
 function persistUI(){
   try{
     localStorage.setItem(UI_KEY, JSON.stringify({
@@ -558,10 +558,10 @@ function fullTitle(b){
   else if(b.volume!=null && !hasTomeInTitle(b.title)) t = `${b.title} — T.${b.volume}`;
   return t;
 }
-/* ---- Affiliation Amazon (liens d'achat / Kindle) ----
+/* ---- Affiliation Amazon (liens d’achat / Kindle) ----
    Pour TOUCHER une commission : mets ton identifiant Amazon Partenaires dans AMAZON_TAG
    (ex : 'lucasm-21'), obtenu sur https://partenaires.amazon.fr. Sans identifiant, les boutons
-   fonctionnent quand même mais ne rapportent rien. Lien de RECHERCHE (pas d'API à gérer). */
+   fonctionnent quand même mais ne rapportent rien. Lien de RECHERCHE (pas d’API à gérer). */
 const AMAZON_TAG = '';
 /* ---- Soutien volontaire ----
    Colle ici ton lien Ko-fi ou Liberapay (ex : 'https://ko-fi.com/lucastome') : le bouton
@@ -582,7 +582,7 @@ function seriesBooks(name){
 }
 function starsTxt(r){
   r = Number(r); if(!r || Number.isNaN(r)) return '';
-  const n = Math.min(5, Math.max(0, Math.floor(r))); // borné (une note d'ami hors [0,5] ne casse pas le rendu)
+  const n = Math.min(5, Math.max(0, Math.floor(r))); // borné (une note d’ami hors [0,5] ne casse pas le rendu)
   return '★'.repeat(n) + (r%1 ? '½' : '');
 }
 function starInputHTML(rating, cls='st'){
@@ -596,7 +596,7 @@ function halfFromClick(el, clientX){
   const rect = el.getBoundingClientRect();
   return (clientX - rect.left) < rect.width/2;
 }
-// Couvertures du catalogue (Google Books / Open Library) chargées en anonyme : coupe l'envoi des
+// Couvertures du catalogue (Google Books / Open Library) chargées en anonyme : coupe l’envoi des
 // cookies tiers (join du compte Google ↔ liste de lecture). Réservé au catalogue, qui supporte CORS ;
 // une couverture perso hébergée ailleurs reste sans crossorigin pour ne pas casser son affichage.
 function xorigin(u){ return SHAREABLE_COVER.test(u||'') ? ' crossorigin="anonymous"' : ''; }
@@ -604,7 +604,7 @@ function coverHTML(b, mini=false){
   if(b.cover) return `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer" data-fb="${esc(b.id)}">`;
   return phHTML(b, mini);
 }
-// Couverture manquante : un « livre » d'éditeur à la Fitzcarraldo — aplat d'encre choisi
+// Couverture manquante : un « livre » d’éditeur à la Fitzcarraldo — aplat d’encre choisi
 // dans une petite palette par type (déterministe via le titre), titre composé en Fraunces,
 // filet intérieur et tranche en CSS. Le placeholder devient un objet de marque, pas une absence.
 const PH_INKS = {
@@ -652,13 +652,13 @@ function goalInfo(year){
 }
 function paceHTML(gi){
   if(gi.done >= gi.goal) return `<span class="pace ahead">objectif atteint 🎉</span>`;
-  if(gi.delta > 0) return `<span class="pace ahead">${gi.delta} lecture${gi.delta>1?'s':''} d'avance</span>`;
+  if(gi.delta > 0) return `<span class="pace ahead">${gi.delta} lecture${gi.delta>1?'s':''} d’avance</span>`;
   if(gi.delta < 0) return `<span class="pace behind">${-gi.delta} de retard</span>`;
   return `<span class="pace">pile à jour</span>`;
 }
 async function setGoal(year){
   const cur = state.goals[String(year)] || '';
-  const v = await uiPrompt({ title:`Objectif de lecture ${year}`, message:'Nombre de livres à lire cette année. Laisse vide pour retirer l\'objectif.', value:String(cur), placeholder:'ex : 24', type:'number', okLabel:'Enregistrer' });
+  const v = await uiPrompt({ title:`Objectif de lecture ${year}`, message:'Nombre de livres à lire cette année. Laisse vide pour retirer l’objectif.', value:String(cur), placeholder:'ex : 24', type:'number', okLabel:'Enregistrer' });
   if(v===null) return;
   const n = parseInt(v, 10);
   if(!n || n<1) delete state.goals[String(year)];
@@ -673,7 +673,7 @@ function applyTheme(t){
   $('#btn-theme').innerHTML = ic('contrast',18);
 }
 applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
-// tant que l'utilisateur n'a pas choisi lui-même, le thème suit le réglage du système en direct
+// tant que l’utilisateur n’a pas choisi lui-même, le thème suit le réglage du système en direct
 // (passage auto clair/sombre au coucher du soleil sur mobile) ; son premier clic fige son choix
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', e=>{
   if(!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? 'light' : 'dark');
@@ -700,7 +700,7 @@ function selectView(view){
   if(location.hash.slice(1) !== view){ try{ history.replaceState(history.state, '', '#'+view); }catch(_){} }
   persistUI();
   render();
-  // sans cela on arrive au milieu de la nouvelle vue, à la hauteur où on avait laissé l'ancienne
+  // sans cela on arrive au milieu de la nouvelle vue, à la hauteur où on avait laissé l’ancienne
   if(!ui._noScrollReset) window.scrollTo({top:0, behavior:'instant'});
 }
 function render(){
@@ -720,7 +720,7 @@ function scheduleRender(){
 }
 let _dirtyBg = false;
 
-/* =============== Aujourd'hui =============== */
+/* =============== Aujourd’hui =============== */
 function todayGreeting(){
   const h = new Date().getHours();
   return h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
@@ -756,8 +756,8 @@ function todayMiniCards(reading){
   const next = reading ? dailyNextRead() : null;
   const cards = [];
   // Sans email collecté, le code de secours est la SEULE voie de récupération : un compte qui
-  // n'en a pas est définitivement perdu si le mot de passe l'est. On le dit, et on le repropose
-  // tous les 30 jours tant que ce n'est pas fait.
+  // n’en a pas est définitivement perdu si le mot de passe l’est. On le dit, et on le repropose
+  // tous les 30 jours tant que ce n’est pas fait.
   let recSnooze = 0;
   try{ recSnooze = +localStorage.getItem('tome-rec-snooze') || 0; }catch(_){ }
   if(social.me && social.hasRecovery===false && Date.now()-recSnooze > 30*864e5){
@@ -784,8 +784,8 @@ function todayMiniCards(reading){
   if(next) cards.push(`<button class="today-mini" data-today-open="${esc(next.b.id)}">
     <span class="today-mini-icon next" aria-hidden="true">${ic('bookmark',22)}</span><span><small>Dans ta pile</small><b>${esc(fullTitle(next.b))}</b><em>${esc(next.why)}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
-  // Installer : proposé au bon moment (l'utilisateur a une vraie bibliothèque), une seule fois,
-  // et jamais si l'app est déjà installée — le bouton des réglages reste le chemin permanent.
+  // Installer : proposé au bon moment (l’utilisateur a une vraie bibliothèque), une seule fois,
+  // et jamais si l’app est déjà installée — le bouton des réglages reste le chemin permanent.
   let installDismissed = false;
   try{ installDismissed = !!localStorage.getItem('tome-install-hidden'); }catch(_){ }
   const canInstall = !isStandalone() && (installEvt || isIOSDevice()) && !installDismissed
@@ -987,7 +987,7 @@ function filteredBooks(){
   if(ui.types.size) arr = arr.filter(b=>ui.types.has(b.type));
   if(ui.tag) arr = arr.filter(b=>(b.tags||[]).includes(ui.tag));
   if(ui.q) arr = arr.filter(b => bookHaystack(b).includes(ui.q));
-  // décorer → trier → restituer : fullTitle/authorsStr et le collateur ne tournent qu'en O(n)
+  // décorer → trier → restituer : fullTitle/authorsStr et le collateur ne tournent qu’en O(n)
   const dec = arr.map(b => ({ b, t:fullTitle(b), a:authorsStr(b) }));
   const cmp = {
     added:(x,y)=> (y.b.addedAt||'').localeCompare(x.b.addedAt||''),
@@ -1064,14 +1064,14 @@ function markRead(b){
   else toast('Marqué lu — ajouté au journal ✓');
 }
 
-// Bibliothèque d'exemple pour le premier lancement (couvertures Open Library, autorisées par la CSP)
+// Bibliothèque d’exemple pour le premier lancement (couvertures Open Library, autorisées par la CSP)
 const DEMO_BOOKS = [
   {title:'Berserk', series:'Berserk', volume:1, seriesTotal:41, type:'manga', authors:['Kentarō Miura'], year:1990, pages:224, status:'read', rating:5, favorite:true, tags:['dark fantasy','coup de cœur'], moods:['sombre','tendu'], pace:'moyen', review:'Un sommet du manga : violence, deuil et démesure.', cover:'https://covers.openlibrary.org/b/isbn/9781593070205-M.jpg', readings:[{date:'2025-03-12', rating:5}]},
   {title:'Watchmen', type:'bd', authors:['Alan Moore','Dave Gibbons'], year:1987, pages:416, status:'read', rating:5, favorite:true, tags:['comics','classique'], moods:['sombre','réflexif'], review:'La BD qui a fait grandir le medium.', cover:'https://covers.openlibrary.org/b/isbn/9780930289232-M.jpg', readings:[{date:'2026-01-20', rating:5}]},
   {title:'Dune', type:'livre', authors:['Frank Herbert'], year:1965, pages:688, status:'read', rating:4.5, tags:['SF','classique'], moods:['réflexif','inspirant'], pace:'lent', review:'Politique, écologie, mysticisme — dense et magistral.', cover:'https://covers.openlibrary.org/b/isbn/9780441172719-M.jpg', readings:[{date:'2026-02-15', rating:4.5}]},
   {title:'Pluto', series:'Pluto', volume:1, seriesTotal:8, type:'manga', authors:['Naoki Urasawa'], year:2003, pages:200, status:'read', rating:5, tags:['SF'], moods:['émouvant','tendu'], cover:'https://covers.openlibrary.org/b/isbn/9781421519180-M.jpg', readings:[{date:'2026-03-30', rating:5}]},
   {title:'La Horde du Contrevent', type:'livre', authors:['Alain Damasio'], year:2004, pages:736, status:'reading', currentPage:210, tags:['SF','français'], cover:'https://covers.openlibrary.org/b/isbn/9782070456253-M.jpg'},
-  {title:'L\'Étranger', type:'livre', authors:['Albert Camus'], year:1942, pages:159, status:'read', rating:4, tags:['classique'], moods:['mélancolique'], cover:'https://covers.openlibrary.org/b/isbn/9782070360024-M.jpg', readings:[{date:'2026-04-08', rating:4}]},
+  {title:'L’Étranger', type:'livre', authors:['Albert Camus'], year:1942, pages:159, status:'read', rating:4, tags:['classique'], moods:['mélancolique'], cover:'https://covers.openlibrary.org/b/isbn/9782070360024-M.jpg', readings:[{date:'2026-04-08', rating:4}]},
   {title:'Sapiens', type:'livre', authors:['Yuval Noah Harari'], year:2011, pages:512, status:'wishlist', tags:['essai','histoire']},
   {title:'Akira', series:'Akira', volume:1, seriesTotal:6, type:'manga', authors:['Katsuhiro Ōtomo'], year:1982, pages:364, status:'read', rating:4.5, tags:['SF','cyberpunk'], cover:'https://covers.openlibrary.org/b/isbn/9781935429005-M.jpg', readings:[{date:'2025-11-15', rating:4.5}]},
 ];
@@ -1081,8 +1081,8 @@ const ONBOARD_PICKS = [
   {title:'Dune', type:'livre', authors:['Frank Herbert'], year:1965, cover:'https://covers.openlibrary.org/b/isbn/9780441172719-M.jpg'},
   {title:'1984', type:'livre', authors:['George Orwell'], year:1949, cover:'https://covers.openlibrary.org/b/isbn/9780451524935-M.jpg'},
   {title:'Le Petit Prince', type:'livre', authors:['Antoine de Saint-Exupéry'], year:1943, cover:'https://covers.openlibrary.org/b/isbn/9782070612758-M.jpg'},
-  {title:'Harry Potter à l\'école des sorciers', type:'livre', authors:['J.K. Rowling'], year:1997, cover:'https://covers.openlibrary.org/b/isbn/9782070584628-M.jpg'},
-  {title:'L\'Étranger', type:'livre', authors:['Albert Camus'], year:1942, cover:'https://covers.openlibrary.org/b/isbn/9782070360024-M.jpg'},
+  {title:'Harry Potter à l’école des sorciers', type:'livre', authors:['J.K. Rowling'], year:1997, cover:'https://covers.openlibrary.org/b/isbn/9782070584628-M.jpg'},
+  {title:'L’Étranger', type:'livre', authors:['Albert Camus'], year:1942, cover:'https://covers.openlibrary.org/b/isbn/9782070360024-M.jpg'},
   {title:'Sapiens', type:'livre', authors:['Yuval Noah Harari'], year:2011, cover:'https://covers.openlibrary.org/b/isbn/9782226257017-M.jpg'},
   {title:'Watchmen', type:'bd', authors:['Alan Moore','Dave Gibbons'], year:1987, cover:'https://covers.openlibrary.org/b/isbn/9780930289232-M.jpg'},
   {title:'Persepolis', type:'bd', authors:['Marjane Satrapi'], year:2000, cover:'https://covers.openlibrary.org/b/isbn/9782844140586-M.jpg'},
@@ -1098,7 +1098,7 @@ function loadDemo(){
   });
   if(!state.goals[String(new Date().getFullYear())]) state.goals[String(new Date().getFullYear())] = 20;
   save(); render();
-  toast('Bibliothèque d\'exemple chargée — explore Journal, Stats et les séries ✨');
+  toast('Bibliothèque d’exemple chargée — explore Journal, Stats et les séries ✨');
 }
 function renderDemoBanner(){
   let banner = $('#demo-banner');
@@ -1118,11 +1118,11 @@ function renderDemoBanner(){
       }
     });
   }
-  banner.innerHTML = `<span>✨ Tu explores une <b>bibliothèque d'exemple</b>. Ajoute tes vraies lectures quand tu veux.</span>
+  banner.innerHTML = `<span>✨ Tu explores une <b>bibliothèque d’exemple</b>. Ajoute tes vraies lectures quand tu veux.</span>
     <button class="btn small db-x" id="demo-clear">Tout effacer</button>`;
 }
 
-// Teaser de décembre : la rétro est LE moteur de partage de l'année — on la met sous les yeux
+// Teaser de décembre : la rétro est LE moteur de partage de l’année — on la met sous les yeux
 // au bon moment, une seule fois (masquable, mémorisé par année).
 function isRecapSeason(d){ return (d||new Date()).getMonth()===11; }
 function renderRecapTeaser(){
@@ -1179,7 +1179,7 @@ function renderLibrary(){
         </button>`).join('')}
       </div>
       <div class="ob-foot">
-        <button class="btn" id="ob-demo">Voir plutôt une bibliothèque d'exemple</button>
+        <button class="btn" id="ob-demo">Voir plutôt une bibliothèque d’exemple</button>
         <button class="btn primary" id="ob-done" hidden>Voir ma bibliothèque <span id="ob-n"></span> →</button>
       </div>
     </div>`;
@@ -1261,7 +1261,7 @@ function recommendations(){
   const out = [], seen = new Set();
   const eligible = b => b && b.status!=='read' && b.status!=='reading' && b.status!=='abandoned';
   const add = (b, why)=>{ if(eligible(b) && !seen.has(b.id)){ seen.add(b.id); out.push({b, why}); } };
-  // 1) tome suivant à lire des séries que j'aime (note ≥ 4)
+  // 1) tome suivant à lire des séries que j’aime (note ≥ 4)
   const bySeries = new Map();
   for(const b of state.books){ const k=seriesKey(b); if(k){ if(!bySeries.has(k)) bySeries.set(k,[]); bySeries.get(k).push(b); } }
   for(const [k,books] of bySeries){
@@ -1271,7 +1271,7 @@ function recommendations(){
     const score = (rec && rec.rating!=null) ? rec.rating : avg;
     if(score < 4) continue;
     const next = books.filter(eligible).sort((a,b)=>(a.volume??1e9)-(b.volume??1e9));
-    if(next[0]) add(next[0], 'la suite d\'une série que tu aimes');
+    if(next[0]) add(next[0], 'la suite d’une série que tu aimes');
   }
   // 2) auteurs que je note haut → leurs livres à lire
   const authorScore = {};
@@ -1345,13 +1345,13 @@ let _ideasLoading = false, _ideasNextTry = 0; // re-tentative throttlée si les 
 function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31 + s.charCodeAt(i))|0; } return Math.abs(h); }
 const bookLibKey = (title, author) => (title+'|'+(author||'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
 // Graines du jour : suites de séries à jour, auteurs aimés (rotation quotidienne) et genres
-// partagés par ≥2 coups de cœur. `salt` varie le tirage (bouton « D'autres idées »).
+// partagés par ≥2 coups de cœur. `salt` varie le tirage (bouton « D’autres idées »).
 function ideaSeeds(day, salt=0){
   const sel = k => hashStr(day+'|'+salt+'|'+k);
   // « aimé » = noté ≥4, ou favori lu (les lecteurs qui ne notent pas ont aussi des goûts)
   const loved = state.books.filter(b=>b.rating>=4 || (b.favorite && b.status==='read'));
   const out = [];
-  // 1. La suite d'une série à jour — signal le plus fort : le dernier tome possédé est lu
+  // 1. La suite d’une série à jour — signal le plus fort : le dernier tome possédé est lu
   const bySeries = new Map();
   state.books.forEach(b=>{
     if(!b.series || !b.volume) return;
@@ -1440,16 +1440,16 @@ function ideasGroupsHTML(groups){
       <button class="idea-x" data-idea-x="${gi}:${i}" title="Ne plus proposer" aria-label="Écarter ${esc(r.title)}">✕</button>
     </div>`; }).join('') + `</div></div>`).join('');
 }
-const IDEAS_OPTIN_HTML = `<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques idées de lecture choisies d'après tes coups de cœur : les suites de tes séries, tes auteurs bien notés, tes genres favoris.
-      Pour ça, Tome enverra le nom d'un auteur, d'une série ou d'un tag que tu aimes à Google Books / Open Library (comme lors d'une recherche). Rien d'autre ne quitte ton appareil.</p>
+const IDEAS_OPTIN_HTML = `<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques idées de lecture choisies d’après tes coups de cœur : les suites de tes séries, tes auteurs bien notés, tes genres favoris.
+      Pour ça, Tome enverra le nom d’un auteur, d’une série ou d’un tag que tu aimes à Google Books / Open Library (comme lors d’une recherche). Rien d’autre ne quitte ton appareil.</p>
       <div style="display:flex;gap:8px"><button class="btn small primary" data-ideas-optin>Activer</button>
       <button class="btn small" data-ideas-later>Pas maintenant</button></div>`;
 let _ideasAskMuted = false; // « Pas maintenant » : on reproposera à la prochaine session, pas avant
-// Deux points de montage : le panneau de la Bibliothèque et la section de l'écran Aujourd'hui.
+// Deux points de montage : le panneau de la Bibliothèque et la section de l’écran Aujourd’hui.
 function ideasBoxes(){
   let box = $('#daily-ideas');
   const disc = $('#discover');
-  if(!box && disc){ // le panneau bibliothèque n'existe qu'une fois la vue Bibliothèque construite
+  if(!box && disc){ // le panneau bibliothèque n’existe qu’une fois la vue Bibliothèque construite
     box = document.createElement('div'); box.id='daily-ideas'; box.className='ideas-panel'; box.hidden=true;
     disc.after(box);
     box.addEventListener('click', onIdeaAdd);
@@ -1489,14 +1489,14 @@ function renderDailyIdeas(){
   }
   if(!d.groups.length){
     // Tout le tirage du jour a été ajouté ou écarté : NE PAS cacher le panneau (ce serait un
-    // cul-de-sac jusqu'à demain). On garde la porte de sortie — un nouveau tirage (salt+1).
+    // cul-de-sac jusqu’à demain). On garde la porte de sortie — un nouveau tirage (salt+1).
     peint(`<p style="font-size:13px;color:var(--muted);margin:2px 0 10px">Tu as passé en revue les idées du jour.</p>`+
-      `<div class="ideas-foot"><button class="btn small" data-ideas-more>↻ D'autres idées</button></div>`);
+      `<div class="ideas-foot"><button class="btn small" data-ideas-more>↻ D’autres idées</button></div>`);
     return;
   }
   window._ideaGroups = d.groups;
   peint(ideasGroupsHTML(d.groups) +
-    `<div class="ideas-foot"><button class="btn small" data-ideas-more>↻ D'autres idées</button></div>`);
+    `<div class="ideas-foot"><button class="btn small" data-ideas-more>↻ D’autres idées</button></div>`);
 }
 function onIdeaAdd(e){
   if(e.target.closest('[data-ideas-optin]')){ ui.ideas='on'; persistUI(); renderDailyIdeas(); return; }
@@ -1785,7 +1785,7 @@ function selectedBooks(){ return [...ui.selection].map(id=>state.books.find(b=>b
 function updateBulkBar(){
   const bar = $('#bulk-bar'), n = ui.selection.size;
   bar.hidden = n===0;
-  $('#lib-select').classList.toggle('active', ui.selectMode);
+  $('#lib-select').classList.toggle('active', ui.selectMode); $('#lib-select').setAttribute('aria-pressed', String(ui.selectMode));
   if(!n) return;
   bar.innerHTML = `<b>${n} sélectionné${n>1?'s':''}</b>
     <div class="bb-actions">
@@ -1874,7 +1874,7 @@ async function onBulk(action){
     return;
   }
   if(action==='list'){
-    if(!state.lists.length){ toast('Crée d\'abord une liste (onglet Listes)'); return; }
+    if(!state.lists.length){ toast('Crée d’abord une liste (onglet Listes)'); return; }
     const l = await uiChoose({ title:'Ajouter à une liste', choices: state.lists.map((l,i)=>({ label:l.name, value:l.id, default:i===0 })) });
     if(!l) return;
     const list = state.lists.find(x=>x.id===l); if(!list) return;
@@ -1937,7 +1937,7 @@ function renderJournal(){
   const box = $('#journal-body');
   if(!entries.length){
     box.innerHTML = `<div class="empty"><div class="big">🗓️</div><h3>Ton journal attend sa première page</h3>
-      <p>Marque un titre comme « Lu » et il viendra s'inscrire ici, mois par mois — relectures comprises. Dans un an, ce sera ta plus belle liste.</p></div>`;
+      <p>Marque un titre comme « Lu » et il viendra s’inscrire ici, mois par mois — relectures comprises. Dans un an, ce sera ta plus belle liste.</p></div>`;
     return;
   }
   const groups = new Map();
@@ -1946,15 +1946,15 @@ function renderJournal(){
     if(!groups.has(key)) groups.set(key, []);
     groups.get(key).push(e);
   }
-  // « À la même période l'an dernier » : lectures dans une fenêtre de ±15 jours autour
-  // d'aujourd'hui moins un an — petit moment de nostalgie façon « souvenirs ».
+  // « À la même période l’an dernier » : lectures dans une fenêtre de ±15 jours autour
+  // d’aujourd’hui moins un an — petit moment de nostalgie façon « souvenirs ».
   let html = '';
   const _past = new Date(); _past.setFullYear(_past.getFullYear()-1);
   const _lo = new Date(_past); _lo.setDate(_lo.getDate()-15);
   const _hi = new Date(_past); _hi.setDate(_hi.getDate()+15);
   const ago = entries.filter(e=>e.date>=dateKey(_lo) && e.date<=dateKey(_hi));
   if(ago.length){
-    html += `<div class="month ago-month"><h3>${ic('calendar',15)} À la même période l'an dernier</h3>` + ago.slice(0,6).map(e=>{
+    html += `<div class="month ago-month"><h3>${ic('calendar',15)} À la même période l’an dernier</h3>` + ago.slice(0,6).map(e=>{
       const b = e.b, d = new Date(e.date+'T12:00:00'), shown = e.rating ?? b.rating;
       return `<div class="entry" data-id="${esc(b.id)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, lu le ${fmtDate(e.date)}">
         <div class="day"><b>${d.getDate()}</b><span>${d.toLocaleDateString('fr-FR',{weekday:'short'})}</span></div>
@@ -2085,7 +2085,7 @@ async function doSearch(q){
   }
   if(!items.length){
     box.innerHTML = `<div class="search-hint">${failed
-      ? 'Une des sources est indisponible (limite atteinte ?) et l\'autre n\'a rien trouvé — réessaie dans une minute ou passe par « Ajout manuel ».'
+      ? 'Une des sources est indisponible (limite atteinte ?) et l’autre n’a rien trouvé — réessaie dans une minute ou passe par « Ajout manuel ».'
       : 'Aucun résultat. Essaie une autre orthographe, ou passe par « Ajout manuel ».'}</div>`;
     return;
   }
@@ -2138,7 +2138,7 @@ $('#btn-manual').addEventListener('click', ()=>{ ui.searchFromResult = null; ope
 $('#search-status').addEventListener('click', e => {
   const b = e.target.closest('button[data-s]'); if(!b) return;
   ui.defaultStatus = b.dataset.s;
-  $$('#search-status button').forEach(x=>x.classList.toggle('on', x===b));
+  $$('#search-status button').forEach(x=>{ x.classList.toggle('on', x===b); x.setAttribute('aria-pressed', String(x===b)); });
   persistUI();
 });
 
@@ -2216,7 +2216,7 @@ function stopScan(){
 }
 $('#btn-scan').addEventListener('click', startScan);
 $('#scan-stop').addEventListener('click', stopScan);
-// PWA mobile : couper la caméra si l'app passe en arrière-plan pendant un scan
+// PWA mobile : couper la caméra si l’app passe en arrière-plan pendant un scan
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stopScan(); });
 
 /* =============== Édition =============== */
@@ -2259,8 +2259,8 @@ function frTypo(t){
 }
 
 function fieldError(inputSel, msg){
-  // le message vit SOUS le champ concerné (pas dans un toast à l'autre bout de l'écran),
-  // reste affiché jusqu'à la correction, et est annoncé aux lecteurs d'écran
+  // le message vit SOUS le champ concerné (pas dans un toast à l’autre bout de l’écran),
+  // reste affiché jusqu’à la correction, et est annoncé aux lecteurs d’écran
   const inp = $(inputSel); if(!inp) return;
   let e = inp.parentElement.querySelector('.field-err');
   if(!e){ e = document.createElement('div'); e.className='field-err'; e.setAttribute('role','alert'); inp.after(e); }
@@ -2431,7 +2431,7 @@ function studyPrintHTML(b){
     ${block('Passages marquants',(b.quotes||[]).map(q=>`<blockquote>${paras(q.text)}${q.page!=null?` — p. ${q.page}`:''}</blockquote>`).join(''))}`;
 }
 function printStudy(b){
-  // l'écouteur AVANT l'impression : window.print() peut bloquer et déclencher afterprint
+  // l’écouteur AVANT l’impression : window.print() peut bloquer et déclencher afterprint
   // avant de rendre la main, auquel cas un écouteur posé après ne se déclencherait jamais
   const box=$('#study-print'); box.innerHTML=studyPrintHTML(b);
   addEventListener('afterprint',()=>{ box.innerHTML=''; },{once:true});
@@ -2569,7 +2569,7 @@ function openDetail(id, opts={}){
   // la fiche se reconstruit en innerHTML à chaque action (note, statut, ♥…) : sans ça, le
   // focus clavier retombe sur <body> et il faut re-tabuler depuis le haut de la modale.
   // On mémorise le contrôle réutilisé par id, ou à défaut par son attribut data-* (statut,
-  // rythme… qui n'ont pas d'id), et la position de défilement pour éviter le saut en haut.
+  // rythme… qui n’ont pas d’id), et la position de défilement pour éviter le saut en haut.
   const _ae = document.activeElement;
   let _prevFocus = '';
   if(_ae && _ae.closest && _ae.closest('#ov-detail')){
@@ -2640,7 +2640,7 @@ function openDetail(id, opts={}){
 
       <div class="dblock">
         <label for="d-review">Ma critique</label>
-        <textarea id="d-review" rows="3" placeholder="${opts.pulse ? 'Et alors, verdict ?' : 'Qu\'est-ce que tu en as pensé ?'}">${esc(b.review||'')}</textarea>
+        <textarea id="d-review" rows="3" placeholder="${opts.pulse ? 'Et alors, verdict ?' : 'Qu’est-ce que tu en as pensé ?'}">${esc(b.review||'')}</textarea>
       </div>
 
       <div class="study-entry">
@@ -2672,7 +2672,7 @@ function openDetail(id, opts={}){
             <button class="qdel" data-qdel="${esc(q.id)}" title="Supprimer" aria-label="Supprimer ce passage">✕</button>
           </div>`).join('')}</div>
         <div class="add-quote">
-          <textarea id="d-quote-text" aria-label="Passage ou citation" rows="2" placeholder="Un passage qui t'a marqué·e…"></textarea>
+          <textarea id="d-quote-text" aria-label="Passage ou citation" rows="2" placeholder="Un passage qui t’a marqué·e…"></textarea>
           <div class="row">
             <input type="number" id="d-quote-page" min="0" placeholder="page" aria-label="Page">
             <button class="btn small" id="d-quote-add">＋ Ajouter le passage</button>
@@ -2722,7 +2722,7 @@ function openDetail(id, opts={}){
       </div>
     </div>`;
   openOverlay('#ov-detail');
-  // restaure la position de défilement puis le focus sur le contrôle qui vient d'être utilisé
+  // restaure la position de défilement puis le focus sur le contrôle qui vient d’être utilisé
   const _ovd = $('#ov-detail'); if(_ovd) _ovd.scrollTop = _prevScroll;
   if(_prevFocus){ const el = _ovd && _ovd.querySelector(_prevFocus); if(el) try{ el.focus({preventScroll:true}); }catch(_){ } }
   loadDetailFriends(b);
@@ -2731,7 +2731,7 @@ function openDetail(id, opts={}){
 // hors-ligne, ou si aucun ami ne partage ce livre (la fiche reste 100 % locale sinon).
 // GARDE VIE PRIVÉE : la clé du livre ne part au serveur QUE si ce livre appartient au
 // sous-ensemble partageable (même prédicat que shareableBooks) ET que le partage est actif —
-// jamais pour la wishlist, jamais en mode « rien » : le serveur n'apprend rien qu'il ne
+// jamais pour la wishlist, jamais en mode « rien » : le serveur n’apprend rien qu’il ne
 // connaisse déjà par la synchro. Cache 10 min : les interactions de la fiche ne re-fetchent pas.
 const _bookFriendsCache = new Map();
 async function loadDetailFriends(b){
@@ -2821,7 +2821,7 @@ $('#detail-body').addEventListener('click', e => {
     (async()=>{
       const to = await uiPrompt({ title:'Prêter ce livre', message:'À qui prêtes-tu ce livre ?', placeholder:'Nom de la personne', okLabel:'Continuer' });
       if(!to || !to.trim()) return;
-      const due = await uiPrompt({ title:'Date de retour', message:'Choisis une échéance, ou laisse le champ vide si vous n’en avez pas fixé.', value:isoAfterDays(today(),30), type:'date', okLabel:'Enregistrer le prêt' });
+      const due = await uiPrompt({ title:'Date de retour', message:'Choisis une échéance, ou laisse le champ vide si tu n’en as pas fixé.', value:isoAfterDays(today(),30), type:'date', okLabel:'Enregistrer le prêt' });
       if(due===null) return;
       if(due && (!isValidDate(due) || due<today())){ toast('Choisis une date future'); return; }
       b.loan = {to:to.trim().slice(0,120), since:today(), due:due||null}; save(); openDetail(b.id); scheduleRender();
@@ -3022,7 +3022,7 @@ function openList(id){
           <button data-mv="1" data-bid="${esc(b.id)}" title="Reculer" aria-label="Reculer dans la liste">▸</button>
         </span>
       </div>`).join('')}</div>`
-    : `<p style="color:var(--muted); font-size:14px; padding:20px 0; text-align:center">Liste vide — ouvre la fiche d'un titre et utilise « Listes › Ajouter ».</p>`}`;
+    : `<p style="color:var(--muted); font-size:14px; padding:20px 0; text-align:center">Liste vide — ouvre la fiche d’un titre et utilise « Listes › Ajouter ».</p>`}`;
   openOverlay('#ov-list');
 }
 function openSeries(name){
@@ -3068,7 +3068,7 @@ function pruneSeriesRec(name){
   if(r && r.rating==null && !r.review && !r.favorite && !(r.moods||[]).length) delete state.series[k];
 }
 // Note de série au clavier (←/→) : même comportement que le slider de la fiche livre (#d-stars),
-// sinon le slider est focusable mais totalement inopérant au clavier et au lecteur d'écran.
+// sinon le slider est focusable mais totalement inopérant au clavier et au lecteur d’écran.
 $('#list-body').addEventListener('keydown', e => {
   if(ui.listMode!=='series' || !e.target.closest || !e.target.closest('#s-stars')) return;
   const r = seriesRec(ui.seriesName);
@@ -3155,7 +3155,7 @@ function updateStreakPill(){
   if(cur >= 2){
     el.hidden = false;
     $('#streak-n').textContent = cur;
-    const t = `${cur} jours de lecture d'affilée — continue !`;
+    const t = `${cur} jours de lecture d’affilée — continue !`;
     el.title = t; el.setAttribute('aria-label', t);
   } else el.hidden = true;
 }
@@ -3176,15 +3176,15 @@ function streaks(){
   return {cur, max};
 }
 function renderStats(){
-  // Bibliothèque vide : afficher l'échafaudage complet (tuiles à 0, heatmap vide, histogrammes
-  // sans barres) donne l'impression d'une app cassée. On propose plutôt une porte de sortie.
+  // Bibliothèque vide : afficher l’échafaudage complet (tuiles à 0, heatmap vide, histogrammes
+  // sans barres) donne l’impression d’une app cassée. On propose plutôt une porte de sortie.
   const vide = $('#stats-empty');
   if(!state.books.length){
     $$('#view-stats > *:not(.section):not(#stats-empty)').forEach(el=>el.hidden = true);
     if(!vide){
       const d = document.createElement('div'); d.id='stats-empty'; d.className='empty';
       d.innerHTML = `<div class="big">${ic('chart',34)}</div><h3>Tes statistiques arrivent</h3>
-        <p>Ajoute quelques lectures et tu verras ici ton rythme, tes genres, tes notes et ta régularité au fil de l'année.</p>
+        <p>Ajoute quelques lectures et tu verras ici ton rythme, tes genres, tes notes et ta régularité au fil de l’année.</p>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
           <button class="btn primary" id="stats-add">${ic('plus',16)} Ajouter une lecture</button>
           <button class="btn" id="stats-lib">Voir ma bibliothèque</button>
@@ -3253,8 +3253,8 @@ function renderStats(){
   const byType = metric==='pages' ? byTypePages : byTypeCount;
   const tmax = Math.max(...Object.values(byType), 1);
   const tcolor = {livre:'var(--blue)', bd:'var(--orange)', manga:'var(--pink)'};
-  $('#type-metric-count').classList.toggle('on', metric==='count');
-  $('#type-metric-pages').classList.toggle('on', metric==='pages');
+  $('#type-metric-count').classList.toggle('on', metric==='count'); $('#type-metric-count').setAttribute('aria-pressed', String(metric==='count'));
+  $('#type-metric-pages').classList.toggle('on', metric==='pages'); $('#type-metric-pages').setAttribute('aria-pressed', String(metric==='pages'));
   $('#type-bars').innerHTML = Object.entries(byType).map(([t,n])=>`
     <div class="hbar"><span class="lbl">${TYPE_LABEL[t]}${t==='livre'?'s':''}</span>
     <div class="track"><div class="fill" style="width:${n/tmax*100}%; background:${tcolor[t]}"></div></div>
@@ -3268,7 +3268,7 @@ function renderStats(){
   $('#year-bars').innerHTML = years.map(y=>`
     <div class="hbar"><span class="lbl">${y}</span>
     <div class="track"><div class="fill" style="width:${byYear[y]/ymax*100}%"></div></div>
-    <span class="val">${byYear[y]}</span></div>`).join('') || '<p style="font-size:13px;color:var(--faint)">Aucune lecture datée pour l\'instant.</p>';
+    <span class="val">${byYear[y]}</span></div>`).join('') || '<p style="font-size:13px;color:var(--faint)">Aucune lecture datée pour l’instant.</p>';
 
   // Note moyenne par année (livres distincts notés, lus cette année-là)
   const yearRate = {};
@@ -3320,11 +3320,11 @@ function renderStats(){
     <div class="track"><div class="fill" style="width:${s.n/sm*100}%; background:var(--orange)"></div></div>
     <span class="val">${s.n}</span></div>`).join('') || '<p style="font-size:13px;color:var(--faint)">Renseigne le champ Série pour suivre tes sagas.</p>';
 
-  // Infos d'export
+  // Infos d’export
   const m = state.meta || {};
   $('#export-info').textContent = m.lastExport
     ? `Dernier export : ${fmtDate(m.lastExport)} · ${m.changes||0} modification${(m.changes||0)>1?'s':''} depuis`
-    : 'Aucun export pour l\'instant.';
+    : 'Aucun export pour l’instant.';
   $('#btn-restore').hidden = !hasRecoverable();
 }
 function renderHeat(){
@@ -3420,7 +3420,7 @@ function showRecap(year){
       </div>
       ${monthChart}
       ${r.best?`<div class="recap-hi"><div class="rl">Ton coup de cœur</div><b>${esc(fullTitle(r.best))}</b> — ${starsTxt(r.best.rating)}</div>`:''}
-      ${r.topAuthor?`<div class="recap-hi"><div class="rl">Auteur·e de l'année</div><b>${esc(r.topAuthor[0])}</b> · ${r.topAuthor[1]} titre${r.topAuthor[1]>1?'s':''}</div>`:''}
+      ${r.topAuthor?`<div class="recap-hi"><div class="rl">Auteur·e de l’année</div><b>${esc(r.topAuthor[0])}</b> · ${r.topAuthor[1]} titre${r.topAuthor[1]>1?'s':''}</div>`:''}
       ${r.topTag?`<div class="recap-hi"><div class="rl">Genre phare</div><b>${esc(r.topTag[0])}</b> · ${r.topTag[1]} titre${r.topTag[1]>1?'s':''}</div>`:''}
       ${r.topSeries&&r.topSeries.n>1?`<div class="recap-hi"><div class="rl">Ta plus longue saga</div><b>${esc(r.topSeries.name)}</b> · ${r.topSeries.n} tomes</div>`:''}
       ${r.readingDays?`<div class="recap-hi"><div class="rl">Jours de lecture</div><b>${r.readingDays}</b> jour${r.readingDays>1?'s':''} avec une page tournée</div>`:''}
@@ -3449,7 +3449,7 @@ const TOME_CSV_HEADERS = [
   'Review','Synopsis','Readings','Progress Log','Quotes','Loan To','Loan Since','Loan Due','Cover','Added At','Study',
 ];
 // Toutes les cellules sont citées. Une apostrophe neutralise les préfixes interprétés comme
-// formules par Excel/Sheets ; l'import Tome la retirera sans altérer la donnée d'origine.
+// formules par Excel/Sheets ; l’import Tome la retirera sans altérer la donnée d’origine.
 function csvCell(value){
   let s=value==null?'':String(value);
   if(/^'[=+\-@\t\r]/.test(s) || /^[=+\-@\t\r]/.test(s)) s="'"+s;
@@ -3527,8 +3527,8 @@ const GR_STATUS = {'read':'read', 'currently-reading':'reading', 'to-read':'wish
 const SG_STATUS = {'read':'read', 'currently-reading':'reading', 'to-read':'wishlist', 'did-not-finish':'abandoned'};
 const SG_MOOD = {adventurous:'entraînant', dark:'sombre', funny:'drôle', emotional:'émouvant', hopeful:'réconfortant', relaxing:'réconfortant', lighthearted:'réconfortant', tense:'tendu', mysterious:'tendu', challenging:'réflexif', informative:'réflexif', reflective:'réflexif', inspiring:'inspirant', sad:'mélancolique'};
 const SG_PACE = {slow:'lent', medium:'moyen', fast:'rapide'};
-// Détection de série pour l'import : suffixe « (Série, #N) » (Goodreads) ou mention « tome/vol N ».
-// N'utilise PAS l'heuristique du nombre nu de parseTome (« Catch-22 » ne doit pas devenir tome 22).
+// Détection de série pour l’import : suffixe « (Série, #N) » (Goodreads) ou mention « tome/vol N ».
+// N’utilise PAS l’heuristique du nombre nu de parseTome (« Catch-22 » ne doit pas devenir tome 22).
 function parenTome(title){
   const m = String(title).match(/\(([^)]+?)[,#\s]+#?(\d{1,4})\)\s*$/);
   if(m && m[1].trim()) return {series:m[1].trim(), volume:+m[2]};
@@ -3624,7 +3624,7 @@ function queueCovers(pairs){
         if(ok){ const b = state.books.find(x=>x.id===id); if(b && !b.cover){ b.cover=url; dirty=true; got++; } }
         next();
       };
-      const to = setTimeout(()=>done(false), 8000); // libère le créneau si l'image ne répond jamais
+      const to = setTimeout(()=>done(false), 8000); // libère le créneau si l’image ne répond jamais
       img.onload = ()=>done(img.naturalWidth>1);
       img.onerror = ()=>done(false);
       img.src = url;
@@ -3649,7 +3649,7 @@ async function importCSV(text){
   const sourceLabel = source==='goodreads'?'Goodreads':source==='storygraph'?'StoryGraph':'Tome CSV';
   const choice = await uiChoose({
     title: `Import ${sourceLabel}`,
-    message: `${parsed.length} livre(s) trouvé(s).${source==='tome'?'\n\nLe CSV contient les ouvrages, pas les listes ni les objectifs. Le JSON reste le format de sauvegarde complète.':''}\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d'abord ta bibliothèque actuelle — une sauvegarde de secours est conservée (restaurable dans Stats).`,
+    message: `${parsed.length} livre(s) trouvé(s).${source==='tome'?'\n\nLe CSV contient les ouvrages, pas les listes ni les objectifs. Le JSON reste le format de sauvegarde complète.':''}\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d’abord ta bibliothèque actuelle — une sauvegarde de secours est conservée (restaurable dans Stats).`,
     choices: [
       { label:'Fusionner', value:'merge', variant:'primary', default:true },
       { label:'Tout remplacer', value:'replace', variant:'danger' },
@@ -3657,12 +3657,12 @@ async function importCSV(text){
   });
   if(choice===null) return; // Annuler / Échap / clic hors modale = AUCUNE écriture
   const doReplace = (choice==='replace');
-  // dédup par titre+auteur+tome (les livres existants n'ont pas d'ISBN persisté) ET par ISBN dans le lot
+  // dédup par titre+auteur+tome (les livres existants n’ont pas d’ISBN persisté) ET par ISBN dans le lot
   const titleKey = b => (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
   const pairs = [];
   let added=0, skipped=0;
   if(doReplace){
-    // Remplacement : backup d'abord (réutilise le mécanisme d'import JSON)
+    // Remplacement : backup d’abord (réutilise le mécanisme d’import JSON)
     const prev = JSON.stringify(state);
     let backedUp=false; try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp=true; }catch(_){}
     if(!backedUp && state.books.length) downloadJSON(prev, `tome-sauvegarde-avant-import-${today()}.json`);
@@ -3702,7 +3702,7 @@ $('#import-file').addEventListener('change', e => {
       const clean = normalizeData(d);
       if(!clean.books.length && !clean.lists.length) throw new Error('vide');
       if(!await uiConfirm({ title:'Importer cette sauvegarde ?', message:`${clean.books.length} ouvrage(s) et ${clean.lists.length} liste(s). Cela remplace tes données actuelles — une sauvegarde de secours est conservée (restaurable dans Stats).`, okLabel:'Importer et remplacer', danger:true })) return;
-      // sauvegarde de secours AVANT tout écrasement ; si le stockage est plein, on télécharge l'ancien état
+      // sauvegarde de secours AVANT tout écrasement ; si le stockage est plein, on télécharge l’ancien état
       const prev = JSON.stringify(state);
       let backedUp = false;
       try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp = true; }catch(_){ }
@@ -3720,10 +3720,10 @@ $('#import-file').addEventListener('change', e => {
 // Sauvegardes restaurables : avant-import (-backup), données corrompues (-corrupt), et les copies
 // de secours faites avant une réconciliation avec le compte (-preacct / -conflit / -autre).
 const RESTORE_KEYS = [
-  { k:'-backup',  label:"Sauvegarde d'avant-import" },
-  { k:'-preacct', label:"Version locale d'avant la synchro du compte" },
-  { k:'-conflit', label:"Version locale d'avant une fusion multi-appareils" },
-  { k:'-autre',   label:"Bibliothèque locale d'un autre compte, mise de côté" },
+  { k:'-backup',  label:"Sauvegarde d’avant-import" },
+  { k:'-preacct', label:"Version locale d’avant la synchro du compte" },
+  { k:'-conflit', label:"Version locale d’avant une fusion multi-appareils" },
+  { k:'-autre',   label:"Bibliothèque locale d’un autre compte, mise de côté" },
 ];
 function hasRecoverable(){ return RESTORE_KEYS.some(r=>localStorage.getItem(LS_KEY+r.k)) || !!localStorage.getItem(LS_KEY+'-corrupt'); }
 $('#btn-restore').addEventListener('click', async ()=>{
@@ -3734,7 +3734,7 @@ $('#btn-restore').addEventListener('click', async ()=>{
     toast('Copie brute téléchargée — à réparer à la main puis réimporter'); return;
   }
   if(!avail.length){ toast('Aucune sauvegarde disponible'); return; }
-  // choisir laquelle restaurer (avec le nombre d'ouvrages pour se repérer)
+  // choisir laquelle restaurer (avec le nombre d’ouvrages pour se repérer)
   let chosen = avail[0];
   if(avail.length > 1){
     const choices = avail.map(r=>{ let n='?'; try{ n=String((JSON.parse(r.raw).books||[]).length); }catch(_){} return { label:`${r.label} — ${n} ouvrage(s)`, value:r.k }; });
@@ -3750,7 +3750,7 @@ $('#btn-restore').addEventListener('click', async ()=>{
 });
 
 /* =============== Notifications push ===============
-   Sans elles, on n'apprend qu'en ouvrant l'app qu'un ami a réagi : le fil social reste muet.
+   Sans elles, on n’apprend qu’en ouvrant l’app qu’un ami a réagi : le fil social reste muet.
    Opt-in explicite (le navigateur exige un geste utilisateur), désactivable à tout moment. */
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 function urlB64ToBytes(b64){
@@ -3791,12 +3791,12 @@ async function disablePush(){
 }
 
 /* =============== Page publique /@pseudo ===============
-   Lisible sans compte : c'est le lien qu'on met dans une bio. Elle n'affiche QUE ce que le
+   Lisible sans compte : c’est le lien qu’on met dans une bio. Elle n’affiche QUE ce que le
    serveur accepte de rendre public (opt-in + mode de partage) — le front ne décide rien. */
 function publicUsernameFromURL(){
   const m = location.pathname.match(/^\/@([a-z0-9_.-]{3,20})$/i);
   if(m) return m[1].toLowerCase();
-  const h = location.hash.match(/^#@([a-z0-9_.-]{3,20})$/i);   // repli si l'hébergeur ne route pas /@
+  const h = location.hash.match(/^#@([a-z0-9_.-]{3,20})$/i);   // repli si l’hébergeur ne route pas /@
   return h ? h[1].toLowerCase() : '';
 }
 async function showPublicProfile(uname){
@@ -3808,18 +3808,18 @@ async function showPublicProfile(uname){
   try{ d = await api('/api/public/'+encodeURIComponent(uname)); }
   catch(e){
     body.innerHTML = `<div class="pp-empty">
-      <p>${e.message==='offline' ? 'Profil indisponible hors ligne.' : 'Ce profil n\'existe pas ou n\'est pas public.'}</p>
+      <p>${e.message==='offline' ? 'Profil indisponible hors ligne.' : 'Ce profil n’existe pas ou n’est pas public.'}</p>
       <p style="margin-top:16px"><a class="btn primary" href="/">Découvrir Tome</a></p></div>`;
     return;
   }
   const u = d.user, st = d.stats||{}, shelf = d.shelf||[];
   const annee = u.since ? new Date(u.since).getFullYear() : '';
   // Une liste de couvertures ne donne pas envie ; un livre défendu, si. On met en avant le mieux
-  // noté — en préférant celui qui porte une critique, c'est ce qui fait la valeur d'un journal.
+  // noté — en préférant celui qui porte une critique, c’est ce qui fait la valeur d’un journal.
   const coeur = shelf.filter(b=>b.rating>=4.5).sort((a,b)=>
       ((b.review?1:0)-(a.review?1:0)) || (b.rating-a.rating))[0] || null;
   // Les « 4 favoris » (le rituel de profil hérité de Letterboxd) : les mieux notés après le
-  // coup de cœur. Affichés seulement s'il y en a au moins 2 — une rangée d'un seul livre est triste.
+  // coup de cœur. Affichés seulement s’il y en a au moins 2 — une rangée d’un seul livre est triste.
   const favoris = shelf.filter(b=>b!==coeur && b.rating>=4)
       .sort((a,b)=>(b.rating-a.rating) || ((b.review?1:0)-(a.review?1:0))).slice(0,4);
   const horsFav = new Set([coeur, ...favoris]);
@@ -3858,7 +3858,7 @@ async function showPublicProfile(uname){
         <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>` : `<div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>`}</div>
         <div class="pp-t">${esc(b.title)}</div>
         ${b.rating ? `<div class="pp-r">${starsTxt(b.rating)}</div>` : ''}
-      </div>`).join('')}</div>` : `<div class="pp-empty">Ce lecteur n'a encore rien partagé.</div>`}
+      </div>`).join('')}</div>` : `<div class="pp-empty">Ce lecteur n’a encore rien partagé.</div>`}
     <div style="text-align:center;margin-top:26px"><button type="button" class="linkish" data-pp-report="${esc(u.username)}" style="font-size:var(--fs-sm);color:var(--faint)">\u2690 Signaler ce profil</button></div>
     <section class="pp-cta">
       <h3>Et toi, tu lis quoi ?</h3>
@@ -3875,22 +3875,23 @@ async function showPublicProfile(uname){
    et les recommandations. On enchaîne donc les lectures non notées, une carte à la fois. */
 function unratedBooks(){
   return state.books.filter(b => !b.rating && (b.status==='read' || (b.readings||[]).length))
-                    .sort((a,b)=> (lastReadDate(b)||'').localeCompare(lastReadDate(a)||''));  // les plus récentes d'abord
+                    .sort((a,b)=> (lastReadDate(b)||'').localeCompare(lastReadDate(a)||''));  // les plus récentes d’abord
 }
 function lastReadDate(b){ return (b.readings||[]).map(r=>r.date).filter(Boolean).sort().pop() || ''; }
 let _qrQueue = [], _qrDone = 0, _qrTotal = 0;
 function openQuickRate(){
-  _qrQueue = unratedBooks(); _qrDone = 0; _qrTotal = _qrQueue.length;
+  _qrQueue = unratedBooks().map(b=>b.id); _qrDone = 0; _qrTotal = _qrQueue.length;
   if(!_qrTotal){ toast('Tout est déjà noté ✓'); return; }
   renderQuickRate(); openOverlay('#ov-rate');
 }
 function renderQuickRate(){
   const el = $('#rate-body'); if(!el) return;
-  const b = _qrQueue[0];
+  while(_qrQueue.length && !state.books.some(x=>x.id===_qrQueue[0])) _qrQueue.shift(); // livres disparus entre-temps
+  const b = state.books.find(x=>x.id===_qrQueue[0]);
   if(!b){                                            // file épuisée
     const reste = unratedBooks().length;
     el.innerHTML = `<div class="qr-done"><div class="big">✨</div>
-      <h4>${_qrDone ? `${_qrDone} lecture${_qrDone>1?'s':''} notée${_qrDone>1?'s':''}` : 'C\'est tout pour l\'instant'}</h4>
+      <h4>${_qrDone ? `${_qrDone} lecture${_qrDone>1?'s':''} notée${_qrDone>1?'s':''}` : 'C’est tout pour l’instant'}</h4>
       <p>${_qrDone ? 'Tes stats, ton récap et ton fil viennent de gagner en relief.' : 'Reviens quand tu auras terminé un livre.'}${reste?` Il reste ${reste} titre${reste>1?'s':''} à noter plus tard.`:''}</p>
       <div class="qr-actions"><button class="btn primary" data-close>Terminer</button></div></div>`;
     return;
@@ -3906,7 +3907,7 @@ function renderQuickRate(){
       ${when ? `<div class="qr-when">lu le ${fmtDate(when)}</div>` : ''}
       <div class="star-input qr-stars" id="qr-stars" tabindex="0" role="slider" aria-label="Ma note"
            aria-valuemin="0" aria-valuemax="5" aria-valuenow="0" aria-valuetext="non noté">${starInputHTML(0)}</div>
-      <div class="qr-hint">Touche la moitié gauche d'une étoile pour une demi-note</div>
+      <div class="qr-hint">Touche la moitié gauche d’une étoile pour une demi-note</div>
       <div class="qr-actions">
         <button class="btn" id="qr-skip">Passer</button>
         <button class="btn" id="qr-open">Ouvrir la fiche</button>
@@ -3916,15 +3917,15 @@ function renderQuickRate(){
 }
 function qrAdvance(){ _qrQueue.shift(); renderQuickRate(); }
 $('#rate-body').addEventListener('click', e=>{
-  const b = _qrQueue[0];
+  const b = state.books.find(x=>x.id===_qrQueue[0]);
   const st = e.target.closest('#qr-stars .st');
   if(st && b){
     const n = +st.dataset.n;
     b.rating = halfFromClick(st, e.clientX) ? n-0.5 : n;
-    // la note de l'unique lecture suit, pour que le journal reste cohérent avec la fiche
+    // la note de l’unique lecture suit, pour que le journal reste cohérent avec la fiche
     const rs = b.readings||[]; if(rs.length===1 && rs[0].rating==null) rs[0].rating = b.rating;
     save(); _qrDone++;
-    $('#qr-stars').innerHTML = starInputHTML(b.rating);          // feedback avant d'enchaîner
+    $('#qr-stars').innerHTML = starInputHTML(b.rating);          // feedback avant d’enchaîner
     $('#rate-body').querySelector('.qr-hint').textContent = `${starsTxt(b.rating)} — enregistré ✓`;
     setTimeout(()=>{ qrAdvance(); scheduleRender(); }, 420);
     return;
@@ -3935,7 +3936,7 @@ $('#rate-body').addEventListener('click', e=>{
 // clavier : ← → pour choisir, Entrée pour valider et enchaîner
 $('#rate-body').addEventListener('keydown', e=>{
   const host = e.target.closest && e.target.closest('#qr-stars'); if(!host) return;
-  const b = _qrQueue[0]; if(!b) return;
+  const b = state.books.find(x=>x.id===_qrQueue[0]); if(!b) return;
   let v = +host.getAttribute('aria-valuenow') || 0;
   if(e.key==='ArrowRight'){ e.preventDefault(); v = Math.min(5, v+0.5); }
   else if(e.key==='ArrowLeft'){ e.preventDefault(); v = Math.max(0, v-0.5); }
@@ -3978,10 +3979,10 @@ function wrapText(ctx, text, x, y, maxW, lineH, maxLines){
   if(line){ ctx.fillText(line, x, y); y += lineH; }
   return y;
 }
-// Aperçu + partage d'une carte générée. Sur mobile, navigator.share({files}) ouvre la feuille
+// Aperçu + partage d’une carte générée. Sur mobile, navigator.share({files}) ouvre la feuille
 // native (Instagram, WhatsApp…) — LE canal viral ; sinon repli sur le téléchargement.
 const SITE_URL = 'https://montome.fr';
-let _cardUrl = ''; // blob-URL de l'aperçu courant, révoquée à la génération suivante
+let _cardUrl = ''; // blob-URL de l’aperçu courant, révoquée à la génération suivante
 function presentCard(cv, filename, shareText){
   cv.toBlob(blob=>{
     if(!blob){ toast('Génération impossible'); return; }
@@ -3997,7 +3998,7 @@ function presentCard(cv, filename, shareText){
         ${canNative ? `<button class="btn primary" id="card-share">${ic('share',16)} Partager</button>` : ''}
         <button class="btn ${canNative?'':'primary'}" id="card-dl">${ic('download',16)} Télécharger</button>
       </div>
-      <p class="card-hint">En story, en message… l'adresse de Tome est sur l'image ✨</p>`;
+      <p class="card-hint">En story, en message… l’adresse de Tome est sur l’image ✨</p>`;
     if(canNative) $('#card-share').addEventListener('click', async ()=>{
       try{ await navigator.share({ files:[file], title:'Tome', text:shareText }); }catch(_){ /* partage annulé */ }
     });
@@ -4012,7 +4013,7 @@ function presentCard(cv, filename, shareText){
 // Le canvas ne rend une police QUE si elle est déjà chargée : on précharge les graisses
 // utilisées par les cartes avant de tracer (sinon repli serif système silencieux).
 // Tramage ordonne (matrice de Bayer 4x4, 5 niveaux/canal, point visible x2) : donne aux
-// couvertures des cartes de partage une texture d'impression \u00AB riso \u00BB. Echoue en silence
+// couvertures des cartes de partage une texture d’impression \u00AB riso \u00BB. Echoue en silence
 // si le canvas est souille (couverture sans CORS) : la carte reste nette, jamais cassee.
 function ditherRegion(ctx, x, y, w, h, r){
   try{
@@ -4033,7 +4034,7 @@ function ditherRegion(ctx, x, y, w, h, r){
     ctx.save();
     if(ctx.roundRect && r){ ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.clip(); }
     ctx.imageSmoothingEnabled=false;
-    ctx.globalAlpha=.5;                       // fondu : texture d'impression, pas un damier
+    ctx.globalAlpha=.5;                       // fondu : texture d’impression, pas un damier
     ctx.drawImage(t, 0,0,tw,th, x,y,w,h);
     ctx.restore();
   }catch(_){ }
@@ -4113,7 +4114,7 @@ async function shareCard(b){
       const slug = (b.title||'carte').toLowerCase().replace(/[^a-z0-9à-ÿ]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,40)||'carte';
       presentCard(cv, `tome-${slug}.png`, `« ${fullTitle(b)} » — mon avis sur Tome · ${SITE_URL}`);
     }catch(e){
-      // canvas « souillé » (couverture sans CORS) → on regénère sans l'image
+      // canvas « souillé » (couverture sans CORS) → on regénère sans l’image
       if(img) generate(null);
       else toast('Génération impossible');
     }
@@ -4210,8 +4211,8 @@ async function shareYearCard(year){
 }
 
 /* =============== Overlays & focus =============== */
-// Une modale ouverte pousse une entrée d'historique : le bouton Retour (matériel Android,
-// geste iOS, ou de la souris) ferme la modale au lieu de quitter l'application.
+// Une modale ouverte pousse une entrée d’historique : le bouton Retour (matériel Android,
+// geste iOS, ou de la souris) ferme la modale au lieu de quitter l’application.
 let _overlayDepth = 0;
 function pushOverlayHistory(){
   try{ history.pushState({ tomeOverlay: ++_overlayDepth }, ''); }catch(_){ }
@@ -4227,24 +4228,39 @@ window.addEventListener('popstate', e=>{
     syncModalIsolation();
   }
 });
+// Clé de re-sélection d’un élément (id, puis data-id) : après un render(), le nœud mémorisé
+// n’est plus dans le document — on retrouve son remplaçant par cette clé.
+function focusKey(el){
+  if(!el || el===document.body || !el.getAttribute) return '';
+  if(el.id) return '#' + CSS.escape(el.id);
+  const did = el.getAttribute('data-id');
+  if(did) return el.tagName.toLowerCase() + '[data-id="' + CSS.escape(did) + '"]';
+  // bouton SANS id dans une carte identifiée (ex. .card-hit) : on vise le même bouton de la carte reconstruite
+  const host = el.closest ? el.closest('[data-id]') : null;
+  if(host && host !== el && host.getAttribute('data-id')){
+    const cls = el.className ? String(el.className).split(' ')[0] : '';
+    return host.tagName.toLowerCase() + '[data-id="' + CSS.escape(host.getAttribute('data-id')) + '"] ' + el.tagName.toLowerCase() + (cls ? '.' + CSS.escape(cls) : '');
+  }
+  return '';
+}
 function openOverlay(sel){
   const root=$(sel);
   // Sommes-nous déjà dans la pile de modales ? (root déjà ouverte = simple re-rendu ;
-  // une AUTRE overlay ouverte = transition A→B ; ou une entrée d'historique déjà posée.)
+  // une AUTRE overlay ouverte = transition A→B ; ou une entrée d’historique déjà posée.)
   const dansPile = _overlayDepth > 0 || $$('.overlay.open').length > 0;
   if(dansPile){
-    // Re-rendu OU transition modale→modale : on échange visuellement SANS toucher l'historique.
-    // L'ancien closeOverlays(false)+pushOverlayHistory faisait un history.back() ASYNCHRONE →
+    // Re-rendu OU transition modale→modale : on échange visuellement SANS toucher l’historique.
+    // L’ancien closeOverlays(false)+pushOverlayHistory faisait un history.back() ASYNCHRONE →
     // popstate → applyHashView → closeOverlays, qui refermait la nouvelle modale ~50 ms après
     // (aussi bien pour un re-rendu de la même fiche que pour une transition fiche→étude/édition).
     $$('.overlay.open').forEach(o=>{ if(o!==root) o.classList.remove('open'); });
-    // Ne PAS écraser la référence vers l'appelant d'origine (une carte hors modale) : sinon la
+    // Ne PAS écraser la référence vers l’appelant d’origine (une carte hors modale) : sinon la
     // restauration de focus à la fermeture viserait un bouton devenu display:none (retour <body>).
     const ae = document.activeElement;
-    if(!(ae && ae.closest && ae.closest('.overlay'))) ui.lastFocus = ae;
-    if(_overlayDepth === 0) pushOverlayHistory(); // filet : une overlay ouverte sans entrée d'historique
+    if(!(ae && ae.closest && ae.closest('.overlay'))){ ui.lastFocus = ae; ui.lastFocusKey = focusKey(ae); }
+    if(_overlayDepth === 0) pushOverlayHistory(); // filet : une overlay ouverte sans entrée d’historique
   }else{
-    ui.lastFocus = document.activeElement;
+    ui.lastFocus = document.activeElement; ui.lastFocusKey = focusKey(ui.lastFocus);
     pushOverlayHistory();
   }
   root.classList.add('open'); syncModalIsolation();
@@ -4256,11 +4272,16 @@ function closeOverlays(restore=true){
   stopScan();
   const etaitOuverte = $$('.overlay.open').length > 0;
   $$('.overlay').forEach(o=>o.classList.remove('open'));
-  // rendre l'entrée d'historique poussée à l'ouverture (sans re-déclencher la fermeture)
+  // rendre l’entrée d’historique poussée à l’ouverture (sans re-déclencher la fermeture)
   if(etaitOuverte && _overlayDepth > 0 && (history.state||{}).tomeOverlay){ _overlayDepth = 0; try{ history.back(); }catch(_){ } }
   syncModalIsolation();
-  if(restore && ui.lastFocus && document.contains(ui.lastFocus)){ try{ ui.lastFocus.focus(); }catch(_){} }
-  if(_dirtyBg){ _dirtyBg=false; render(); } // rattrape le rendu de fond différé pendant la modale
+  if(_dirtyBg){ _dirtyBg=false; render(); } // rattrape le rendu de fond différé AVANT de restaurer le focus
+  if(restore){
+    let t = (ui.lastFocus && document.contains(ui.lastFocus)) ? ui.lastFocus : null;
+    if(!t && ui.lastFocusKey){ try{ t = document.querySelector(ui.lastFocusKey); }catch(_){ } }
+    if(!t){ const mc = $('#main-content'); if(mc){ mc.tabIndex = -1; t = mc; } } // jamais <body>
+    try{ t && t.focus({ preventScroll:true }); }catch(_){ }
+  }
 }
 let _coverLastFocus = null;
 function closeCover(restore=true){
@@ -4294,9 +4315,9 @@ $$('.overlay').forEach(o => o.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if(e.key!=='Escape') return;
   const cov = $('#ov-cover');
-  if(cov.classList.contains('open')){ closeCover(); return; } // ferme d'abord le lightbox
+  if(cov.classList.contains('open')){ closeCover(); return; } // ferme d’abord le lightbox
   const ocd = $('#ov-card');
-  if(ocd.classList.contains('open')){ ocd.classList.remove('open'); syncModalIsolation(); return; } // puis l'aperçu de carte
+  if(ocd.classList.contains('open')){ ocd.classList.remove('open'); syncModalIsolation(); return; } // puis l’aperçu de carte
   if($$('.overlay.open').length){ closeOverlays(); return; }
   if(ui.selectMode){ clearSelection(); renderLibrary(); }
 });
@@ -4310,8 +4331,8 @@ function applyHashView(hash){
   const inv = h.match(INVITE_RE);
   if(inv){
     social.invite = inv[1].toLowerCase();
-    // persistée : sur mobile, l'aller-retour vers l'app de messagerie ou un rechargement
-    // faisait perdre l'invitation — c'est le seul canal d'acquisition de l'app.
+    // persistée : sur mobile, l’aller-retour vers l’app de messagerie ou un rechargement
+    // faisait perdre l’invitation — c’est le seul canal d’acquisition de l’app.
     try{ localStorage.setItem(PENDING_INVITE, JSON.stringify({u:social.invite, at:Date.now()})); }catch(_){ }
     try{ history.replaceState(history.state, '', location.pathname + location.search); }catch(_){} // ne pas re-déclencher au refresh
     selectView('friends');
@@ -4381,7 +4402,7 @@ if('serviceWorker' in navigator){
   addEventListener('load', async ()=>{
     try{
       const reg = await navigator.serviceWorker.register('sw.js');
-      // un nouveau worker installé alors qu'un ancien contrôle déjà la page = mise à jour dispo
+      // un nouveau worker installé alors qu’un ancien contrôle déjà la page = mise à jour dispo
       reg.addEventListener('updatefound', ()=>{
         const w = reg.installing; if(!w) return;
         w.addEventListener('statechange', ()=>{
@@ -4405,7 +4426,7 @@ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().c
 // Badge hors-ligne
 function updateOnline(){ $('#offline-badge').hidden = navigator.onLine; }
 window.addEventListener('online', ()=>{
-  // le fil d'« Aujourd'hui » resterait figé sur « indisponible hors ligne » : on le réarme
+  // le fil d'« Aujourd’hui » resterait figé sur « indisponible hors ligne » : on le réarme
   social.todayFeedError=''; social.todayFeedAt=0;
   if(ui.view==='today') renderTodaySocial();
 });
@@ -4472,8 +4493,8 @@ document.addEventListener('keydown', e => {
 // (`npx wrangler dev` dans Tome-Social sert app + API sur 8787, même origine).
 const API_BASE = (location.port==='8791') ? 'http://localhost:8787' : '';
 const SOC_TOKEN = 'tome-social-token';
-// Invitation en attente : conservée jusqu'à ce que la demande d'ami parte VRAIMENT (une
-// invitation perdue = un utilisateur perdu — c'est le seul canal d'acquisition). Expire à 7 jours.
+// Invitation en attente : conservée jusqu’à ce que la demande d’ami parte VRAIMENT (une
+// invitation perdue = un utilisateur perdu — c’est le seul canal d’acquisition). Expire à 7 jours.
 const PENDING_INVITE = 'tome-pending-invite';
 function loadPendingInvite(){
   try{
@@ -4496,7 +4517,7 @@ async function api(path, opts={}){
   catch(e){ throw new Error('offline'); }
   let data = {};
   try{ data = await res.json(); }catch(_){}
-  if(res.status===401 && social.me){ // session expirée en cours d'usage → retour propre à l'écran de connexion
+  if(res.status===401 && social.me){ // session expirée en cours d’usage → retour propre à l’écran de connexion
     try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
     social.me=null; social.view=null;
     if(ui.view==='friends') renderFriends();
@@ -4508,10 +4529,10 @@ const initials = s => {
   const mots = String(s||'?').trim().split(/[\s_.-]+/).filter(Boolean);
   return ((mots[0]||'?')[0] + (mots.length>1 ? mots[mots.length-1][0] : '')).toUpperCase();
 };
-// Couleur d'avatar dérivée du nom : chacun a la sienne, stable, sans rien stocker.
+// Couleur d’avatar dérivée du nom : chacun a la sienne, stable, sans rien stocker.
 // Dégradé saturé + texte blanc = lisible sur fond clair comme sombre.
-// Avatars sur la palette d'encres de l'identité (plus de roue chromatique à 360° : un magenta
-// aléatoire jurait avec l'encre et la dorure). Déterministe par pseudo, texte ivoire.
+// Avatars sur la palette d’encres de l’identité (plus de roue chromatique à 360° : un magenta
+// aléatoire jurait avec l’encre et la dorure). Déterministe par pseudo, texte ivoire.
 const AVATAR_INKS = ['#1f4560','#2e4d38','#8a4a1f','#9c332a','#4a2b40','#41465a','#6d5416','#233c52'];
 function avatarStyle(seed){
   const s = String(seed||'?');
@@ -4519,20 +4540,20 @@ function avatarStyle(seed){
   const ink = AVATAR_INKS[Math.abs(h) % AVATAR_INKS.length];
   return `background:${ink};color:#efe8d8`;
 }
-// markup complet d'un avatar (une seule source de vérité pour les 8 endroits qui en affichent)
+// markup complet d’un avatar (une seule source de vérité pour les 8 endroits qui en affichent)
 function avatarHTML(name, cls=''){
   return `<div class="avatar${cls?' '+cls:''}" style="${avatarStyle(name)}">${esc(initials(name))}</div>`;
 }
-// clé stable d'un livre côté social — DOIT rester identique entre la synchro (shareableBooks)
+// clé stable d’un livre côté social — DOIT rester identique entre la synchro (shareableBooks)
 // et les lectures croisées (« chez tes amis »), sinon les correspondances se perdent
 function shelfKey(b){ return (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,''); }
 // sous-ensemble partageable de la bibliothèque
-// Miroir client de cleanSharedCover (worker) : sert uniquement à prévenir l'utilisateur ;
-// le serveur reste seul juge de ce qu'il accepte.
+// Miroir client de cleanSharedCover (worker) : sert uniquement à prévenir l’utilisateur ;
+// le serveur reste seul juge de ce qu’il accepte.
 const SHAREABLE_COVER = /^https:\/\/(covers\.openlibrary\.org\/b\/(id|isbn|olid)\/[A-Za-z0-9]+-[SML]\.jpg|books\.google(usercontent)?\.com\/books\/)/;
 // La bibliothèque de démonstration (tag 'exemple') est un bac à sable LOCAL : elle ne doit
-// jamais être partagée ni sauvegardée sur un compte — sinon les critiques d'exemple sortent
-// signées du nom de l'utilisateur sur sa page publique et chez ses amis.
+// jamais être partagée ni sauvegardée sur un compte — sinon les critiques d’exemple sortent
+// signées du nom de l’utilisateur sur sa page publique et chez ses amis.
 function isDemoBook(b){ return !!(b && (b.tags||[]).includes('exemple')); }
 function stripDemo(){
   const n = state.books.filter(isDemoBook).length;
@@ -4556,7 +4577,7 @@ function setFriendsBadge(n){
   const b = $('#nav-friends-badge'); if(!b) return;
   if(n>0){ b.textContent = n>9?'9+':String(n); b.hidden = false; } else { b.hidden = true; }
 }
-// le badge de l'onglet Amis = demandes reçues + notifications non lues (tout ce qui est « nouveau »)
+// le badge de l’onglet Amis = demandes reçues + notifications non lues (tout ce qui est « nouveau »)
 function refreshSocBadge(){ setFriendsBadge((social.pendingRequests||0) + (social.unreadNotifs||0)); }
 async function socRefresh(){
   if(!socToken()){ social.me=null; social.sessionError=''; social.pendingRequests=0; social.unreadNotifs=0; setFriendsBadge(0); return; }
@@ -4573,17 +4594,17 @@ async function socRefresh(){
 
 /* =============== Bibliothèque sur le compte (sauvegarde serveur façon Letterboxd) =============== */
 // Le local reste la copie de travail (rapide, hors-ligne) ; le serveur est la source de vérité
-// synchronisée entre appareils. Concurrence optimiste (rev) : jamais d'écrasement silencieux.
+// synchronisée entre appareils. Concurrence optimiste (rev) : jamais d’écrasement silencieux.
 let _libPushTimer = 0, _libPushing = false, _libDirty = false, _libRetryMs = 2000;
 const LIB_STATUS = { saving:'Sauvegarde…', saved:'Enregistré', offline:'Hors ligne — sera sauvegardé au retour', error:'Erreur de sauvegarde', conflict:'Fusionné depuis un autre appareil' };
 function setLibStatus(s){ social.libStatus = s; const el = $('#lib-status'); if(el){ el.dataset.s = s; el.title = LIB_STATUS[s]||''; el.hidden = !s || s==='saved'; } }
 // mute state EN PLACE (const) à partir de données brutes (normalisées + sanitizées)
 function replaceState(raw){ const n = normalizeData(raw||{}); for(const k of Object.keys(state)) delete state[k]; Object.assign(state, n); invalidateCache(); }
-// Sauvegarde de secours locale avant un remplacement d'état. Renvoie false si l'écriture échoue
-// (quota plein) — précisément le cas où l'appelant doit proposer un téléchargement de secours.
+// Sauvegarde de secours locale avant un remplacement d’état. Renvoie false si l’écriture échoue
+// (quota plein) — précisément le cas où l’appelant doit proposer un téléchargement de secours.
 function backupLocal(suffix){ try{ localStorage.setItem(LS_KEY+suffix, localStorage.getItem(LS_KEY)||''); return true; }catch(_){ return false; } }
-// Filet ceinture-bretelles avant un EFFACEMENT total : si la copie localStorage échoue alors qu'il
-// existe de vraies données, on télécharge l'état courant pour qu'aucun effacement ne soit définitif.
+// Filet ceinture-bretelles avant un EFFACEMENT total : si la copie localStorage échoue alors qu’il
+// existe de vraies données, on télécharge l’état courant pour qu’aucun effacement ne soit définitif.
 function backupBeforeWipe(suffix){
   if(backupLocal(suffix)) return;
   if((state.books||[]).some(b=>!(b.tags||[]).includes('exemple'))){
@@ -4610,11 +4631,15 @@ function libraryPayload(){
 async function pushLibrary(opts){
   if(!social.me || social.tosOutdated) return;
   if(_libPushing){ _libDirty = true; return; }               // une seule requête à la fois
-  _libPushing = true; _libDirty = false; clearTimeout(_libPushTimer); setLibStatus('saving');
+  _libPushing = true; _libDirty = false; clearTimeout(_libPushTimer); _libPushTimer = 0; setLibStatus('saving');
   try{
-    const res = await fetch(API_BASE+'/api/library', { method:'POST', keepalive: !!(opts&&opts.keepalive),
+    const body = JSON.stringify({ data: JSON.stringify(libraryPayload()), baseRev: social.libRev||0 });
+    // keepalive : les navigateurs plafonnent le corps à ~64 Ko — au-delà, la requête échoue
+    // silencieusement ; on retombe alors sur un fetch normal (best-effort à la fermeture).
+    const keep = !!(opts&&opts.keepalive) && body.length < 60000;
+    const res = await fetch(API_BASE+'/api/library', { method:'POST', keepalive: keep,
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+socToken() },
-      body: JSON.stringify({ data: JSON.stringify(libraryPayload()), baseRev: social.libRev||0 }) });
+      body });
     if(res.status===409){                                     // un autre appareil a écrit entre-temps
       const d = await res.json();
       backupLocal('-conflit');
@@ -4636,7 +4661,7 @@ async function pushLibrary(opts){
     if(_libDirty && navigator.onLine && !_libPushTimer && social.me && !social.tosOutdated) scheduleLibPush(_libRetryMs);
   }
 }
-// Adopte la bibliothèque du serveur (cas : appareil vierge, ou biblio d'un AUTRE compte à remplacer).
+// Adopte la bibliothèque du serveur (cas : appareil vierge, ou biblio d’un AUTRE compte à remplacer).
 function adoptServerLibrary(d){
   if(!d || !d.data) return;
   backupBeforeWipe('-preacct');
@@ -4664,9 +4689,9 @@ function mergeLibraries(localSt, serverRaw){
         localIdMap.set(b.id, existing.id);
         continue;
       }
-      // Sans historique champ par champ, choisir silencieusement un côté détruirait l'autre version.
+      // Sans historique champ par champ, choisir silencieusement un côté détruirait l’autre version.
       // On conserve donc les DEUX livres : la copie locale est clairement marquée et reçoit un nouvel
-      // id uniquement en cas de collision. L'utilisateur peut ensuite réconcilier les versions.
+      // id uniquement en cas de collision. L’utilisateur peut ensuite réconcilier les versions.
       const localCopy = normalizeBook(b);
       if(ids.has(localCopy.id)) localCopy.id = uid();
       localCopy.tags = [...new Set([...(localCopy.tags||[]), 'conflit-sync'])].slice(0,20);
@@ -4695,7 +4720,7 @@ function mergeLibraries(localSt, serverRaw){
   for(const [y,v] of Object.entries(localSt.goals||{})) out.goals[y] = Math.max(out.goals[y]||0, +v||0);
   // séries : le serveur reste la valeur courante, mais on ne détruit JAMAIS une note/critique locale
   // divergente — la critique est rattachée sous un marqueur de conflit, la note/favori récupérés si
-  // le serveur n'en a pas. (L'ancien Object.assign faisait gagner le serveur en silence.)
+  // le serveur n’en a pas. (L’ancien Object.assign faisait gagner le serveur en silence.)
   out.series = out.series || {};
   for(const [name, loc] of Object.entries(localSt.series||{})){
     const srv = out.series[name];
@@ -4707,7 +4732,7 @@ function mergeLibraries(localSt, serverRaw){
     if(!srv.favorite && loc && loc.favorite) srv.favorite = true;
   }
   // collections intelligentes : union par id ; une locale modifiée (même id, contenu différent)
-  // est préservée sous un nouvel id plutôt qu'ignorée silencieusement.
+  // est préservée sous un nouvel id plutôt qu’ignorée silencieusement.
   const scById = new Map((out.smartCollections||[]).map(c=>[c.id,c]));
   const scStrip = c => JSON.stringify({ name:c.name||'', f:c.f||{} });
   for(const c of (localSt.smartCollections||[])){
@@ -4715,7 +4740,7 @@ function mergeLibraries(localSt, serverRaw){
     if(!t){ out.smartCollections.push(c); scById.set(c.id,c); }
     else if(scStrip(c)!==scStrip(t)){ out.smartCollections.push({ ...c, id: uid(), name: (c.name||'Collection')+' (conflit-sync)' }); conflicts++; }
   }
-  // compteur d'export : garder la date la plus récente
+  // compteur d’export : garder la date la plus récente
   if(localSt.meta && localSt.meta.lastExport && (!out.meta.lastExport || localSt.meta.lastExport > out.meta.lastExport)) out.meta.lastExport = localSt.meta.lastExport;
   out.meta.mergeConflicts = conflicts;
   return out;
@@ -4732,7 +4757,7 @@ async function syncLibraryOnLogin(){
   try{ d = await api('/api/library'); }
   catch(e){ setLibStatus('offline'); return; }                    // hors-ligne : on garde le local
   if(!localMine){
-    // la biblio locale appartient à QUELQU'UN D'AUTRE (appareil partagé) → ne JAMAIS la mêler à ce compte
+    // la biblio locale appartient à QUELQU’UN D’AUTRE (appareil partagé) → ne JAMAIS la mêler à ce compte
     backupBeforeWipe('-autre');
     if(d.exists) adoptServerLibrary(d);
     else { replaceState({}); libTag(0); libPersist(); scheduleRender(); }
@@ -4759,22 +4784,22 @@ async function syncLibraryOnLogin(){
   if(conflicts) toast(`${conflicts} conflit${conflicts>1?'s':''} conservé${conflicts>1?'s':''} en double (tag « conflit-sync »)`);
   else if(localHasReal) toast('Bibliothèques synchronisées ✓');
 }
-// Flush best-effort quand l'onglet se ferme/masque : pousse une sauvegarde en attente (keepalive
+// Flush best-effort quand l’onglet se ferme/masque : pousse une sauvegarde en attente (keepalive
 // survit à la fermeture) — évite de perdre une modif faite juste avant de quitter.
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && _libDirty && social.me && !_libPushing) pushLibrary({keepalive:true}); });
 window.addEventListener('pagehide', ()=>{ if(_libDirty && social.me && !_libPushing) pushLibrary({keepalive:true}); });
 
 /* ---- Étagère partagée : synchro AUTOMATIQUE ----
-   Avant, le profil visible des amis n'existait qu'après un clic manuel dans « Mon partage » — un
-   nouvel inscrit avait donc un profil vide. Désormais l'étagère suit la bibliothèque, en respectant
+   Avant, le profil visible des amis n’existait qu’après un clic manuel dans « Mon partage » — un
+   nouvel inscrit avait donc un profil vide. Désormais l’étagère suit la bibliothèque, en respectant
    le mode de partage : « Rien » = jamais rien envoyé ; « Notes seules » = critiques retirées CÔTÉ
-   CLIENT. Débounce long + empreinte persistée : on n'appelle le serveur que si le contenu partagé a
+   CLIENT. Débounce long + empreinte persistée : on n’appelle le serveur que si le contenu partagé a
    réellement changé (limite serveur : 40 synchros/h). Rattrapage à la connexion et au démarrage. */
 const SHELF_TAG_KEY = 'tome-shelf-tag';
 let _shelfTimer = 0, _shelfPushing = false, _shelfDirty = false, _shelfRetryMs = 5000;
 function shelfPayload(mode){ const books = shareableBooks(); return mode==='ratings' ? books.map(b=>({...b, review:''})) : books; }
 function shelfHash(s){ let h = 5381; for(let i=0;i<s.length;i++) h = ((h<<5)+h+s.charCodeAt(i))>>>0; return h.toString(36); }
-// l'empreinte inclut l'id du compte : sur un appareil partagé, changer de compte force une resynchro
+// l’empreinte inclut l’id du compte : sur un appareil partagé, changer de compte force une resynchro
 function shelfTag(mode, payload){ return (social.me?social.me.id:'')+':'+mode+':'+payload.length+':'+shelfHash(JSON.stringify(payload)); }
 function rememberShelfTag(tag){ try{ localStorage.setItem(SHELF_TAG_KEY, tag); }catch(_){ } }
 function scheduleShelfPush(delay=25000){
@@ -4806,12 +4831,12 @@ window.addEventListener('online', ()=>{
 function renderFriends(){
   const box = $('#friends-body');
   if(!social.me){ renderAuth(box); return; }
-  if(social.invite || loadPendingInvite()) processInvite(); // invitation (même persistée après un rechargement) traitée dès qu'on est connecté
+  if(social.invite || loadPendingInvite()) processInvite(); // invitation (même persistée après un rechargement) traitée dès qu’on est connecté
   if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
   box.innerHTML = `
     ${social.tosOutdated ? `<div class="invite-banner" id="tos-banner">📄 Les mentions légales ont été mises à jour : ta bibliothèque est désormais enregistrée sur ton compte, pour la retrouver sur tous tes appareils (privée, exportable et supprimable à tout moment).
       <button type="button" class="linkish" data-legal-view>Les lire</button>
-      <button class="btn small primary" id="tos-accept" style="margin-left:8px">J'accepte</button></div>` : ''}
+      <button class="btn small primary" id="tos-accept" style="margin-left:8px">J’accepte</button></div>` : ''}
     <div class="me-bar">
       ${avatarHTML(social.me.displayName)}
       <div><b>${esc(social.me.displayName)}</b><div class="muted">@${esc(social.me.username)}</div></div>
@@ -4848,18 +4873,18 @@ async function renderNotifications(){
   const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
   try{
     const d = await api('/api/notifications');
-    // marquer lu dès l'ouverture (efface le compteur)
+    // marquer lu dès l’ouverture (efface le compteur)
     if(social.unreadNotifs){ api('/api/notifications/read', {method:'POST', body:{}}).catch(()=>{}); social.unreadNotifs = 0; refreshSocBadge(); const sb=$('#friends-body .sub-badge'); if(sb) sb.remove(); }
-    if(!d.notifications.length){ el.innerHTML = `<p class="friends-empty">Aucune notification pour l'instant. Ajoute des amis et partage tes lectures !</p>`; return; }
-    // résout le titre d'un livre à partir de sa clé (dans MA bibliothèque locale)
+    if(!d.notifications.length){ el.innerHTML = `<p class="friends-empty">Aucune notification pour l’instant. Ajoute des amis et partage tes lectures !</p>`; return; }
+    // résout le titre d’un livre à partir de sa clé (dans MA bibliothèque locale)
     const byKey = new Map(state.books.map(b=>[shelfKey(b), b]));
-    const verb = { friend_request:'t\'a envoyé une demande d\'ami', friend_accept:'a accepté ta demande d\'ami',
+    const verb = { friend_request:'t’a envoyé une demande d’ami', friend_accept:'a accepté ta demande d’ami',
                    reaction:'a aimé ta lecture', comment:'a commenté ta lecture' };
     el.innerHTML = d.notifications.map(n=>{
       const b = n.bookKey ? byKey.get(n.bookKey) : null;
       const book = b ? ` <b>${esc(fullTitle(b))}</b>` : '';
       const ic = { friend_request:'👋', friend_accept:'🤝', reaction:'♥', comment:'💬' }[n.type] || '🔔';
-      // une demande d'ami s'accepte ICI : c'est l'événement le plus important de l'app
+      // une demande d’ami s’accepte ICI : c’est l’événement le plus important de l’app
       const actions = n.type==='friend_request' && n.actorId
         ? `<div class="notif-actions"><button class="btn small primary" data-accept="${esc(n.actorId)}">Accepter</button></div>` : '';
       return `<div class="notif${n.read?'':' unread'}" ${b?`data-profile-book="${esc(b.id)}"`:''} ${n.username?`data-profile-user="${esc(n.username)}"`:''}>
@@ -4868,7 +4893,7 @@ async function renderNotifications(){
           <span class="notif-when">${notifWhen(n.at)}</span>${actions}</div>
       </div>`;
     }).join('');
-    el.addEventListener('click', async e=>{
+    el.onclick = async e=>{
       const acc = e.target.closest('[data-accept]');
       if(acc){
         if(acc.disabled) return; acc.disabled = true;
@@ -4879,12 +4904,12 @@ async function renderNotifications(){
       }
       const row = e.target.closest('[data-profile-user]');
       if(row) openProfile(row.dataset.profileUser);
-    });
+    };
   }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
 }
 function notifWhen(ts){
   const s = Math.max(0, (Date.now()-ts)/1000);
-  if(s<60) return 'à l\'instant'; if(s<3600) return 'il y a '+Math.floor(s/60)+' min';
+  if(s<60) return 'à l’instant'; if(s<3600) return 'il y a '+Math.floor(s/60)+' min';
   if(s<86400) return 'il y a '+Math.floor(s/3600)+' h';
   return 'il y a '+Math.floor(s/86400)+' j';
 }
@@ -4900,16 +4925,16 @@ async function renderAccount(){
     <input id="acc-new" aria-label="Nouveau mot de passe" type="password" maxlength="256" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)">
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
     <h4>Notifications</h4>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Être prévenu·e quand un ami t'ajoute, aime ou commente une de tes lectures — même quand Tome est fermé. <span id="acc-push-state"></span></p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Être prévenu·e quand un ami t’ajoute, aime ou commente une de tes lectures — même quand Tome est fermé. <span id="acc-push-state"></span></p>
     <div class="data-actions"><button class="btn" id="acc-push">${ic('bell',16)} Activer les notifications</button></div>
     <h4>Ma page publique</h4>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n'affiche que ce que tu partages déjà (Amis → Mon partage) — <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n’affiche que ce que tu partages déjà (Amis → Mon partage) — <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
     <div class="data-actions">
       <button class="btn ${social.publicProfile?'':'primary'}" id="acc-pub">${social.publicProfile?'Rendre ma page privée':'Publier ma page'}</button>
       ${social.publicProfile?`<button class="btn" id="acc-pub-copy">${ic('link',16)} Copier le lien</button><a class="btn" id="acc-pub-open" href="/@${esc(social.me.username)}" target="_blank" rel="noopener">Voir ma page ↗</a>`:''}
     </div>
     <h4>Code de secours</h4>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n'est collecté). ${social.hasRecovery?'Un code est actif — le régénérer invalide l\'ancien.':'<b>Aucun code actif</b> — génère-le maintenant.'}</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n’est collecté). ${social.hasRecovery?'Un code est actif — le régénérer invalide l’ancien.':'<b>Aucun code actif</b> — génère-le maintenant.'}</p>
     <input id="acc-rec" aria-label="Mot de passe actuel (pour générer le code de secours)" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
     <button class="btn" id="acc-rec-gen">${ic('key',16)} ${social.hasRecovery?'Régénérer mon code':'Générer mon code'}</button>
     <h4>Utilisateurs bloqués</h4>
@@ -4982,7 +5007,7 @@ async function renderAccount(){
     let ok = true;
     try{ await api('/api/account/logout-all', {method:'POST'}); }catch(_){ ok = false; }
     try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); renderFriends();
-    toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici — les autres appareils n\'ont pas pu être joints'); };
+    toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici — les autres appareils n’ont pas pu être joints'); };
   $('#acc-delete').onclick = async ()=>{
     if(!await uiConfirm({title:'Supprimer ton compte ?', message:'Action IRRÉVERSIBLE. Ton profil, tes amis, ta bibliothèque privée sauvegardée et ton étagère partagée seront effacés du serveur. Ta bibliothèque locale reste sur cet appareil.', okLabel:'Continuer', danger:true})) return;
     const pw = await uiPrompt({title:'Confirme avec ton mot de passe', message:'Tape ton mot de passe pour supprimer définitivement le compte.', type:'password', okLabel:'Supprimer'});
@@ -5000,20 +5025,20 @@ async function renderAccount(){
   }catch(_){ $('#acc-blocks').innerHTML = `<p class="friends-empty" style="padding:8px 0">—</p>`; }
 }
 // ---- Code de secours : seule voie de récupération (aucun email collecté) ----
-// Reste affiché jusqu'à confirmation explicite ; copie et téléchargement proposés.
+// Reste affiché jusqu’à confirmation explicite ; copie et téléchargement proposés.
 async function showRecoveryCode(code, intro){
-  const msg = `${intro||''}${intro?'\n\n':''}${code}\n\nC'est la SEULE façon de récupérer ton compte si tu oublies ton mot de passe — aucun email n'est collecté. Copie-le ou télécharge-le, puis range-le en lieu sûr : il ne sera plus jamais affiché.`;
+  const msg = `${intro||''}${intro?'\n\n':''}${code}\n\nC’est la SEULE façon de récupérer ton compte si tu oublies ton mot de passe — aucun email n’est collecté. Copie-le ou télécharge-le, puis range-le en lieu sûr : il ne sera plus jamais affiché.`;
   for(;;){
-    // « C'est noté » est la seule sortie : Échap/clic-fond renvoient null → on réaffiche
+    // « C’est noté » est la seule sortie : Échap/clic-fond renvoient null → on réaffiche
     const v = await openDialog({ title:'🔑 Ton code de secours', message: msg, actions:[
       {label:'📋 Copier', value:'copy'},
       {label:'Télécharger', value:'dl'},
-      {label:'C\'est noté ✓', value:'ok', variant:'primary', default:true},
+      {label:'C’est noté ✓', value:'ok', variant:'primary', default:true},
     ]});
     if(v==='ok') return;
     if(v==='copy'){ try{ await navigator.clipboard.writeText(code); toast('Code copié ✓'); }catch(_){ toast('Copie impossible — note-le à la main'); } }
     else if(v==='dl'){
-      const txt = `Code de secours Tome\nPseudo : ${social.me?social.me.username:''}\n\n${code}\n\nCe code permet de récupérer ton compte en cas d'oubli du mot de passe.\nGarde ce fichier en lieu sûr — l'utiliser en génère un nouveau.\n${SITE_URL}\n`;
+      const txt = `Code de secours Tome\nPseudo : ${social.me?social.me.username:''}\n\n${code}\n\nCe code permet de récupérer ton compte en cas d’oubli du mot de passe.\nGarde ce fichier en lieu sûr — l’utiliser en génère un nouveau.\n${SITE_URL}\n`;
       const blob = new Blob([txt], {type:'text/plain'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tome-code-de-secours.txt';
       a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000); toast('Fichier téléchargé ✓');
@@ -5022,8 +5047,8 @@ async function showRecoveryCode(code, intro){
   }
 }
 // ---- Invitation par lien : #invite/<pseudo> ----
-// Le lien ne fait que pré-remplir une demande d'ami confirmée par l'utilisateur ;
-// aucun nouveau point d'entrée serveur (la demande passe par /api/friends/request).
+// Le lien ne fait que pré-remplir une demande d’ami confirmée par l’utilisateur ;
+// aucun nouveau point d’entrée serveur (la demande passe par /api/friends/request).
 async function shareInvite(){
   if(!social.me) return;
   const url = location.origin + location.pathname + '#invite/' + encodeURIComponent(social.me.username);
@@ -5031,10 +5056,10 @@ async function shareInvite(){
     try{ await navigator.share({ title:'Tome', text:'Rejoins-moi sur Tome pour partager nos lectures !', url }); return; }
     catch(e){ if(e && e.name==='AbortError') return; /* sinon : repli presse-papiers */ }
   }
-  try{ await navigator.clipboard.writeText(url); toast('Lien d\'invitation copié ✓ — envoie-le à un ami'); }
-  catch(_){ openDialog({ title:'Mon lien d\'invitation', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}] }); }
+  try{ await navigator.clipboard.writeText(url); toast('Lien d’invitation copié ✓ — envoie-le à un ami'); }
+  catch(_){ openDialog({ title:'Mon lien d’invitation', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}] }); }
 }
-let _inviteBusy = false; // renderFriends est appelé souvent : un seul dialogue d'invitation à la fois
+let _inviteBusy = false; // renderFriends est appelé souvent : un seul dialogue d’invitation à la fois
 async function processInvite(){
   if(_inviteBusy) return;
   const uname = social.invite || loadPendingInvite();
@@ -5044,8 +5069,8 @@ async function processInvite(){
   try{ await _processInvite(uname); } finally{ _inviteBusy = false; }
 }
 async function _processInvite(uname){
-  if(uname === social.me.username){ clearPendingInvite(); toast("C'est ton propre lien d'invitation 😄"); return; }
-  const ok = await uiConfirm({ title:`@${uname} t'invite`, message:`Envoyer une demande d'ami à @${uname} ? Vous verrez alors vos lectures respectives.`, okLabel:'Envoyer la demande' });
+  if(uname === social.me.username){ clearPendingInvite(); toast("C’est ton propre lien d’invitation 😄"); return; }
+  const ok = await uiConfirm({ title:`@${uname} t’invite`, message:`Envoyer une demande d’ami à @${uname} ? Vous verrez alors vos lectures respectives.`, okLabel:'Envoyer la demande' });
   if(!ok){ clearPendingInvite(); return; }          // refus explicite : ne pas redemander
   try{
     const r = await api('/api/friends/request', {method:'POST', body:{username:uname}});
@@ -5053,16 +5078,16 @@ async function _processInvite(uname){
     toast(r.status==='accepted' ? 'Vous êtes maintenant amis ✓' : 'Demande envoyée ✓');
     if(social.tab==='friends') loadFriendLists();
   }catch(e){
-    // hors ligne / serveur injoignable : l'invitation reste en attente pour la prochaine ouverture
-    toast(e.message==='offline' ? "Serveur injoignable — l'invitation est gardée" : e.message);
+    // hors ligne / serveur injoignable : l’invitation reste en attente pour la prochaine ouverture
+    toast(e.message==='offline' ? "Serveur injoignable — l’invitation est gardée" : e.message);
   }
 }
 function renderAuth(box, mode, errMsg=''){
-  // un visiteur sans jeton n'a par définition pas de compte : lui présenter l'inscription,
-  // pas un mur de connexion (surtout s'il arrive par l'invitation d'un ami)
+  // un visiteur sans jeton n’a par définition pas de compte : lui présenter l’inscription,
+  // pas un mur de connexion (surtout s’il arrive par l’invitation d’un ami)
   if(!mode) mode = (socToken() && !social.invite && !loadPendingInvite()) ? 'login' : 'signup';
   box.innerHTML = `
-    ${social.invite ? `<div class="invite-banner">💌 <b>@${esc(social.invite)}</b> t'invite sur Tome — connecte-toi ou crée un compte pour l'ajouter en ami.</div>` : ''}
+    ${social.invite ? `<div class="invite-banner">💌 <b>@${esc(social.invite)}</b> t’invite sur Tome — connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : ''}
     <div class="auth-card">
       <h3>${mode==='login'?'Se connecter':'Créer un compte'}</h3>
       <p class="sub">${mode==='login'
@@ -5082,14 +5107,14 @@ function renderAuth(box, mode, errMsg=''){
       </fieldset>
       <label class="consent-row" style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);display:flex;gap:8px;align-items:flex-start;margin-top:12px">
         <input type="checkbox" id="soc-consent" style="width:auto;margin-top:3px">
-        <span>J'accepte les <button type="button" class="linkish" data-legal>mentions légales et la politique de confidentialité</button> et les <button type="button" class="linkish" data-cgu>conditions d'utilisation</button>.</span></label>`:''}
+        <span>J’accepte les <button type="button" class="linkish" data-legal>mentions légales et la politique de confidentialité</button> et les <button type="button" class="linkish" data-cgu>conditions d’utilisation</button>.</span></label>`:''}
       <div class="auth-err" role="alert" aria-live="assertive">${esc(errMsg)}</div>
       <button class="btn primary" id="soc-submit" style="width:100%; justify-content:center">${mode==='login'?'Connexion':'Créer mon compte'}</button>
       <div class="switch">${mode==='login'
         ? `Pas encore de compte ? <button type="button" class="linkish" data-auth="signup">Créer un compte</button><br><button type="button" class="linkish" data-auth="recover">Mot de passe oublié&nbsp;?</button>`
         : `Déjà inscrit ? <button type="button" class="linkish" data-auth="login">Se connecter</button>`}</div>
     </div>`;
-  // affiche l'erreur SANS re-render (préserve pseudo/mot de passe/nom/consentement déjà saisis)
+  // affiche l’erreur SANS re-render (préserve pseudo/mot de passe/nom/consentement déjà saisis)
   const showErr = m => { const e=$('#friends-body .auth-err'); if(e) e.textContent=m; const s=$('#soc-submit'); if(s){ s.disabled=false; s.textContent = mode==='login'?'Connexion':'Créer mon compte'; } };
   const submit = async ()=>{
     const username = $('#soc-user').value.trim();
@@ -5103,12 +5128,12 @@ function renderAuth(box, mode, errMsg=''){
       const body = mode==='login' ? {username, password} : {username, password, displayName, consent:true, shareMode};
       const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
       localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tosOutdated = mode!=='signup'; social.tab='feed'; social.view=null;
-      try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d'accueil
+      try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d’accueil
       await socRefresh(); // récupère aussi tosOutdated AVANT toute sauvegarde privée
       if(stripDemo()) toast('Exemples retirés — ton compte démarre avec tes vrais livres.');
       if(!social.tosOutdated) syncLibraryOnLogin().then(()=>pushShelf());
-      // le code AVANT renderFriends : sinon la confirmation d'invitation (#invite) écraserait le
-      // dialogue du code (une seule modale à la fois) — l'invitation s'ouvrira après « C'est noté »
+      // le code AVANT renderFriends : sinon la confirmation d’invitation (#invite) écraserait le
+      // dialogue du code (une seule modale à la fois) — l’invitation s’ouvrira après « C’est noté »
       if(d.recoveryCode) await showRecoveryCode(d.recoveryCode, 'Bienvenue sur Tome ! Avant tout, note ton code de secours :');
       renderFriends();
     }catch(e){
@@ -5118,7 +5143,7 @@ function renderAuth(box, mode, errMsg=''){
   $('#soc-submit').addEventListener('click', submit);
   $('#soc-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
   const legal = $('#friends-body [data-legal]'); if(legal) legal.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
-  const cgu = $('#friends-body [data-cgu]'); if(cgu) cgu.addEventListener('click', ()=>openDialog({title:"Conditions d'utilisation", message:TERMS_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
+  const cgu = $('#friends-body [data-cgu]'); if(cgu) cgu.addEventListener('click', ()=>openDialog({title:"Conditions d’utilisation", message:TERMS_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
   $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>a.dataset.auth==='recover' ? renderRecover(box) : renderAuth(box, a.dataset.auth)));
 }
 // Récupération de compte par code de secours (« mot de passe oublié »)
@@ -5147,8 +5172,8 @@ function renderRecover(box, errMsg=''){
       localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tosOutdated = true; social.tab='feed'; social.view=null;
       await socRefresh();
       if(!social.tosOutdated) syncLibraryOnLogin().then(()=>pushShelf());
-      // même ordre qu'à l'inscription : le code d'abord, l'onglet Amis (et une éventuelle invitation) ensuite
-      if(d.recoveryCode) await showRecoveryCode(d.recoveryCode, 'Compte récupéré ✓ Voici ton NOUVEAU code de secours (l\'ancien ne fonctionne plus) :');
+      // même ordre qu’à l’inscription : le code d’abord, l’onglet Amis (et une éventuelle invitation) ensuite
+      if(d.recoveryCode) await showRecoveryCode(d.recoveryCode, 'Compte récupéré ✓ Voici ton NOUVEAU code de secours (l’ancien ne fonctionne plus) :');
       renderFriends();
     }catch(e){ showErr(e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message); }
   };
@@ -5157,22 +5182,22 @@ function renderRecover(box, errMsg=''){
   $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>renderAuth(box, a.dataset.auth)));
 }
 // La promesse publique du modèle : le cœur reste gratuit, le payant (un jour) sera du confort en
-// plus — jamais une reprise de l'existant. C'est un ENGAGEMENT : ne jamais l'affaiblir en douce.
+// plus — jamais une reprise de l’existant. C’est un ENGAGEMENT : ne jamais l’affaiblir en douce.
 const FREE_PLEDGE = `Ce qui restera toujours gratuit — la promesse de Tome.
 
-Tome proposera peut-être un jour des options payantes (du confort, du soutien au projet). Mais le cœur de l'app est gratuit, pour toujours :
+Tome proposera peut-être un jour des options payantes (du confort, du soutien au projet). Mais le cœur de l’app est gratuit, pour toujours :
 
 • Bibliothèque, séries et listes ILLIMITÉES — jamais de plafond de livres.
 • Journal de lecture, notes, critiques, citations, ambiances, objectif annuel, streak.
-• Amis, fil d'activité, réactions ♥, réponses, notifications.
+• Amis, fil d’activité, réactions ♥, réponses, notifications.
 • Récap annuel et cartes de partage.
-• Import ET export complets — tes données t'appartiennent, tu peux partir à tout moment.
+• Import ET export complets — tes données t’appartiennent, tu peux partir à tout moment.
 • Multi-appareils : ta bibliothèque enregistrée sur ton compte, privée.
 
 Et trois « jamais » :
 • Jamais de publicité display.
 • Jamais de vente de tes données individuelles.
-• Jamais de limite rétroactive : ce qui est gratuit aujourd'hui le reste.
+• Jamais de limite rétroactive : ce qui est gratuit aujourd’hui le reste.
 
 Si des options payantes arrivent, ce sera du confort EN PLUS (statistiques avancées, personnalisation, soutien) — jamais une rançon sur ce que tu utilises déjà.`;
 
@@ -5196,41 +5221,41 @@ function showPledge(){ openDialog({title:'💚 Toujours gratuit', message:FREE_P
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement et directeur de la publication : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n'étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d'amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l'abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus — effacée automatiquement sous 48 heures).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n’étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d’amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l’abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus — effacée automatiquement sous 48 heures).
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
-Base légale : ton consentement (recueilli à l'inscription).
-Âge minimum : Tome s'adresse aux 15 ans et plus (âge du consentement numérique en France) ; en dessous, l'inscription nécessite l'accord d'un parent ou tuteur.
-Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Le partage social est réglé sur « Rien » par défaut. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n'envoie jamais rien. Exception si tu l'actives toi-même : « Ma page publique » (Amis → Mon compte) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
-Services tiers : Tome n'installe aucun traceur, mais pour afficher les couvertures et proposer des recherches de livres, ton navigateur contacte directement Google Books (googleapis.com, books.google.com) et Open Library (openlibrary.org, covers.openlibrary.org) — qui reçoivent alors ta requête ou l'identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n'a lieu que quand tu la déclenches ; les « Idées du jour » ne s'activent qu'avec ton accord explicite.
-Cookies et traceurs : Tome n'utilise aucun cookie publicitaire ni de mesure d'audience — uniquement le stockage strictement nécessaire au service (ta bibliothèque sur ton appareil, ta session). Ces usages sont exemptés de consentement, c'est pourquoi il n'y a pas de bannière cookies.
-Hébergement et transferts : Cloudflare, Inc. (101 Townsend St, San Francisco, États-Unis) ; la base de données est hébergée en Europe de l'Ouest. Les flux transitant hors de l'UE sont encadrés par les garanties reconnues (certification Data Privacy Framework et clauses contractuelles types).
-Liens d'achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d'affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d'Amazon qui s'appliquent.
-Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d'inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
+Base légale : ton consentement (recueilli à l’inscription).
+Âge minimum : Tome s’adresse aux 15 ans et plus (âge du consentement numérique en France) ; en dessous, l’inscription nécessite l’accord d’un parent ou tuteur.
+Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Le partage social est réglé sur « Rien » par défaut. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n’envoie jamais rien. Exception si tu l’actives toi-même : « Ma page publique » (Amis → Mon compte) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
+Services tiers : Tome n’installe aucun traceur, mais pour afficher les couvertures et proposer des recherches de livres, ton navigateur contacte directement Google Books (googleapis.com, books.google.com) et Open Library (openlibrary.org, covers.openlibrary.org) — qui reçoivent alors ta requête ou l’identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n’a lieu que quand tu la déclenches ; les « Idées du jour » ne s’activent qu’avec ton accord explicite.
+Cookies et traceurs : Tome n’utilise aucun cookie publicitaire ni de mesure d’audience — uniquement le stockage strictement nécessaire au service (ta bibliothèque sur ton appareil, ta session). Ces usages sont exemptés de consentement, c’est pourquoi il n’y a pas de bannière cookies.
+Hébergement et transferts : Cloudflare, Inc. (101 Townsend St, San Francisco, États-Unis) ; la base de données est hébergée en Europe de l’Ouest. Les flux transitant hors de l’UE sont encadrés par les garanties reconnues (certification Data Privacy Framework et clauses contractuelles types).
+Liens d’achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d’affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d’Amazon qui s’appliquent.
+Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d’inactivité ; suppression immédiate possible à tout moment via « Mon compte ».
 Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil. Si tu estimes que tes droits ne sont pas respectés, tu peux adresser une réclamation à la CNIL (cnil.fr).`;
 
-const TERMS_TEXT = `Tome — conditions d'utilisation.
+const TERMS_TEXT = `Tome — conditions d’utilisation.
 
-L'essentiel : Tome est un journal de lecture. Sois honnête, sois correct, et tout ira bien.
+L’essentiel : Tome est un journal de lecture. Sois honnête, sois correct, et tout ira bien.
 
 Le service : Tome te permet de tenir ta bibliothèque, de noter et critiquer tes lectures, et de les partager avec des amis si tu le décides. Le cœur du service est gratuit (voir « Toujours gratuit »).
 Ton compte : tu es responsable de ce qui se passe avec ton compte et de la garde de ton mot de passe et de ton code de secours. Un compte = une personne réelle.
-Tes contenus : tes critiques, avis et listes restent les tiens. En les partageant (amis ou page publique), tu autorises Tome à les afficher aux personnes que TU as choisies — rien d'autre, aucune revente, aucune utilisation publicitaire.
-Contenus interdits : contenus illégaux, harcèlement, haine, spam, usurpation d'identité, ou toute utilisation visant à nuire au service ou à ses membres.
-Signalement : chaque critique, commentaire et profil public peut être signalé (bouton « Signaler »). Les signalements sont examinés rapidement ; un contenu manifestement illicite est retiré, et l'auteur peut en discuter par email.
-Modération et résiliation : en cas d'abus, Tome peut retirer un contenu, suspendre ou fermer un compte — avec explication, sauf obligation légale contraire. Tu peux supprimer ton compte à tout moment (Mon compte), ce qui efface tes données du serveur.
-Disponibilité : Tome est un projet indépendant, fourni « en l'état », sans garantie de disponibilité permanente — l'export de ta bibliothèque est là pour que tes données ne dépendent jamais du service.
+Tes contenus : tes critiques, avis et listes restent les tiens. En les partageant (amis ou page publique), tu autorises Tome à les afficher aux personnes que TU as choisies — rien d’autre, aucune revente, aucune utilisation publicitaire.
+Contenus interdits : contenus illégaux, harcèlement, haine, spam, usurpation d’identité, ou toute utilisation visant à nuire au service ou à ses membres.
+Signalement : chaque critique, commentaire et profil public peut être signalé (bouton « Signaler »). Les signalements sont examinés rapidement ; un contenu manifestement illicite est retiré, et l’auteur peut en discuter par email.
+Modération et résiliation : en cas d’abus, Tome peut retirer un contenu, suspendre ou fermer un compte — avec explication, sauf obligation légale contraire. Tu peux supprimer ton compte à tout moment (Mon compte), ce qui efface tes données du serveur.
+Disponibilité : Tome est un projet indépendant, fourni « en l’état », sans garantie de disponibilité permanente — l’export de ta bibliothèque est là pour que tes données ne dépendent jamais du service.
 Droit applicable : droit français. Contact : lucas.marroig@essec.edu.`;
 async function renderFeed(){
   const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
   try{
     const d = await api('/api/feed'); social.todayFeed=d.feed||[]; social.todayFeedAt=Date.now(); social.todayFeedUser=social.me&&social.me.id; social.todayFeedError='';
     if(!d.feed.length){
-      // écran d'atterrissage de tous les chemins sociaux : il DOIT proposer une issue
+      // écran d’atterrissage de tous les chemins sociaux : il DOIT proposer une issue
       el.innerHTML = `<div class="friends-empty" style="text-align:center">
-        <p>Ton fil s'animera dès qu'un ami partagera une lecture.</p>
+        <p>Ton fil s’animera dès qu’un ami partagera une lecture.</p>
         <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
           <button class="btn primary" id="feed-invite">${ic('link',16)} Inviter un ami</button>
-          <button class="btn" id="feed-find">Chercher quelqu'un</button>
+          <button class="btn" id="feed-find">Chercher quelqu’un</button>
         </div></div>`;
       $('#feed-invite').addEventListener('click', shareInvite);
       $('#feed-find').addEventListener('click', ()=>{ social.tab='friends'; renderFriends(); setTimeout(()=>{ const q=$('#friend-search'); if(q) q.focus(); },80); });
@@ -5238,10 +5263,10 @@ async function renderFeed(){
     }
     el.innerHTML = d.feed.map((x,fi)=>{
       const rv = String(x.review||'').trim();
-      // compteurs = COUNT(*) SQL (donc des nombres), mais on coerce pour tenir l'invariant
+      // compteurs = COUNT(*) SQL (donc des nombres), mais on coerce pour tenir l’invariant
       // « tout ce qui vient du réseau est neutralisé » si la forme de /api/feed changeait un jour.
       x.hearts = Number(x.hearts) || 0; x.comments = Number(x.comments) || 0;
-      const isMe = social.me && x.uid===social.me.id; // ma propre lecture : pas d'auto-cœur, mais je vois et modère les réponses
+      const isMe = social.me && x.uid===social.me.id; // ma propre lecture : pas d’auto-cœur, mais je vois et modère les réponses
       return `
       <div class="feed-cell">
       <div class="feed-item">
@@ -5256,7 +5281,7 @@ async function renderFeed(){
           <div style="display:flex;gap:6px">
             ${isMe ? (x.hearts?`<span class="heart-btn on" style="cursor:default" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts}</span></span>`:'') : `
             <button class="heart-btn${x.i_hearted?' on':''}" data-react="${esc(x.book_key)}" data-owner="${esc(x.username)}"
-              aria-pressed="${x.i_hearted?'true':'false'}" title="J'aime" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts||''}</span></button>`}
+              aria-pressed="${x.i_hearted?'true':'false'}" title="J’aime" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts||''}</span></button>`}
             <button class="heart-btn cmt-btn" data-thread="${esc(x.username)}" data-key="${esc(x.book_key)}"
               aria-expanded="false" aria-controls="feed-thread-${fi}" title="Réponses" aria-label="${x.comments?`Réponses — ${x.comments}`:'Répondre'}">💬<span class="hn">${x.comments||''}</span></button>
             ${!isMe ? `<button class="heart-btn rep-btn" data-report-review="${esc(x.username)}|${esc(x.book_key)}" title="Signaler cette critique" aria-label="Signaler cette critique">\u2690</button>` : ''}
@@ -5274,7 +5299,7 @@ async function renderFeed(){
   }catch(e){ el.innerHTML = `<p class="friends-empty">${e.message==='offline'?'Serveur injoignable.':esc(e.message)}</p>`; }
 }
 // le nom accessible remplace le contenu du bouton : il doit donc porter aussi le compteur
-const heartLabel = n => n ? `J'aime cette lecture — ${n} j'aime` : `J'aime cette lecture`;
+const heartLabel = n => n ? `J’aime cette lecture — ${n} j’aime` : `J’aime cette lecture`;
 // Un seul écouteur délégué pour le fil : cœurs, dépliage des réponses, envoi, suppression.
 function onFeedClick(e){
   if(e.target.closest('[data-react]')) return onFeedHeart(e);
@@ -5315,7 +5340,7 @@ async function loadThread(cell){
     const d = await api(`/api/comments?u=${encodeURIComponent(btn.dataset.thread)}&k=${encodeURIComponent(btn.dataset.key)}`);
     th.innerHTML = threadHTML(d);
     if(draft){ const i = th.querySelector('.cmt-input'); if(i) i.value = draft; }
-    // le compteur de l'entrée suit le fil réel
+    // le compteur de l’entrée suit le fil réel
     const cn = btn.querySelector('.hn'); cn.textContent = d.comments.length || '';
     btn.setAttribute('aria-label', d.comments.length?`Réponses — ${d.comments.length}`:'Répondre');
   }catch(err){ th.innerHTML = `<p class="cmt-none">${err.message==='offline'?'Serveur injoignable.':esc(err.message)}</p>`; }
@@ -5355,7 +5380,7 @@ async function deleteComment(del){
   }
   catch(err){ del.disabled = false; toast(err.message==='offline'?'Serveur injoignable':err.message); }
 }
-// Bascule ♥ optimiste : l'UI répond tout de suite, puis se cale sur la réponse serveur (ou revient en arrière).
+// Bascule ♥ optimiste : l’UI répond tout de suite, puis se cale sur la réponse serveur (ou revient en arrière).
 async function onFeedHeart(e){
   const hb = e.target.closest('[data-react]'); if(!hb || hb.disabled) return;
   hb.disabled = true;
@@ -5378,8 +5403,8 @@ async function renderFriendsList(){
   const el = $('#soc-tab');
   el.innerHTML = `
     <div class="add-friend">
-      <input id="friend-search" placeholder="Rechercher quelqu'un (pseudo ou nom)…" aria-label="Rechercher un utilisateur" autocomplete="off">
-      <button class="btn" id="friend-invite" title="Partager mon lien d'invitation">${ic('link',16)} Inviter</button>
+      <input id="friend-search" placeholder="Rechercher quelqu’un (pseudo ou nom)…" aria-label="Rechercher un utilisateur" autocomplete="off">
+      <button class="btn" id="friend-invite" title="Partager mon lien d’invitation">${ic('link',16)} Inviter</button>
     </div>
     <div id="search-res"></div>
     <div id="friend-lists"><p class="friends-empty">Chargement…</p></div>`;
@@ -5425,7 +5450,7 @@ async function loadFriendLists(){
       html += d.incoming.map(p=>person(p, `<button class="btn small primary" data-accept="${esc(p.id)}">Accepter</button><button class="btn small" data-remove="${esc(p.id)}">Refuser</button>`)).join(''); }
     html += `<h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 8px">Amis (${d.friends.length})</h4>`;
     html += d.friends.length ? d.friends.map(p=>person(p, `<button class="btn small" data-remove="${esc(p.id)}">Retirer</button>`)).join('')
-      : `<p class="friends-empty">Aucun ami pour l'instant.</p>`;
+      : `<p class="friends-empty">Aucun ami pour l’instant.</p>`;
     if(d.outgoing.length){ html += `<h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 8px">Demandes envoyées</h4>`;
       html += d.outgoing.map(p=>person(p, `<span style="font-size:12px;color:var(--faint)">en attente</span><button class="btn small" data-remove="${esc(p.id)}">Annuler</button>`)).join(''); }
     el.innerHTML = html;
@@ -5438,7 +5463,7 @@ async function renderMyShare(){
   const shareable = shareableBooks();
   el.innerHTML = `
     <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">Choisis ce que tes amis peuvent voir — ton étagère se synchronise ensuite automatiquement. ${shareable.length} titre(s) partageables (lus ou notés).${(()=>{
-      // le serveur n'accepte que les couvertures des catalogues de livres (une image quelconque
+      // le serveur n’accepte que les couvertures des catalogues de livres (une image quelconque
       // pourrait pister tes amis) : on le dit au lieu de les faire disparaître en silence
       const n = shareable.filter(b=>b.cover && !SHAREABLE_COVER.test(b.cover)).length;
       return n ? ` <span style="color:var(--faint)">${n} couverture(s) ne seront pas partagée(s) — image hors catalogue, le titre reste visible.</span>` : '';
@@ -5461,7 +5486,7 @@ async function renderMyShare(){
     try{
       const d = await api('/api/sync', {method:'POST', body:{shareMode:chosen, books:payload}});
       social.me.shareMode = d.shareMode;
-      rememberShelfTag(shelfTag(d.shareMode, payload));   // l'auto-synchro sait que c'est à jour
+      rememberShelfTag(shelfTag(d.shareMode, payload));   // l’auto-synchro sait que c’est à jour
       $('#share-status').textContent = d.shareMode==='none' ? 'Profil masqué. ✓' : `${d.count} titre(s) synchronisé(s) ✓`;
       toast('Profil mis à jour ✓');
     }catch(e){ $('#share-status').textContent = e.message==='offline'?'Serveur injoignable.':e.message; }
@@ -5500,7 +5525,7 @@ function renderProfile(box, d){
       ${d.friendState!=='self' ? `<button class="btn small" data-block="${esc(d.user.username)}" title="Bloquer">🚫</button>` : ''}
     </div>
     ${d.user.bio ? `<p style="color:var(--muted);font-size:14px;margin-bottom:14px">${esc(d.user.bio)}</p>` : ''}
-    ${affinity!=null ? `<div class="affinity-ring"><span class="pct">${affinity}%</span><div><b>d'affinité de goût</b><div class="muted" style="color:var(--muted);font-size:12.5px">sur ${rated.length} livre(s) noté(s) tous les deux</div></div></div>` : ''}
+    ${affinity!=null ? `<div class="affinity-ring"><span class="pct">${affinity}%</span><div><b>d’affinité de goût</b><div class="muted" style="color:var(--muted);font-size:12.5px">sur ${rated.length} livre(s) noté(s) tous les deux</div></div></div>` : ''}
     ${d.areFriends ? (shelf.length ? `
       <p style="margin-bottom:14px">${shelf.length} titre(s) partagé(s)${common?` · <span class="common-badge">${common} en commun</span>`:''}</p>
       ${rated.length ? `<div style="margin-bottom:16px">${rated.slice(0,8).map(r=>`<div class="cmp-row"><span class="ct">${esc(r.title)}</span><span class="me" title="ta note">${starsTxt(r.mine)}</span><span style="color:var(--faint)">vs</span><span class="them" title="sa note">${starsTxt(r.them)}</span></div>`).join('')}</div>` : ''}
@@ -5511,12 +5536,12 @@ function renderProfile(box, d){
           ${mine.has(b.book_key)?`<span class="ribbon done">✓ toi aussi</span>`:''}
         </div><div class="under">${b.rating?`<span class="stars">${starsTxt(b.rating)}</span>`:''}</div></div>`).join('')}</div>`
       : `<p class="friends-empty">${esc(d.user.displayName)} ne partage rien pour le moment.</p>`)
-    : (d.iBlocked ? `<p class="friends-empty">Tu as bloqué cet utilisateur.</p>` : `<p class="friends-empty">Vous n'êtes pas encore amis — sa bibliothèque est privée.</p>`)}`;
+    : (d.iBlocked ? `<p class="friends-empty">Tu as bloqué cet utilisateur.</p>` : `<p class="friends-empty">Vous n’êtes pas encore amis — sa bibliothèque est privée.</p>`)}`;
   $('#prof-back').addEventListener('click', ()=>{ social.view=null; social.profile=null; social.tab='friends'; renderFriends(); });
   const blockBtn = box.querySelector('[data-block]');
   if(blockBtn) blockBtn.addEventListener('click', async ()=>{
     if(blockBtn.disabled) return;
-    if(!await uiConfirm({title:'Bloquer '+d.user.displayName+' ?', message:'Vous ne serez plus amis et il ne pourra plus t\'ajouter.', okLabel:'Bloquer', danger:true})) return;
+    if(!await uiConfirm({title:'Bloquer '+d.user.displayName+' ?', message:'Vous ne serez plus amis et il ne pourra plus t’ajouter.', okLabel:'Bloquer', danger:true})) return;
     blockBtn.disabled = true;
     try{ await api('/api/block', {method:'POST', body:{username:d.user.username}}); toast('Utilisateur bloqué'); social.view=null; social.profile=null; social.tab='friends'; renderFriends(); }
     catch(e){ blockBtn.disabled = false; toast(e.message); }
@@ -5529,7 +5554,7 @@ $('#friends-body').addEventListener('click', async e => {
   if(e.target.closest('#soc-logout')){
     try{ await api('/api/logout', {method:'POST'}); }catch(_){}
     try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
-    social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError=''; setLibStatus(''); // la biblio locale reste sur l'appareil
+    social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError=''; setLibStatus(''); // la biblio locale reste sur l’appareil
     renderFriends(); return;
   }
   const acc = e.target.closest('[data-accept]');
@@ -5540,7 +5565,7 @@ $('#friends-body').addEventListener('click', async e => {
   if(prof){ openProfile(prof.dataset.profile); return; }
 });
 
-/* =============== Restauration des préférences d'affichage =============== */
+/* =============== Restauration des préférences d’affichage =============== */
 (function restoreUI(){
   let saved = null;
   try{ saved = JSON.parse(localStorage.getItem(UI_KEY)||'null'); }catch(_){}
@@ -5575,65 +5600,65 @@ render = function(){ _origRender(); refreshResume(); updateStreakPill(); };
 updateStreakPill();
 $('#btn-streak').addEventListener('click', ()=>selectView('stats'));
 if(_initHash.startsWith('#book/') || _initHash.startsWith('#invite/')) applyHashView(_initHash);
-if(_loaded.migrated) save(true); // fige la migration depuis l'ancienne clé, sans compter comme une modification
+if(_loaded.migrated) save(true); // fige la migration depuis l’ancienne clé, sans compter comme une modification
 if(_loaded.notice) setTimeout(()=>toast(_loaded.notice), 600);
 // restaure la session sociale si un token existe → rafraîchit la vue Amis + synchronise la biblio du compte
 if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin().then(()=>pushShelf()); } if(ui.view==='friends') renderFriends(); else if(ui.view==='today') renderToday(); });
 
-// Page d'accueil : présentée aux visiteurs qui arrivent sans compte et sans bibliothèque à eux.
-// (Les utilisateurs connectés, ou qui ont déjà des livres, entrent directement dans l'app.)
+// Page d’accueil : présentée aux visiteurs qui arrivent sans compte et sans bibliothèque à eux.
+// (Les utilisateurs connectés, ou qui ont déjà des livres, entrent directement dans l’app.)
 const _pubUser = publicUsernameFromURL();
-if(_pubUser) showPublicProfile(_pubUser);   // visiteur arrivé par un lien de bio : page publique, rien d'autre
+if(_pubUser) showPublicProfile(_pubUser);   // visiteur arrivé par un lien de bio : page publique, rien d’autre
 (function maybeWelcome(){
-  if(_pubUser) return;                      // ne pas superposer la page d'accueil à un profil public
+  if(_pubUser) return;                      // ne pas superposer la page d’accueil à un profil public
   let welcomed = false;
   try{ welcomed = !!localStorage.getItem('tome-welcomed'); }catch(_){}
   const hasRealBooks = (state.books||[]).some(b=>!(b.tags||[]).includes('exemple'));
   if(hasRealBooks || socToken()){ try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}; return; }
-  // _initHash = hash d'ARRIVÉE (capturé avant que selectView ne pose #today) : on n'interrompt
+  // _initHash = hash d’ARRIVÉE (capturé avant que selectView ne pose #today) : on n’interrompt
   // pas un visiteur qui deep-linke (#book/…, #invite/…), seulement une arrivée « à froid ».
-  // seuls les VRAIS deep-links suppriment la page d'accueil : le start_url de la PWA porte
+  // seuls les VRAIS deep-links suppriment la page d’accueil : le start_url de la PWA porte
   // désormais #today, qui sinon la désactiverait définitivement pour les nouveaux venus
-  // Une invitation N'EST PAS un deep-link à respecter en silence : c'est le trafic le plus
-  // qualifié (recommandé par un ami). Il doit voir ce qu'est Tome avant qu'on lui demande
-  // de créer un compte — l'invitation est mémorisée et traitée après l'inscription.
+  // Une invitation N’EST PAS un deep-link à respecter en silence : c’est le trafic le plus
+  // qualifié (recommandé par un ami). Il doit voir ce qu’est Tome avant qu’on lui demande
+  // de créer un compte — l’invitation est mémorisée et traitée après l’inscription.
   const deepLink = _initHash.startsWith('#book/');
   if(!welcomed && !deepLink) showWelcome();
 })();
 
-/* =============== Page d'accueil publique =============== */
+/* =============== Page d’accueil publique =============== */
 function showWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=false; document.body.classList.add('welcome-open');
   try{ window.scrollTo(0,0); }catch(_){}
   // invité par un ami : le dire ici, sur la page qui explique le produit
   const who = social.invite || loadPendingInvite();
   const host = $('#lp-invite');
-  if(host){ host.innerHTML = who ? `💌 <b>@${esc(who)}</b> t'invite à le/la rejoindre sur Tome.` : ''; host.hidden = !who; }
+  if(host){ host.innerHTML = who ? `💌 <b>@${esc(who)}</b> t’invite à le/la rejoindre sur Tome.` : ''; host.hidden = !who; }
   syncModalIsolation();
   const first=w.querySelector('[data-lp="signup"]'); if(first) try{ first.focus(); }catch(_){} }
 function hideWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=true; document.body.classList.remove('welcome-open'); syncModalIsolation();
-  try{ window.scrollTo(0,0); }catch(_){}  // la page de garde a pu faire defiler la fenetre : l'app repart en haut
+  try{ window.scrollTo(0,0); }catch(_){}  // la page de garde a pu faire defiler la fenetre : l’app repart en haut
   if(location.hash==='#welcome'){ try{ history.replaceState(history.state,'',location.pathname+location.search); }catch(_){} } }
 $('#welcome').addEventListener('click', e=>{
   const b = e.target.closest('[data-lp]'); if(!b) return;
   const a = b.dataset.lp;
   if(a==='legal'){ openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); return; }
   if(a==='pledge'){ showPledge(); return; }
-  try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus l'imposer au prochain lancement
+  try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus l’imposer au prochain lancement
   hideWelcome();
   if(a==='signup' || a==='login'){ selectView('friends'); if(!social.me) renderAuth($('#friends-body'), a==='signup'?'signup':'login'); }
-  // « Essayer d'abord » sur une bibliothèque vide : on sème la démo pour montrer l'app
-  // habitée plutôt qu'un écran nu (le bandeau « Tout effacer » permet de repartir à zéro).
+  // « Essayer d’abord » sur une bibliothèque vide : on sème la démo pour montrer l’app
+  // habitée plutôt qu’un écran nu (le bandeau « Tout effacer » permet de repartir à zéro).
   if(a==='try' && !state.books.length){
     loadDemo();
     toast('Bac à sable : fouille, note, supprime — « Tout effacer » quand tu veux.', { ms:6000 });
   }
 });
-// couvertures de l'éventail : si une image ne charge pas (hors-ligne, 404), on la retire → la carte
+// couvertures de l’éventail : si une image ne charge pas (hors-ligne, 404), on la retire → la carte
 // dégradée avec le titre reste en repli élégant
 document.addEventListener('error', e=>{
   if(e.target && e.target.matches && e.target.matches('#welcome .lp-cover,.ob-cov img')) e.target.remove();
 }, true);
-// Prévisualisation : #welcome affiche la page d'accueil (le branchement au 1er lancement viendra avec les comptes)
+// Prévisualisation : #welcome affiche la page d’accueil (le branchement au 1er lancement viendra avec les comptes)
 if(location.hash==='#welcome') showWelcome();
 window.addEventListener('hashchange', ()=>{ if(location.hash==='#welcome') showWelcome(); });
 
@@ -5654,7 +5679,7 @@ if(location.search.includes('selftest')){
   assert('normalize moods filter', eq(nb.moods,['sombre']));
   // micro-typographie française (frTypo)
   assert('frTypo guillemets', frTypo('"super"') === '\u00AB\u00A0super\u00A0\u00BB');
-  assert('frTypo apostrophe', frTypo("c'est") === 'c\u2019est');
+  assert('frTypo apostrophe', frTypo("c’est") === 'c\u2019est');
   assert('frTypo insecable !', frTypo('Bravo !') === 'Bravo\u00A0!');
   assert('frTypo colle ?', frTypo('Vraiment?') === 'Vraiment\u00A0?');
   assert('frTypo deux-points epargnes', frTypo('12:30 et http://a.fr') === '12:30 et http://a.fr');
@@ -5740,7 +5765,7 @@ if(location.search.includes('selftest')){
   assert('merge : marque la copie locale conflictuelle', _m.books.some(b=>b.title==='Dune' && b.tags.includes('conflit-sync') && b.study.summary==='Récent'));
   const _same=mergeLibraries({books:[{id:'local',title:'Neuromancien',authors:['William Gibson']}]},{books:[{id:'server',title:'Neuromancien',authors:['William Gibson']}]});
   assert('merge : déduplique deux versions identiques', _same.books.filter(b=>b.title==='Neuromancien').length===1);
-  // v10 : fiches d'étude et répétition espacée
+  // v10 : fiches d’étude et répétition espacée
   const _st=normalizeStudy({objective:' comprendre ',ideas:['Idée A',''],questions:[{question:'Pourquoi ?',answer:'Parce que'}],cards:[{front:'Recto',back:'Verso',due:'invalide'}]});
   assert('study : normalise les champs et listes', _st.objective==='comprendre' && _st.ideas.length===1 && _st.questions[0].answer==='Parce que');
   assert('study : une nouvelle carte est due aujourd’hui', _st.cards[0].due===today());
