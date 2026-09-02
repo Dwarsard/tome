@@ -2735,7 +2735,7 @@ function openDetail(id, opts={}){
 // connaisse déjà par la synchro. Cache 10 min : les interactions de la fiche ne re-fetchent pas.
 const _bookFriendsCache = new Map();
 async function loadDetailFriends(b){
-  if(!social.me || social.me.shareMode==='none') return;
+  if(!social.me || social.me.shareMode==='none' || isDemoBook(b)) return;
   const lastRead = (b.readings||[]).map(r=>r.date).sort().pop() || '';
   if(!(b.status==='read' || b.rating || lastRead)) return; // hors du périmètre partageable → 100 % local
   const key = shelfKey(b);
@@ -4530,8 +4530,20 @@ function shelfKey(b){ return (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume
 // Miroir client de cleanSharedCover (worker) : sert uniquement à prévenir l'utilisateur ;
 // le serveur reste seul juge de ce qu'il accepte.
 const SHAREABLE_COVER = /^https:\/\/(covers\.openlibrary\.org\/b\/(id|isbn|olid)\/[A-Za-z0-9]+-[SML]\.jpg|books\.google(usercontent)?\.com\/books\/)/;
+// La bibliothèque de démonstration (tag 'exemple') est un bac à sable LOCAL : elle ne doit
+// jamais être partagée ni sauvegardée sur un compte — sinon les critiques d'exemple sortent
+// signées du nom de l'utilisateur sur sa page publique et chez ses amis.
+function isDemoBook(b){ return !!(b && (b.tags||[]).includes('exemple')); }
+function stripDemo(){
+  const n = state.books.filter(isDemoBook).length;
+  if(!n) return 0;
+  state.books = state.books.filter(b=>!isDemoBook(b));
+  state.lists.forEach(l=> l.bookIds = l.bookIds.filter(id=>state.books.some(b=>b.id===id)));
+  save(); scheduleRender();
+  return n;
+}
 function shareableBooks(){
-  return state.books.map(b=>{
+  return state.books.filter(b=>!isDemoBook(b)).map(b=>{
     const key = shelfKey(b);
     const lastRead = (b.readings||[]).map(r=>r.date).sort().pop() || '';
     return {
@@ -4588,6 +4600,13 @@ function scheduleLibPush(delay=1400){
   _libPushTimer = setTimeout(()=>{ _libPushTimer=0; pushLibrary(); }, delay);
   scheduleShelfPush();
 }
+// état à sauvegarder sur le compte : identique à state, sans les livres de démonstration
+function libraryPayload(){
+  if(!state.books.some(isDemoBook)) return state;
+  const books = state.books.filter(b=>!isDemoBook(b));
+  const ids = new Set(books.map(b=>b.id));
+  return { ...state, books, lists:(state.lists||[]).map(l=>({ ...l, bookIds:(l.bookIds||[]).filter(id=>ids.has(id)) })) };
+}
 async function pushLibrary(opts){
   if(!social.me || social.tosOutdated) return;
   if(_libPushing){ _libDirty = true; return; }               // une seule requête à la fois
@@ -4595,7 +4614,7 @@ async function pushLibrary(opts){
   try{
     const res = await fetch(API_BASE+'/api/library', { method:'POST', keepalive: !!(opts&&opts.keepalive),
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+socToken() },
-      body: JSON.stringify({ data: JSON.stringify(state), baseRev: social.libRev||0 }) });
+      body: JSON.stringify({ data: JSON.stringify(libraryPayload()), baseRev: social.libRev||0 }) });
     if(res.status===409){                                     // un autre appareil a écrit entre-temps
       const d = await res.json();
       backupLocal('-conflit');
@@ -4787,7 +4806,7 @@ window.addEventListener('online', ()=>{
 function renderFriends(){
   const box = $('#friends-body');
   if(!social.me){ renderAuth(box); return; }
-  if(social.invite) processInvite(); // invitation en attente traitée dès qu'on est connecté
+  if(social.invite || loadPendingInvite()) processInvite(); // invitation (même persistée après un rechargement) traitée dès qu'on est connecté
   if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
   box.innerHTML = `
     ${social.tosOutdated ? `<div class="invite-banner" id="tos-banner">📄 Les mentions légales ont été mises à jour : ta bibliothèque est désormais enregistrée sur ton compte, pour la retrouver sur tous tes appareils (privée, exportable et supprimable à tout moment).
@@ -5015,10 +5034,16 @@ async function shareInvite(){
   try{ await navigator.clipboard.writeText(url); toast('Lien d\'invitation copié ✓ — envoie-le à un ami'); }
   catch(_){ openDialog({ title:'Mon lien d\'invitation', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}] }); }
 }
+let _inviteBusy = false; // renderFriends est appelé souvent : un seul dialogue d'invitation à la fois
 async function processInvite(){
+  if(_inviteBusy) return;
   const uname = social.invite || loadPendingInvite();
   social.invite = null;
   if(!social.me || !uname) return;
+  _inviteBusy = true;
+  try{ await _processInvite(uname); } finally{ _inviteBusy = false; }
+}
+async function _processInvite(uname){
   if(uname === social.me.username){ clearPendingInvite(); toast("C'est ton propre lien d'invitation 😄"); return; }
   const ok = await uiConfirm({ title:`@${uname} t'invite`, message:`Envoyer une demande d'ami à @${uname} ? Vous verrez alors vos lectures respectives.`, okLabel:'Envoyer la demande' });
   if(!ok){ clearPendingInvite(); return; }          // refus explicite : ne pas redemander
@@ -5080,6 +5105,7 @@ function renderAuth(box, mode, errMsg=''){
       localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tosOutdated = mode!=='signup'; social.tab='feed'; social.view=null;
       try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d'accueil
       await socRefresh(); // récupère aussi tosOutdated AVANT toute sauvegarde privée
+      if(stripDemo()) toast('Exemples retirés — ton compte démarre avec tes vrais livres.');
       if(!social.tosOutdated) syncLibraryOnLogin().then(()=>pushShelf());
       // le code AVANT renderFriends : sinon la confirmation d'invitation (#invite) écraserait le
       // dialogue du code (une seule modale à la fois) — l'invitation s'ouvrira après « C'est noté »

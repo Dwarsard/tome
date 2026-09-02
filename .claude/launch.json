@@ -4,14 +4,38 @@
     {
       "name": "tome",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["-y", "serve", "-l", "8791", "."],
+      "runtimeArgs": [
+        "-y",
+        "serve",
+        "-l",
+        "8791",
+        "."
+      ],
       "port": 8791
     },
     {
       "name": "tome-social",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["-y", "wrangler", "dev", "--cwd", "../Tome-Social", "--port", "8787", "--local"],
+      "runtimeArgs": [
+        "-y",
+        "wrangler",
+        "dev",
+        "--cwd",
+        "../Tome-Social",
+        "--port",
+        "8787",
+        "--local"
+      ],
       "port": 8787
+    },
+    {
+      "name": "elan",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "cd /d C:/Users/lucas/Desktop/Elan && npm run dev"
+      ],
+      "port": 3000
     }
   ]
 }
