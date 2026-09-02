@@ -16,10 +16,10 @@ const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;'
 const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
 
 /* =============== Icônes =================================================
-   Un emoji change de dessin selon l’appareil (le 📚 d’un iPhone n’est pas celui d’Android),
+   Un emoji change de dessin selon l’appareil (le d’un iPhone n’est pas celui d’Android),
    ne prend pas la couleur du thème et ne s’aligne jamais tout à fait. Ces icônes sont dessinées
    sur une grille de 24, épaisseur constante, et héritent de currentColor.
-   Les emoji restent là où ils sont EXPRESSIFS (réactions ♥, récap 🎉, notifications 👋). */
+   Plus aucun emoji dans l'interface : glyphes typographiques (♥ ★ ❝ ✓) et fleuron ❦ dans les états vides. */
 const ICONS = {
   plus:'<path d="M12 5v14M5 12h14"/>',
   check:'<path d="M20 6 9 17l-5-5"/>',
@@ -480,7 +480,7 @@ function load(){
       // ne pas écraser une copie corrompue déjà conservée (garde la 1re, la plus ancienne)
       try{ if(!localStorage.getItem(key+'-corrupt')) localStorage.setItem(key+'-corrupt', raw); }catch(_){}
       corrupted = true;
-      notice = '⚠ Données illisibles — copie de secours conservée. Va dans Stats › Mes données pour la récupérer.';
+      notice = 'Données illisibles — copie de secours conservée. Va dans Stats › Mes données pour la récupérer.';
     }
   }
   return {data:{books:[], lists:[], goals:{}, meta:{changes:0, lastExport:null}, series:{}, smartCollections:[]}, migrated:false, notice, corrupted};
@@ -510,7 +510,7 @@ function save(skipCount){
     // connecté ? on planifie une sauvegarde serveur (débounce) — le local reste la copie de travail
     if(typeof scheduleLibPush==='function' && typeof social!=='undefined' && social.me) scheduleLibPush();
     if(!skipCount && state.meta.changes>0 && state.meta.changes%50===0)
-      toast(`💾 ${state.meta.changes} modifications depuis le dernier export — pense à sauvegarder (Stats)`);
+      toast(`${state.meta.changes} modifications depuis le dernier export — pense à sauvegarder (Stats)`);
     return true;
   }catch(e){
     console.error('save failed', e);
@@ -520,9 +520,9 @@ function save(skipCount){
     // connecté perd ses deux filets d’un coup et croit à tort être sauvé « sur son compte ».
     if(typeof scheduleLibPush==='function' && typeof social!=='undefined' && social.me){
       scheduleLibPush();
-      toast('⚠ Stockage plein — sauvegardé sur ton compte, mais pense à exporter', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
+      toast('Stockage plein — sauvegardé sur ton compte, mais pense à exporter', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
     }else{
-      toast('⚠ Sauvegarde impossible — stockage plein', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
+      toast('Sauvegarde impossible — stockage plein', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
     }
     return false;
   }
@@ -651,7 +651,7 @@ function goalInfo(year){
   return {goal, done, delta: done - expected};
 }
 function paceHTML(gi){
-  if(gi.done >= gi.goal) return `<span class="pace ahead">objectif atteint 🎉</span>`;
+  if(gi.done >= gi.goal) return `<span class="pace ahead">objectif atteint </span>`;
   if(gi.delta > 0) return `<span class="pace ahead">${gi.delta} lecture${gi.delta>1?'s':''} d’avance</span>`;
   if(gi.delta < 0) return `<span class="pace behind">${-gi.delta} de retard</span>`;
   return `<span class="pace">pile à jour</span>`;
@@ -848,10 +848,15 @@ function renderToday(){
   const reading = lastReadingBook();
   const now = new Date();
   $('#today-date').textContent = new Intl.DateTimeFormat('fr-FR',{weekday:'long',day:'numeric',month:'long'}).format(now);
+  { // folio du titre courant : lectures de l'année · taille de la bibliothèque
+    const yr = String(now.getFullYear());
+    const lus = state.books.filter(b=>b.status==='read' && (b.readings||[]).some(r=>String(r.date||'').startsWith(yr))).length;
+    const fol = $('#today-folio'); if(fol) fol.textContent = `${lus} lecture${lus>1?'s':''} en ${yr} · ${state.books.length} titre${state.books.length>1?'s':''}`;
+  }
   const firstName = social.me && String(social.me.displayName||'').trim().split(/\s+/)[0];
   $('#today-subtitle').textContent = `${todayGreeting()}${firstName?' '+firstName:''}. ${reading?'Quelques pages suffisent pour garder le fil.':'Quelle histoire vas-tu faire entrer dans ta journée ?'}`;
   const sk=streaks(), streak=$('#today-streak');
-  streak.hidden=sk.cur<1; streak.textContent=sk.cur?`🔥 ${sk.cur} jour${sk.cur>1?'s':''} d’affilée`:'';
+  streak.hidden=sk.cur<1; streak.textContent=sk.cur?`${sk.cur} jour${sk.cur>1?'s':''} d’affilée`:'';
   $('#today-body').innerHTML = `<div class="today-grid"><div>${todayFocusHTML(reading)}</div><aside class="today-side" aria-label="À ne pas oublier">${todayMiniCards(reading)}</aside></div>
     <section class="today-card today-ideas" id="ideas-today-wrap" hidden aria-labelledby="ideas-today-title"><div class="today-section-head"><div><div class="today-kicker">Découvrir</div><h3 id="ideas-today-title">Idées du jour</h3></div></div><div id="ideas-today"></div></section>
     <section class="today-card today-social" aria-labelledby="today-social-title"><div class="today-section-head"><div><div class="today-kicker">Ton cercle de lecture</div><h3 id="today-social-title">Chez tes amis</h3></div><button data-today-friends>Voir le fil →</button></div><div id="today-social-feed"></div></section>`;
@@ -898,7 +903,7 @@ $('#today-body').addEventListener('click', async e=>{
     if(v!==null && v!==''){ const n=Number(v); if(Number.isFinite(n) && n>=0) setProgress(b,n); else toast('Entre un numéro de page valide'); } return;
   }
   const finish=e.target.closest('[data-today-finish]'); if(finish){ const b=state.books.find(x=>x.id===finish.dataset.todayFinish); if(b){ markRead(b); save(); render(); } return; }
-  const start=e.target.closest('[data-today-start]'); if(start){ const b=state.books.find(x=>x.id===start.dataset.todayStart); if(b){ b.status='reading'; if(b.currentPage==null)b.currentPage=0; save(); render(); toast('Bonne lecture 📖'); } return; }
+  const start=e.target.closest('[data-today-start]'); if(start){ const b=state.books.find(x=>x.id===start.dataset.todayStart); if(b){ b.status='reading'; if(b.currentPage==null)b.currentPage=0; save(); render(); toast('Bonne lecture '); } return; }
   if(e.target.closest('[data-today-recovery]')){
     social.tab='account'; social.view=null; selectView('friends');
     setTimeout(()=>{ const el=$('#acc-rec'); if(el){ el.scrollIntoView({block:'center'}); el.focus(); } }, 220);
@@ -1043,7 +1048,7 @@ function setProgress(b, page){
     if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
     scheduleRender();
     // proposition non bloquante (pas de dialogue qui coupe la saisie)
-    toast(`Dernière page de « ${fullTitle(b)} » 🎉`, { label:'Marquer lu', ms:6000, onAction:()=>{
+    toast(`Dernière page de « ${fullTitle(b)} » `, { label:'Marquer lu', ms:6000, onAction:()=>{
       markRead(b); save();
       if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id, {pulse:true});
       scheduleRender();
@@ -1070,9 +1075,9 @@ const DEMO_BOOKS = [
   {title:'Watchmen', type:'bd', authors:['Alan Moore','Dave Gibbons'], year:1987, pages:416, status:'read', rating:5, favorite:true, tags:['comics','classique'], moods:['sombre','réflexif'], review:'La BD qui a fait grandir le medium.', cover:'https://covers.openlibrary.org/b/isbn/9780930289232-M.jpg', readings:[{date:'2026-01-20', rating:5}]},
   {title:'Dune', type:'livre', authors:['Frank Herbert'], year:1965, pages:688, status:'read', rating:4.5, tags:['SF','classique'], moods:['réflexif','inspirant'], pace:'lent', review:'Politique, écologie, mysticisme — dense et magistral.', cover:'https://covers.openlibrary.org/b/isbn/9780441172719-M.jpg', readings:[{date:'2026-02-15', rating:4.5}]},
   {title:'Pluto', series:'Pluto', volume:1, seriesTotal:8, type:'manga', authors:['Naoki Urasawa'], year:2003, pages:200, status:'read', rating:5, tags:['SF'], moods:['émouvant','tendu'], cover:'https://covers.openlibrary.org/b/isbn/9781421519180-M.jpg', readings:[{date:'2026-03-30', rating:5}]},
-  {title:'La Horde du Contrevent', type:'livre', authors:['Alain Damasio'], year:2004, pages:736, status:'reading', currentPage:210, tags:['SF','français'], cover:'https://covers.openlibrary.org/b/isbn/9782070456253-M.jpg'},
+  {title:'La Horde du Contrevent', type:'livre', authors:['Alain Damasio'], year:2004, pages:736, status:'reading', currentPage:210, tags:['SF','français'], cover:'https://covers.openlibrary.org/b/isbn/9782070464234-M.jpg'},
   {title:'L’Étranger', type:'livre', authors:['Albert Camus'], year:1942, pages:159, status:'read', rating:4, tags:['classique'], moods:['mélancolique'], cover:'https://covers.openlibrary.org/b/isbn/9782070360024-M.jpg', readings:[{date:'2026-04-08', rating:4}]},
-  {title:'Sapiens', type:'livre', authors:['Yuval Noah Harari'], year:2011, pages:512, status:'wishlist', tags:['essai','histoire']},
+  {title:'Sapiens', cover:'https://covers.openlibrary.org/b/isbn/9782226257017-M.jpg', type:'livre', authors:['Yuval Noah Harari'], year:2011, pages:512, status:'wishlist', tags:['essai','histoire']},
   {title:'Akira', series:'Akira', volume:1, seriesTotal:6, type:'manga', authors:['Katsuhiro Ōtomo'], year:1982, pages:364, status:'read', rating:4.5, tags:['SF','cyberpunk'], cover:'https://covers.openlibrary.org/b/isbn/9781935429005-M.jpg', readings:[{date:'2025-11-15', rating:4.5}]},
 ];
 // Sélection « démarrage rapide » : incontournables à taper pour amorcer la bibliothèque (les
@@ -1098,7 +1103,7 @@ function loadDemo(){
   });
   if(!state.goals[String(new Date().getFullYear())]) state.goals[String(new Date().getFullYear())] = 20;
   save(); render();
-  toast('Bibliothèque d’exemple chargée — explore Journal, Stats et les séries ✨');
+  toast('Bibliothèque d’exemple chargée — explore Journal, Stats et les séries ');
 }
 function renderDemoBanner(){
   let banner = $('#demo-banner');
@@ -1118,7 +1123,7 @@ function renderDemoBanner(){
       }
     });
   }
-  banner.innerHTML = `<span>✨ Tu explores une <b>bibliothèque d’exemple</b>. Ajoute tes vraies lectures quand tu veux.</span>
+  banner.innerHTML = `<span>Tu explores une <b>bibliothèque d’exemple</b>. Ajoute tes vraies lectures quand tu veux.</span>
     <button class="btn small db-x" id="demo-clear">Tout effacer</button>`;
 }
 
@@ -1139,8 +1144,8 @@ function renderRecapTeaser(){
       if(e.target.closest('#recap-dismiss')){ try{ localStorage.setItem('tome-recap-teased-'+y,'1'); }catch(_){ } ban.remove(); }
     });
   }
-  ban.innerHTML = `<span>🎁 <b>Ta rétro ${y} est prête</b> — ton année de lecture en une carte à partager.</span>
-    <span style="display:flex;gap:8px"><button class="btn small primary" id="recap-open">Voir 🎉</button><button class="btn small db-x" id="recap-dismiss" aria-label="Masquer">✕</button></span>`;
+  ban.innerHTML = `<span><b>Ta rétro ${y} est prête</b> — ton année de lecture en une carte à partager.</span>
+    <span style="display:flex;gap:8px"><button class="btn small primary" id="recap-open">Voir </button><button class="btn small db-x" id="recap-dismiss" aria-label="Masquer">✕</button></span>`;
 }
 function renderLibrary(){
   renderNowReading();
@@ -1166,7 +1171,7 @@ function renderLibrary(){
     grid.innerHTML = ''; $('#lib-count').textContent = '';
     emptyBox.innerHTML = `<div class="onboard">
       <div class="ob-head">
-        <div class="big">📚</div>
+        <div class="big orn" aria-hidden="true">❦</div>
         <h3>Commence ta bibliothèque</h3>
         <p>Ajoute des livres, BD ou manga que tu as lus — ta collection, ton journal et tes recommandations démarrent tout de suite.</p>
         <button class="btn primary lp-big" id="ob-search">${ic('search',16)} Chercher un livre</button>
@@ -1223,7 +1228,7 @@ function renderLibrary(){
   const nBooks = arr.length, nItems = items.length;
   $('#lib-count').textContent = `${nBooks} ouvrage${nBooks>1?'s':''}${nItems!==nBooks ? ` · ${nItems} carte${nItems>1?'s':''}` : ''}`;
   if(!arr.length){
-    emptyBox.innerHTML = `<div class="empty"><div class="big">🔍</div>
+    emptyBox.innerHTML = `<div class="empty"><div class="big orn" aria-hidden="true">❦</div>
       <h3>Rien sur cette étagère</h3><p>Ces filtres ne laissent passer aucun titre. Élargis, ou range-les.</p>
       <button class="btn" id="empty-reset">Réinitialiser les filtres</button></div>`;
     $('#empty-reset').addEventListener('click', resetFilters);
@@ -1331,7 +1336,7 @@ async function chooseNextRead(){
     if(action==='view'){ openDetail(b.id); return; }
     if(action==='start'){
       b.status='reading'; if(b.currentPage==null) b.currentPage=0;
-      save(); render(); openDetail(b.id); toast('Bonne lecture 📖'); return;
+      save(); render(); openDetail(b.id); toast('Bonne lecture '); return;
     }
     return;
   }
@@ -1464,7 +1469,7 @@ function renderDailyIdeas(){
     if(bib && (ui.status!=='all' || ui.q || ui.tag || ui.types.size)){ b.hidden=true; return; }
     if(html===null){ b.hidden=true; if(wrap) wrap.hidden=true; return; }
     b.hidden=false; if(wrap) wrap.hidden=false;
-    b.innerHTML = (bib ? `<div class="ideas-head">💡 Idées du jour <span>de nouvelles suggestions chaque jour</span></div>` : '') + html;
+    b.innerHTML = (bib ? `<div class="ideas-head">Idées du jour <span>de nouvelles suggestions chaque jour</span></div>` : '') + html;
   });
   // Opt-in OBLIGATOIRE : la fonctionnalité envoie des auteurs/tags aimés à des API externes —
   // rien ne part sans un accord explicite (la proposition, elle, est 100 % locale).
@@ -1929,14 +1934,14 @@ function renderJournal(){
       ${paceHTML(gi)}
     </div>` : `
     <div class="goal-line" id="jgoal" role="button" tabindex="0" aria-label="Définir un objectif de lecture">
-      <span style="color:var(--muted)">🎯 Fixe-toi un objectif de lectures pour ${y} — clique ici.</span>
+      <span style="color:var(--muted)">Fixe-toi un objectif de lectures pour ${y} — clique ici.</span>
     </div>`;
   $('#jgoal').addEventListener('click', ()=>setGoal(y));
 
   const entries = allReadings().sort((a,b)=> b.date.localeCompare(a.date));
   const box = $('#journal-body');
   if(!entries.length){
-    box.innerHTML = `<div class="empty"><div class="big">🗓️</div><h3>Ton journal attend sa première page</h3>
+    box.innerHTML = `<div class="empty"><div class="big orn" aria-hidden="true">❦</div><h3>Ton journal attend sa première page</h3>
       <p>Marque un titre comme « Lu » et il viendra s’inscrire ici, mois par mois — relectures comprises. Dans un an, ce sera ta plus belle liste.</p></div>`;
     return;
   }
@@ -2342,7 +2347,7 @@ function renderStudyAlert(){
   if(!due.length){ box.hidden=true; box.innerHTML=''; return; }
   const books=new Set(due.map(x=>x.bookId)).size;
   box.hidden=false;
-  box.innerHTML=`<span>🎓 <b>${due.length} carte${due.length>1?'s':''} à réviser</b> dans ${books} livre${books>1?'s':''} — une session prend moins de cinq minutes.</span><button class="btn small primary" id="study-alert-open">Commencer</button>`;
+  box.innerHTML=`<span><b>${due.length} carte${due.length>1?'s':''} à réviser</b> dans ${books} livre${books>1?'s':''} — une session prend moins de cinq minutes.</span><button class="btn small primary" id="study-alert-open">Commencer</button>`;
   $('#study-alert-open').onclick=()=>startStudyReview();
 }
 function studySimpleItems(items, kind, empty){
@@ -2375,27 +2380,27 @@ function renderStudyEditor(b, focus=''){
       <button class="btn" data-study-export="print">${ic('print',14)} Imprimer / PDF</button>
       <button class="btn" data-study-back>← Revenir au livre</button>
     </div>
-    <details class="study-section" open><summary>🎯 Intention et résumé</summary><div class="study-inside">
+    <details class="study-section" open><summary>Intention et résumé</summary><div class="study-inside">
       <label class="study-label" for="st-objective">Pourquoi je lis ce livre</label><textarea id="st-objective" aria-label="Mon intention de lecture" rows="2" placeholder="Ce que tu veux comprendre, apprendre ou changer…">${esc(s.objective)}</textarea>
       <label class="study-label" for="st-summary">Résumé avec mes propres mots</label><textarea id="st-summary" aria-label="Résumé personnel" rows="6" placeholder="Explique le livre comme si tu devais le raconter à quelqu’un…">${esc(s.summary)}</textarea>
     </div></details>
-    <details class="study-section" open><summary>💡 Idées essentielles <span class="pill">${s.ideas.length}</span></summary><div class="study-inside">
+    <details class="study-section" open><summary>Idées essentielles <span class="pill">${s.ideas.length}</span></summary><div class="study-inside">
       ${studySimpleItems(s.ideas,'ideas','Note les principes ou arguments que tu ne veux pas oublier.')}
       <div class="study-add"><textarea id="st-idea" aria-label="Idée essentielle" rows="2" placeholder="Une idée importante…"></textarea><button class="btn small primary" data-study-add="idea">＋ Ajouter</button></div>
     </div></details>
-    <details class="study-section"${focus==='lessons'?' open':''}><summary>✅ Leçons à appliquer <span class="pill">${s.lessons.length}</span></summary><div class="study-inside">
+    <details class="study-section"${focus==='lessons'?' open':''}><summary>Leçons à appliquer <span class="pill">${s.lessons.length}</span></summary><div class="study-inside">
       ${studySimpleItems(s.lessons,'lessons','Transforme une idée en action concrète dans ta vie, tes études ou ton travail.')}
       <div class="study-add"><textarea id="st-lesson" aria-label="Leçon à appliquer" rows="2" placeholder="Ce que je vais appliquer…"></textarea><button class="btn small primary" data-study-add="lesson">＋ Ajouter</button></div>
     </div></details>
-    <details class="study-section"${focus==='questions'?' open':''}><summary>❓ Questions de compréhension <span class="pill">${s.questions.length}</span></summary><div class="study-inside">
+    <details class="study-section"${focus==='questions'?' open':''}><summary>Questions de compréhension <span class="pill">${s.questions.length}</span></summary><div class="study-inside">
       ${studyQuestionItems(s.questions)}
       <div class="study-add two"><textarea id="st-question" aria-label="Question de compréhension" rows="2" placeholder="Question…"></textarea><textarea id="st-answer" aria-label="Réponse" rows="2" placeholder="Réponse…"></textarea><button class="btn small primary" data-study-add="question">＋ Ajouter</button></div>
     </div></details>
-    <details class="study-section"${focus==='chapters'?' open':''}><summary>📑 Notes par chapitre <span class="pill">${s.chapters.length}</span></summary><div class="study-inside">
+    <details class="study-section"${focus==='chapters'?' open':''}><summary>Notes par chapitre <span class="pill">${s.chapters.length}</span></summary><div class="study-inside">
       ${studyChapterItems(s.chapters)}
       <div class="study-add two"><input id="st-chapter-title" aria-label="Titre du chapitre" placeholder="Titre ou numéro du chapitre"><textarea id="st-chapter-notes" aria-label="Notes du chapitre" rows="3" placeholder="Notes du chapitre…"></textarea><button class="btn small primary" data-study-add="chapter">＋ Ajouter</button></div>
     </div></details>
-    <details class="study-section" open><summary>🧠 Cartes mémoire <span class="pill">${s.cards.length}</span></summary><div class="study-inside">
+    <details class="study-section" open><summary>Cartes mémoire <span class="pill">${s.cards.length}</span></summary><div class="study-inside">
       ${studyCardItems(s.cards)}
       <div class="study-add two"><textarea id="st-card-front" aria-label="Recto de la carte mémoire" rows="2" placeholder="Question / recto…"></textarea><textarea id="st-card-back" aria-label="Verso de la carte mémoire" rows="2" placeholder="Réponse / verso…"></textarea><button class="btn small primary" data-study-add="card">＋ Créer</button></div>
     </div></details>`;
@@ -2477,7 +2482,7 @@ function gradeStudyCard(card,grade){
 function renderStudyDone(){
   const remain=studyDueCards().length;
   $('#study-head').textContent='Session terminée';
-  $('#study-body').innerHTML=`<div class="study-done"><div class="big">🎓</div><h4>${studySession.reviewed} carte${studySession.reviewed>1?'s':''} révisée${studySession.reviewed>1?'s':''}</h4><p>Chaque rappel réussi espace un peu plus la prochaine révision.</p><div class="study-actions" style="justify-content:center">${remain?'<button class="btn primary" data-review-more>Continuer</button>':''}${studySession.bookId?'<button class="btn" data-review-editor>Revenir à la fiche</button>':''}<button class="btn" data-close>Terminer</button></div></div>`;
+  $('#study-body').innerHTML=`<div class="study-done"><div class="big orn" aria-hidden="true">❦</div><h4>${studySession.reviewed} carte${studySession.reviewed>1?'s':''} révisée${studySession.reviewed>1?'s':''}</h4><p>Chaque rappel réussi espace un peu plus la prochaine révision.</p><div class="study-actions" style="justify-content:center">${remain?'<button class="btn primary" data-review-more>Continuer</button>':''}${studySession.bookId?'<button class="btn" data-review-editor>Revenir à la fiche</button>':''}<button class="btn" data-close>Terminer</button></div></div>`;
   scheduleRender();
 }
 
@@ -2644,7 +2649,7 @@ function openDetail(id, opts={}){
       </div>
 
       <div class="study-entry">
-        <div aria-hidden="true" style="font-size:25px">🎓</div>
+        
         <div class="study-copy"><b>Mode étude${study.due?` · ${study.due} à réviser`:''}</b><span>${study.cards||studyHasContent(b.study)?`${study.cards} carte${study.cards>1?'s':''} · maîtrise ${study.mastery}%`:'Résumé, idées clés, leçons et cartes mémoire'}</span></div>
         <button class="btn small primary" id="d-study">${studyHasContent(b.study)?'Ouvrir la fiche':'Créer ma fiche'}</button>
       </div>
@@ -2684,7 +2689,7 @@ function openDetail(id, opts={}){
         <label>Prêt</label>
         <div class="loan-row" id="d-loan">
           ${b.loan
-            ? `<span class="lnw">📤 Prêté à ${esc(b.loan.to)}</span><span style="color:var(--faint)">depuis le ${fmtDate(b.loan.since)}</span>${loanDue?`<span class="loan-due ${loanDue.level}">${esc(loanDue.text)}</span>`:'<span class="loan-due">sans date de retour</span>'}<button class="btn small" id="d-loan-date">${ic('calendar',13)} Date</button><button class="btn small" id="d-loan-back">Rendu ✓</button>`
+            ? `<span class="lnw">Prêté à ${esc(b.loan.to)}</span><span style="color:var(--faint)">depuis le ${fmtDate(b.loan.since)}</span>${loanDue?`<span class="loan-due ${loanDue.level}">${esc(loanDue.text)}</span>`:'<span class="loan-due">sans date de retour</span>'}<button class="btn small" id="d-loan-date">${ic('calendar',13)} Date</button><button class="btn small" id="d-loan-back">Rendu ✓</button>`
             : `<button class="btn small" id="d-loan-out">${ic('lend',13)} Prêter à…</button>`}
         </div>
       </div>
@@ -2935,7 +2940,7 @@ function addNextTome(seriesName, opts={}){
   const base = withVol.find(b=>b.volume===maxVol) || sBooks[0];
   const next = maxVol + 1;
   if(base.seriesTotal && next > base.seriesTotal){
-    toast(`La série est complète (${base.seriesTotal} tomes) 🎉`);
+    toast(`La série est complète (${base.seriesTotal} tomes) `);
     return;
   }
   const nb = newBook({
@@ -2980,7 +2985,7 @@ function renderLists(){
   const grid = $('#lists-grid'), emptyBox = $('#lists-empty');
   if(!state.lists.length){
     grid.innerHTML = '';
-    emptyBox.innerHTML = `<div class="empty"><div class="big">🗂️</div><h3>Aucune liste</h3>
+    emptyBox.innerHTML = `<div class="empty"><div class="big orn" aria-hidden="true">❦</div><h3>Aucune liste</h3>
       <p>Crée des listes thématiques — « Pépites SF », « Mangas à finir », « À offrir à Noël »… — puis ajoute des titres depuis leur fiche.</p></div>`;
     return;
   }
@@ -3054,7 +3059,7 @@ function openSeries(name){
         <span class="st-tag ${esc(b.status)}">${STATUS_LABEL[b.status]}</span>
       </button>`).join('')}
     <div style="display:flex; margin-top:12px">
-      ${!complete ? `<button class="btn small" id="s-next">＋ Tome ${maxVol+1}</button>` : `<span style="font-size:13px;color:var(--green);font-weight:600">Série complète 🎉</span>`}
+      ${!complete ? `<button class="btn small" id="s-next">＋ Tome ${maxVol+1}</button>` : `<span style="font-size:13px;color:var(--green);font-weight:600">Série complète </span>`}
       <span style="flex:1"></span>
     </div>`;
   openOverlay('#ov-list');
@@ -3148,7 +3153,7 @@ function activityByDay(){
   for(const b of state.books) for(const p of (b.progressLog||[])) map[p.date] = (map[p.date]||0)+1;
   return (_cacheActivity = map);
 }
-// Pill 🔥 du header : rend la série de jours visible (elle existait, cachée dans Stats).
+// Pill du header : rend la série de jours visible (elle existait, cachée dans Stats).
 function updateStreakPill(){
   const el = $('#btn-streak'); if(!el) return;
   const {cur} = streaks();
@@ -3210,11 +3215,11 @@ function renderStats(){
     <div class="tile"><b>${pages ? pages.toLocaleString('fr-FR') : '—'}</b><span>pages lues</span></div>
     <div class="tile"><b>${avg ? avg.toFixed(1).replace('.',',')+' ★' : '—'}</b><span>note moyenne</span></div>
     <div class="tile"><b>${state.books.filter(b=>b.status==='wishlist').length}</b><span>dans la pile à lire</span></div>
-    <div class="tile"><b>${sk.cur} j${sk.cur>=3?' 🔥':''}</b><span>série en cours (record : ${sk.max} j)</span></div>`;
+    <div class="tile"><b>${sk.cur} j${sk.cur>=3?' ':''}</b><span>série en cours (record : ${sk.max} j)</span></div>`;
 
   // Objectif annuel
   const gi = goalInfo(yr);
-  const recapBtn = `<button class="btn small" id="recap-btn" style="margin-top:12px">🎉 Rétro ${yr}</button>`;
+  const recapBtn = `<button class="btn small" id="recap-btn" style="margin-top:12px">Rétro ${yr}</button>`;
   const goalContent = gi ? `
     <span class="goal-title">Objectif ${yr}</span>
     <div class="goal-big">
@@ -3404,7 +3409,7 @@ const MONTHS_MINI = ['J','F','M','A','M','J','J','A','S','O','N','D'];
 function showRecap(year){
   const r = yearRecap(year);
   ui.listMode = 'recap'; ui.recapYear = year;
-  $('#list-head').textContent = `Ta rétro ${r.year} 🎉`;
+  $('#list-head').textContent = `Ta rétro ${r.year} `;
   if(!r.count){
     $('#list-body').innerHTML = `<p style="color:var(--muted); padding:16px 0; text-align:center">Aucune lecture datée en ${r.year} — reviens quand tu auras noirci quelques pages.</p>`;
   }else{
@@ -3676,7 +3681,7 @@ async function importCSV(text){
     state.books.unshift(book); pairs.push({id:book.id, isbn}); added++;
   }
   if(save()){ render(); }
-  else { render(); toast('⚠ Importé mais non sauvegardé (stockage plein)'); return; }
+  else { render(); toast('Importé mais non sauvegardé (stockage plein)'); return; }
   toast(`Import ${sourceLabel} : ${added} ajoutés${skipped?`, ${skipped} déjà présents`:''}${source==='tome'?'.':'. Couvertures en cours…'}`);
   if(source!=='tome') queueCovers(pairs);
 }
@@ -3712,7 +3717,7 @@ $('#import-file').addEventListener('change', e => {
       }
       state.books = clean.books; state.lists = clean.lists; state.goals = clean.goals; state.meta = clean.meta; state.series = clean.series||{}; state.smartCollections = clean.smartCollections||[];
       if(save()){ render(); toast('Import réussi ✓'); }
-      else { render(); toast('⚠ Importé mais non sauvegardé (stockage plein) — exporte pour sécuriser'); }
+      else { render(); toast('Importé mais non sauvegardé (stockage plein) — exporte pour sécuriser'); }
     }catch(err){ toast('Fichier invalide ou vide'); }
   };
   reader.readAsText(f);
@@ -3890,7 +3895,7 @@ function renderQuickRate(){
   const b = state.books.find(x=>x.id===_qrQueue[0]);
   if(!b){                                            // file épuisée
     const reste = unratedBooks().length;
-    el.innerHTML = `<div class="qr-done"><div class="big">✨</div>
+    el.innerHTML = `<div class="qr-done"><div class="big orn" aria-hidden="true">❦</div>
       <h4>${_qrDone ? `${_qrDone} lecture${_qrDone>1?'s':''} notée${_qrDone>1?'s':''}` : 'C’est tout pour l’instant'}</h4>
       <p>${_qrDone ? 'Tes stats, ton récap et ton fil viennent de gagner en relief.' : 'Reviens quand tu auras terminé un livre.'}${reste?` Il reste ${reste} titre${reste>1?'s':''} à noter plus tard.`:''}</p>
       <div class="qr-actions"><button class="btn primary" data-close>Terminer</button></div></div>`;
@@ -3998,7 +4003,7 @@ function presentCard(cv, filename, shareText){
         ${canNative ? `<button class="btn primary" id="card-share">${ic('share',16)} Partager</button>` : ''}
         <button class="btn ${canNative?'':'primary'}" id="card-dl">${ic('download',16)} Télécharger</button>
       </div>
-      <p class="card-hint">En story, en message… l’adresse de Tome est sur l’image ✨</p>`;
+      <p class="card-hint">En story, en message… l’adresse de Tome est sur l’image </p>`;
     if(canNative) $('#card-share').addEventListener('click', async ()=>{
       try{ await navigator.share({ files:[file], title:'Tome', text:shareText }); }catch(_){ /* partage annulé */ }
     });
@@ -4197,7 +4202,7 @@ async function shareYearCard(year){
   await ensureCardFonts();
   const generate = (img)=>{
     try{
-      presentCard(drawYearCard(year, img), `tome-retro-${year}.png`, `Ma rétro lecture ${year} 📚 · ${SITE_URL}`);
+      presentCard(drawYearCard(year, img), `tome-retro-${year}.png`, `Ma rétro lecture ${year} · ${SITE_URL}`);
     }catch(e){ if(img) generate(null); else toast('Génération impossible'); }
   };
   const cover = r.best && r.best.cover;
@@ -4439,7 +4444,7 @@ let _reloadWarned = false;
 window.addEventListener('storage', e => {
   if(e.key !== LS_KEY || e.newValue == null) return;
   if($$('.overlay.open').length){
-    if(!_reloadWarned){ _reloadWarned = true; toast('⚠ Modifié dans une autre fenêtre — recharge pour synchroniser'); }
+    if(!_reloadWarned){ _reloadWarned = true; toast('Modifié dans une autre fenêtre — recharge pour synchroniser'); }
     return;
   }
   try{
@@ -4727,7 +4732,7 @@ function mergeLibraries(localSt, serverRaw){
     if(!srv){ out.series[name] = loc; continue; }
     if(JSON.stringify(loc)===JSON.stringify(srv)) continue;
     const locRev=(loc&&loc.review||'').trim(), srvRev=(srv&&srv.review||'').trim();
-    if(locRev && locRev!==srvRev){ srv.review = (srvRev?srvRev+'\n\n':'')+'⚠ conflit-sync : '+locRev; conflicts++; }
+    if(locRev && locRev!==srvRev){ srv.review = (srvRev?srvRev+'\n\n':'')+'conflit-sync : '+locRev; conflicts++; }
     if(srv.rating==null && loc && loc.rating!=null) srv.rating = loc.rating;
     if(!srv.favorite && loc && loc.favorite) srv.favorite = true;
   }
@@ -4834,7 +4839,7 @@ function renderFriends(){
   if(social.invite || loadPendingInvite()) processInvite(); // invitation (même persistée après un rechargement) traitée dès qu’on est connecté
   if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
   box.innerHTML = `
-    ${social.tosOutdated ? `<div class="invite-banner" id="tos-banner">📄 Les mentions légales ont été mises à jour : ta bibliothèque est désormais enregistrée sur ton compte, pour la retrouver sur tous tes appareils (privée, exportable et supprimable à tout moment).
+    ${social.tosOutdated ? `<div class="invite-banner" id="tos-banner">Les mentions légales ont été mises à jour : ta bibliothèque est désormais enregistrée sur ton compte, pour la retrouver sur tous tes appareils (privée, exportable et supprimable à tout moment).
       <button type="button" class="linkish" data-legal-view>Les lire</button>
       <button class="btn small primary" id="tos-accept" style="margin-left:8px">J’accepte</button></div>` : ''}
     <div class="me-bar">
@@ -4846,7 +4851,7 @@ function renderFriends(){
     <div class="friends-sub" role="tablist" aria-label="Sections du réseau">
       <button data-tab="feed" role="tab" aria-selected="${social.tab==='feed'}" class="${social.tab==='feed'?'on':''}">Fil</button>
       <button data-tab="friends" role="tab" aria-selected="${social.tab==='friends'}" class="${social.tab==='friends'?'on':''}">Amis</button>
-      <button data-tab="notifs" role="tab" aria-selected="${social.tab==='notifs'}" aria-label="Notifications${social.unreadNotifs?` (${social.unreadNotifs} non lue${social.unreadNotifs>1?'s':''})`:''}" class="${social.tab==='notifs'?'on':''}" style="position:relative">🔔${social.unreadNotifs?`<span class="sub-badge" aria-hidden="true">${social.unreadNotifs>9?'9+':social.unreadNotifs}</span>`:''}</button>
+      <button data-tab="notifs" role="tab" aria-selected="${social.tab==='notifs'}" aria-label="Notifications${social.unreadNotifs?` (${social.unreadNotifs} non lue${social.unreadNotifs>1?'s':''})`:''}" class="${social.tab==='notifs'?'on':''}" style="position:relative">${social.unreadNotifs?`<span class="sub-badge" aria-hidden="true">${social.unreadNotifs>9?'9+':social.unreadNotifs}</span>`:''}</button>
       <button data-tab="me" role="tab" aria-selected="${social.tab==='me'}" class="${social.tab==='me'?'on':''}">Partage</button>
       <button data-tab="account" role="tab" aria-selected="${social.tab==='account'}" class="${social.tab==='account'?'on':''}">Compte</button>
     </div>
@@ -4883,7 +4888,7 @@ async function renderNotifications(){
     el.innerHTML = d.notifications.map(n=>{
       const b = n.bookKey ? byKey.get(n.bookKey) : null;
       const book = b ? ` <b>${esc(fullTitle(b))}</b>` : '';
-      const ic = { friend_request:'👋', friend_accept:'🤝', reaction:'♥', comment:'💬' }[n.type] || '🔔';
+      const ic = { friend_request:'+', friend_accept:'✓', reaction:'♥', comment:'❝' }[n.type] || '•';
       // une demande d’ami s’accepte ICI : c’est l’événement le plus important de l’app
       const actions = n.type==='friend_request' && n.actorId
         ? `<div class="notif-actions"><button class="btn small primary" data-accept="${esc(n.actorId)}">Accepter</button></div>` : '';
@@ -5030,8 +5035,8 @@ async function showRecoveryCode(code, intro){
   const msg = `${intro||''}${intro?'\n\n':''}${code}\n\nC’est la SEULE façon de récupérer ton compte si tu oublies ton mot de passe — aucun email n’est collecté. Copie-le ou télécharge-le, puis range-le en lieu sûr : il ne sera plus jamais affiché.`;
   for(;;){
     // « C’est noté » est la seule sortie : Échap/clic-fond renvoient null → on réaffiche
-    const v = await openDialog({ title:'🔑 Ton code de secours', message: msg, actions:[
-      {label:'📋 Copier', value:'copy'},
+    const v = await openDialog({ title:'Ton code de secours', message: msg, actions:[
+      {label:'Copier', value:'copy'},
       {label:'Télécharger', value:'dl'},
       {label:'C’est noté ✓', value:'ok', variant:'primary', default:true},
     ]});
@@ -5069,7 +5074,7 @@ async function processInvite(){
   try{ await _processInvite(uname); } finally{ _inviteBusy = false; }
 }
 async function _processInvite(uname){
-  if(uname === social.me.username){ clearPendingInvite(); toast("C’est ton propre lien d’invitation 😄"); return; }
+  if(uname === social.me.username){ clearPendingInvite(); toast("C’est ton propre lien d’invitation "); return; }
   const ok = await uiConfirm({ title:`@${uname} t’invite`, message:`Envoyer une demande d’ami à @${uname} ? Vous verrez alors vos lectures respectives.`, okLabel:'Envoyer la demande' });
   if(!ok){ clearPendingInvite(); return; }          // refus explicite : ne pas redemander
   try{
@@ -5087,7 +5092,7 @@ function renderAuth(box, mode, errMsg=''){
   // pas un mur de connexion (surtout s’il arrive par l’invitation d’un ami)
   if(!mode) mode = (socToken() && !social.invite && !loadPendingInvite()) ? 'login' : 'signup';
   box.innerHTML = `
-    ${social.invite ? `<div class="invite-banner">💌 <b>@${esc(social.invite)}</b> t’invite sur Tome — connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : ''}
+    ${social.invite ? `<div class="invite-banner"><b>@${esc(social.invite)}</b> t’invite sur Tome — connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : ''}
     <div class="auth-card">
       <h3>${mode==='login'?'Se connecter':'Créer un compte'}</h3>
       <p class="sub">${mode==='login'
@@ -5217,7 +5222,7 @@ async function reportContent(targetType, targetKey){
     toast('Signalement envoyé — merci, il sera examiné.');
   }catch(e){ toast(e && e.message==='offline' ? 'Hors ligne — réessaie plus tard.' : (e.message||'Envoi impossible')); }
 }
-function showPledge(){ openDialog({title:'💚 Toujours gratuit', message:FREE_PLEDGE, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
+function showPledge(){ openDialog({title:'Toujours gratuit', message:FREE_PLEDGE, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement et directeur de la publication : Lucas Marroig (lucas.marroig@essec.edu).
@@ -5283,7 +5288,7 @@ async function renderFeed(){
             <button class="heart-btn${x.i_hearted?' on':''}" data-react="${esc(x.book_key)}" data-owner="${esc(x.username)}"
               aria-pressed="${x.i_hearted?'true':'false'}" title="J’aime" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts||''}</span></button>`}
             <button class="heart-btn cmt-btn" data-thread="${esc(x.username)}" data-key="${esc(x.book_key)}"
-              aria-expanded="false" aria-controls="feed-thread-${fi}" title="Réponses" aria-label="${x.comments?`Réponses — ${x.comments}`:'Répondre'}">💬<span class="hn">${x.comments||''}</span></button>
+              aria-expanded="false" aria-controls="feed-thread-${fi}" title="Réponses" aria-label="${x.comments?`Réponses — ${x.comments}`:'Répondre'}">❝<span class="hn">${x.comments||''}</span></button>
             ${!isMe ? `<button class="heart-btn rep-btn" data-report-review="${esc(x.username)}|${esc(x.book_key)}" title="Signaler cette critique" aria-label="Signaler cette critique">\u2690</button>` : ''}
           </div>
         </div>
@@ -5422,7 +5427,7 @@ async function renderFriendsList(){
     tmr = setTimeout(async ()=>{
       try{
         const d = await api('/api/search-users?q='+encodeURIComponent(q)); if(my!==seq) return;
-        if(!d.users.length){ res.innerHTML = `<p class="friends-empty" style="padding:8px 0">Personne pour « ${esc(q)} ». Tu peux inviter par lien 🔗.</p>`; return; }
+        if(!d.users.length){ res.innerHTML = `<p class="friends-empty" style="padding:8px 0">Personne pour « ${esc(q)} ». Tu peux inviter par lien .</p>`; return; }
         res.innerHTML = `<div class="search-res-h">Résultats</div>` + d.users.map(u=>{
           const act = u.relation==='friend' ? `<span class="frel">✓ ami</span>`
             : u.relation==='sent' ? `<span class="frel">en attente</span>`
@@ -5522,7 +5527,7 @@ function renderProfile(box, d){
         <h3 style="font-size:20px">${esc(d.user.displayName)}</h3>
         <div class="muted" style="color:var(--muted)">@${esc(d.user.username)}</div>
       </div>
-      ${d.friendState!=='self' ? `<button class="btn small" data-block="${esc(d.user.username)}" title="Bloquer">🚫</button>` : ''}
+      ${d.friendState!=='self' ? `<button class="btn small" data-block="${esc(d.user.username)}" title="Bloquer"></button>` : ''}
     </div>
     ${d.user.bio ? `<p style="color:var(--muted);font-size:14px;margin-bottom:14px">${esc(d.user.bio)}</p>` : ''}
     ${affinity!=null ? `<div class="affinity-ring"><span class="pct">${affinity}%</span><div><b>d’affinité de goût</b><div class="muted" style="color:var(--muted);font-size:12.5px">sur ${rated.length} livre(s) noté(s) tous les deux</div></div></div>` : ''}
@@ -5632,7 +5637,7 @@ function showWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=false; do
   // invité par un ami : le dire ici, sur la page qui explique le produit
   const who = social.invite || loadPendingInvite();
   const host = $('#lp-invite');
-  if(host){ host.innerHTML = who ? `💌 <b>@${esc(who)}</b> t’invite à le/la rejoindre sur Tome.` : ''; host.hidden = !who; }
+  if(host){ host.innerHTML = who ? `<b>@${esc(who)}</b> t’invite à le/la rejoindre sur Tome.` : ''; host.hidden = !who; }
   syncModalIsolation();
   const first=w.querySelector('[data-lp="signup"]'); if(first) try{ first.focus(); }catch(_){} }
 function hideWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=true; document.body.classList.remove('welcome-open'); syncModalIsolation();

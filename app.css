@@ -9,6 +9,11 @@
 @font-face{font-family:'Newsreader';font-style:italic;font-weight:400 500;font-display:swap;src:url('./fonts/newsreader-italic-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
 @font-face{font-family:'Newsreader';font-style:italic;font-weight:400 500;font-display:swap;src:url('./fonts/newsreader-italic-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 
+/* Mono pour les données (chiffres, dates, libellés techniques) : le contraste qui manquait au tout-serif. */
+@font-face{font-family:'Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/plexmono-normal-400-latin.woff2') format('woff2')}
+@font-face{font-family:'Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url('./fonts/plexmono-normal-500-latin.woff2') format('woff2')}
+@font-face{font-family:'Plex Mono';font-style:italic;font-weight:400;font-display:swap;src:url('./fonts/plexmono-italic-400-latin.woff2') format('woff2')}
+
 :root{
   /* Échelle typographique : 12 paliers (avant : 31 valeurs dont 7 demi-pixels indistinguables) */
   --fs-xs:11px; --fs-sm:12px; --fs-md:13px; --fs-base:14px; --fs-lg:16px; --fs-xl:18px; --fs-2xl:21px; --fs-3xl:24px; --fs-4xl:26px; --fs-5xl:32px; --fs-6xl:42px; --fs-7xl:54px;
@@ -20,31 +25,35 @@
   --header-bg:rgba(21,18,13,.9); --chip-bg:rgba(10,8,4,.72); --chip-text:#ece3d1;
   --overlay-dim:rgba(8,6,3,.74);
   --heat1:rgba(203,163,81,.28); --heat2:rgba(203,163,81,.56); --heat3:rgba(203,163,81,.95);
-  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:22px; --radius:12px;
+  --r-sm:4px; --r-md:6px; --r-lg:8px; --r-xl:12px; --radius:6px;
+  --rule:#6b5a3a; /* filet éditorial (titres courants, séparations de page) */
   --sh-1:0 2px 8px rgba(0,0,0,.28); --sh-2:0 10px 26px rgba(0,0,0,.42); --sh-3:0 20px 48px rgba(0,0,0,.5);
   --shadow:var(--sh-2);
   /* Typo d'affichage : serif système chaleureux (Iowan sur Apple, Palatino sur Windows, Georgia en repli)
      — donne une identité « livre » aux grands titres, sans police externe (CSP/offline). */
   --font-display:"Fraunces","Iowan Old Style",Georgia,"Times New Roman",serif;
   --font-serif:"Newsreader","Iowan Old Style",Georgia,serif;
+  --font-mono:"Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --grad-green:linear-gradient(135deg,#dcb562,#bd9036);
   --page:#e8dfc9; --page-edge:#c9bda0;   /* tranche de papier des « livres en volume » */
   --glow-green:0 8px 24px -8px color-mix(in srgb, var(--green) 55%, transparent);
 }
 :root[data-theme="light"]{
-  /* Ex-Libris : encre sur papier d'archive (ivoire froid, pas le crème « IA »), accent rouge sang. */
-  --bg:#e9e4d8; --bg2:#f0ebe0; --surface:#f5f1e9; --surface2:#e2dccb;
-  --border:#d5cebc; --border-hover:#bcb29a; --control-border:#877964; --text:#231d16; --muted:#675e50; --faint:#675e50;
-  --green:#9c332a; --green-strong:#822018; --on-green:#f7f2e7; --star:#9a742a; --star-off:#cec6b2;
-  --red:#b5372a; --orange:#9c5200;
-  --blue:#1f5d8c; --pink:#a2385f;
-  --grad-green:linear-gradient(135deg,#a83a2f,#872018);
-  --page:#f6f1e4; --page-edge:#d3c9ae;
-  --accent-soft:color-mix(in srgb, var(--green) 12%, transparent);
-  --header-bg:rgba(233,228,216,.9); --chip-bg:rgba(255,255,255,.82); --chip-text:#231d16;
-  --overlay-dim:rgba(45,35,24,.5);
-  --heat1:rgba(156,51,42,.26); --heat2:rgba(156,51,42,.55); --heat3:rgba(156,51,42,.92);
-  --sh-1:0 2px 8px rgba(90,70,45,.1); --sh-2:0 10px 26px rgba(90,70,45,.16); --sh-3:0 20px 48px rgba(90,70,45,.2);
+  /* Fiche de bibliothèque : papier blanc, encre noire, bleu de tampon. Le rouge ne sert qu'aux
+     tampons et aux alertes. Volontairement loin du crème/terracotta devenu le défaut de tout le monde. */
+  --bg:#f7f6f2; --bg2:#fbfaf7; --surface:#ffffff; --surface2:#ecebe5;
+  --border:#d9d7cf; --border-hover:#b9b6ab; --control-border:#7a776e; --text:#141311; --muted:#5b5952; --faint:#5b5952;
+  --green:#2b4c8c; --green-strong:#1f3a6e; --on-green:#ffffff; --star:#141311; --star-off:#d6d4cb;
+  --red:#b8322b; --orange:#8a5a12;
+  --blue:#2b4c8c; --pink:#8c2b5a;
+  --grad-green:linear-gradient(135deg,#2f5397,#1f3a6e);
+  --page:#f4f2ea; --page-edge:#cfccc0;
+  --accent-soft:color-mix(in srgb, var(--green) 9%, transparent);
+  --header-bg:rgba(247,246,242,.92); --chip-bg:rgba(255,255,255,.88); --chip-text:#141311;
+  --overlay-dim:rgba(20,19,17,.5);
+  --heat1:rgba(43,76,140,.24); --heat2:rgba(43,76,140,.52); --heat3:rgba(43,76,140,.92);
+  --sh-1:0 1px 3px rgba(20,19,17,.08); --sh-2:0 8px 22px rgba(20,19,17,.12); --sh-3:0 18px 44px rgba(20,19,17,.16);
+  --rule:#141311;
 }
 *{box-sizing:border-box; margin:0; padding:0}
 html{scrollbar-color:var(--surface2) var(--bg)}
@@ -139,18 +148,21 @@ main{max-width:1060px; margin:0 auto; padding:22px 16px 90px; padding-left:max(1
 h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12em; color:var(--muted); border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:16px; font-weight:700}
 
 /* ---------- Aujourd'hui ---------- */
-.today-hero{display:flex; align-items:flex-end; justify-content:space-between; gap:20px; padding:8px 2px 24px}
-.today-date,.today-kicker{color:var(--green); font-size:var(--fs-xs); font-weight:800; letter-spacing:.14em; text-transform:uppercase}
-.today-hero h2{font-family:var(--font-display); font-size:clamp(38px,6vw,62px); line-height:.98; letter-spacing:-.045em; margin:5px 0 9px}
+/* Titre courant (date à gauche, repères de l'année à droite) puis grand titre sur filet — une page, pas un tableau de bord */
+.today-run{display:flex; justify-content:space-between; gap:12px; font-family:var(--font-mono); font-size:var(--fs-xs); font-weight:500; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); padding:6px 0 10px; border-bottom:1.5px solid var(--rule); margin-bottom:14px}
+.today-hero{display:flex; align-items:flex-end; justify-content:space-between; gap:20px; padding:0 0 22px}
+.today-date,.today-kicker{color:var(--green); font-family:var(--font-mono); font-size:var(--fs-xs); font-weight:500; letter-spacing:.12em; text-transform:uppercase}
+.today-kicker{padding-bottom:8px; border-bottom:1px solid var(--rule); margin-bottom:14px}
+.today-hero h2{font-family:var(--font-display); font-size:clamp(38px,6vw,62px); line-height:.98; letter-spacing:-.045em; margin:0 0 9px}
 .today-hero p{color:var(--muted); font-size:var(--fs-lg)}
 .today-streak{flex:0 0 auto; border:1px solid color-mix(in srgb,var(--orange) 38%,var(--border)); background:color-mix(in srgb,var(--orange) 10%,var(--bg2)); color:var(--text); border-radius:999px; padding:7px 13px; font-size:var(--fs-md); font-weight:750}
 .today-grid{display:grid; grid-template-columns:minmax(0,1.55fr) minmax(260px,.75fr); gap:18px; align-items:stretch}
-.today-card{background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--sh-1)}
-.today-focus{height:100%; min-height:330px; padding:22px; overflow:hidden; position:relative; background:
+.today-card{background:none; border:0; border-radius:0; box-shadow:none}
+.today-focus{height:100%; min-height:0; padding:0; overflow:visible; position:relative}
   radial-gradient(circle at 10% 0%,color-mix(in srgb,var(--green) 12%,transparent),transparent 42%),var(--bg2)}
-.today-focus:after{content:""; position:absolute; width:180px; height:180px; border:1px solid color-mix(in srgb,var(--green) 10%,transparent); border-radius:50%; right:-90px; top:-90px; pointer-events:none}
+.today-focus:after{display:none}
 .today-focus-main{display:flex; gap:24px; align-items:center; min-height:265px; margin-top:12px; position:relative; z-index:1}
-.today-cover{width:142px; aspect-ratio:2/3; flex:0 0 auto; overflow:hidden; border-radius:9px; background:var(--surface2); box-shadow:0 14px 32px rgba(0,0,0,.35); border:1px solid var(--border); text-align:left}
+.today-cover{width:142px; aspect-ratio:2/3; flex:0 0 auto; overflow:hidden; border-radius:2px; background:var(--surface2); box-shadow:0 14px 32px rgba(0,0,0,.35); border:1px solid var(--border); text-align:left}
 .today-cover:hover{transform:translateY(-3px) rotate(-.5deg); box-shadow:0 18px 38px rgba(0,0,0,.42)}
 .today-cover img,.today-cover .ph{width:100%; height:100%; object-fit:cover}
 .today-cover .ph{border:0; border-radius:0}
@@ -159,33 +171,34 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
 .today-focus-copy>p,.today-empty p{color:var(--muted); margin-bottom:20px}
 .today-progress-meta{display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:var(--fs-md); margin-bottom:7px}
 .today-progress-meta strong{color:var(--text); font-variant-numeric:tabular-nums}
-.today-track{height:8px; background:var(--surface2); overflow:hidden; border-radius:999px; margin-bottom:20px}
-.today-track span{display:block; height:100%; border-radius:inherit; background:var(--grad-green); transition:width .45s cubic-bezier(.2,.7,.3,1)}
+.today-track{height:3px; background:var(--surface2); overflow:hidden; border-radius:0; margin-bottom:20px}
+.today-track span{display:block; height:100%; background:var(--green); transition:width .45s cubic-bezier(.2,.7,.3,1)}
 .today-actions{display:flex; flex-wrap:wrap; gap:8px}
 .today-links{display:flex; flex-wrap:wrap; gap:16px; margin-top:14px}
 .today-links button,.today-section-head>button{color:var(--muted); font-size:var(--fs-md); font-weight:650}
 .today-links button:hover,.today-section-head>button:hover{color:var(--green); text-decoration:underline}
 .today-reason{color:var(--muted); font-size:var(--fs-base); padding:10px 12px; border-left:2px solid var(--green); background:var(--accent-soft); margin:4px 0 20px; border-radius:0 8px 8px 0}
 .today-reason span{color:var(--green)}
-.today-side{display:grid; gap:10px; align-content:start; align-self:start}
-.today-mini{width:100%; min-height:96px; display:grid; grid-template-columns:38px minmax(0,1fr) 18px; align-items:center; gap:12px; text-align:left; padding:15px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:var(--sh-1)}
-.today-mini:hover{border-color:var(--border-hover); background:var(--surface); transform:translateX(2px)}
+.today-side{display:grid; gap:0; align-content:start; align-self:start; border-top:1.5px solid var(--rule)}
+.today-mini{width:100%; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 18px; align-items:center; gap:12px; text-align:left; padding:14px 0; background:none; border:0; border-bottom:1px solid var(--border); border-radius:0; transition:color .15s}
+.today-mini:hover{background:none; transform:none}
+.today-mini:hover b{color:var(--green)}
 .today-mini.urgent{border-color:color-mix(in srgb,var(--red) 40%,var(--border))}
-.today-mini-icon{width:38px; height:38px; display:grid; place-items:center; border-radius:11px; font-size:var(--fs-xl); font-weight:800; background:var(--accent-soft); color:var(--green)}
+.today-mini-icon{display:none} /* marginalia : le texte porte seul, sans pastille */
 .today-mini-icon.loan{background:color-mix(in srgb,var(--orange) 13%,transparent); color:var(--orange)}
 .today-mini-icon.goal{background:color-mix(in srgb,var(--blue) 13%,transparent); color:var(--blue)}
 .today-mini-icon.next{background:color-mix(in srgb,var(--pink) 13%,transparent); color:var(--pink)}
 .today-mini span:nth-child(2){display:flex; flex-direction:column; min-width:0}
-.today-mini small{color:var(--muted); font-size:var(--fs-xs); font-weight:700; text-transform:uppercase; letter-spacing:.08em}
-.today-mini b{font-size:var(--fs-lg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:1px 0}
+.today-mini small{color:var(--green); font-family:var(--font-mono); font-size:var(--fs-xs); font-weight:500; text-transform:uppercase; letter-spacing:.1em}
+.today-mini b{font-family:var(--font-display); font-size:var(--fs-2xl); font-weight:600; line-height:1.15; white-space:normal; margin:3px 0 2px}
 .today-mini em{font-size:var(--fs-sm); font-style:normal; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .today-arrow{color:var(--faint); transition:transform .15s,color .15s}
 .today-mini:hover .today-arrow{color:var(--green); transform:translateX(3px)}
-.today-empty{min-height:330px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:clamp(24px,5vw,46px); background:radial-gradient(circle at 90% 15%,var(--accent-soft),transparent 40%),var(--bg2)}
+.today-empty{min-height:0; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:10px 0 4px}
 .today-empty-icon{width:50px; height:50px; display:grid; place-items:center; border-radius:15px; margin-bottom:18px; background:var(--grad-green); color:var(--on-green); font-family:var(--font-display); font-size:var(--fs-3xl); font-weight:800; box-shadow:var(--glow-green)}
 .today-empty h3{max-width:520px}
 .today-empty p{max-width:560px}
-.today-social{margin-top:18px; padding:20px 22px}
+.today-social{margin-top:26px; padding:18px 0 0; border-top:1.5px solid var(--rule)}
 .today-section-head{display:flex; justify-content:space-between; align-items:end; gap:18px; margin-bottom:13px}
 .today-social h3{font-size:var(--fs-3xl); margin:1px 0 0}
 .today-feed{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px}
@@ -1281,3 +1294,12 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
   #ov-search .modal-head{flex-wrap:wrap}
   #search-status{order:1; flex-basis:100%; margin-left:0; margin-top:8px}
 }
+
+/* ---------- Données en mono ---------- */
+.today-progress-meta,.today-progress-meta strong,.entry .day b,.tile b,.goal-big .gnum,.hbar .val,.affinity-ring .pct,
+.heart-btn .hn,#btn-streak,.qr-count,.pp-stat b,.bulkbar b,.pace,.today-feed-row time{font-family:var(--font-mono); font-variant-numeric:tabular-nums; letter-spacing:0}
+.tile b,.goal-big .gnum,.pp-stat b{font-weight:500; letter-spacing:-.01em}
+.tile{background:none; border:0; border-top:1.5px solid var(--rule); border-radius:0; padding:12px 0 6px}
+.tile span{font-family:var(--font-mono); font-size:var(--fs-xs); letter-spacing:.08em; text-transform:uppercase}
+/* Fleuron d'imprimeur à la place des emoji dans les états vides */
+.empty .big.orn,.qr-done .big.orn,.study-done .big.orn{font-family:var(--font-display); font-size:44px; line-height:1; color:var(--green); font-variant-settings:"WONK" 1}

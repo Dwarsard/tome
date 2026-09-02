@@ -145,8 +145,8 @@
       <button data-view="friends" style="position:relative"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2M17.5 13.6a5.5 5.5 0 0 1 3 5.4"/></svg><span class="nav-lbl">Amis</span><span class="nav-badge" id="nav-friends-badge" hidden></span></button>
     </nav>
     <div class="header-actions">
-      <span id="offline-badge" hidden>⚡ Hors ligne</span>
-      <button class="btn icon" id="btn-streak" hidden>🔥<span id="streak-n"></span></button>
+      <span id="offline-badge" hidden>Hors ligne</span>
+      <button class="btn icon" id="btn-streak" hidden><span aria-hidden="true">✦</span><span id="streak-n"></span></button>
       <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
       <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg></button>
       <button class="btn primary" id="btn-open-search" aria-label="Ajouter un livre"><span aria-hidden="true">＋</span> <span class="lbl-txt">Ajouter</span></button>
@@ -158,9 +158,9 @@
 <main id="main-content" tabindex="-1">
   <!-- ======== AUJOURD’HUI ======== -->
   <section class="view active" id="view-today" aria-labelledby="today-title">
+    <div class="today-run"><span id="today-date"></span><span id="today-folio"></span></div>
     <div class="today-hero">
       <div>
-        <div class="today-date" id="today-date"></div>
         <h2 id="today-title">Aujourd’hui</h2>
         <p id="today-subtitle">Un petit pas dans ta vie de lecteur.</p>
       </div>
@@ -304,7 +304,7 @@
         <button data-s="reading" aria-pressed="false">En cours</button>
         <button data-s="read" aria-pressed="false">Lu</button>
       </div>
-      <button class="btn small" id="btn-scan" hidden aria-label="Scanner un code-barres"><span aria-hidden="true">📷</span></button>
+      <button class="btn small" id="btn-scan" hidden aria-label="Scanner un code-barres">Scan</button>
       <button class="btn small" id="btn-manual">Manuel</button>
       <button class="x" data-close aria-label="Fermer">✕</button>
     </div>
@@ -330,9 +330,9 @@
         <div class="full"><label for="f-authors">Auteur·e·s (séparés par des virgules)</label><input id="f-authors"></div>
         <div><label for="f-type">Type</label>
           <select id="f-type">
-            <option value="livre">📖 Livre</option>
-            <option value="bd">🎨 BD / Comics</option>
-            <option value="manga">⛩️ Manga</option>
+            <option value="livre">Livre</option>
+            <option value="bd">BD / Comics</option>
+            <option value="manga">Manga</option>
           </select>
         </div>
         <div><label for="f-status">Statut</label>
@@ -413,10 +413,10 @@
 </div>
 
 <!-- ======== BANDEAU MISE À JOUR PWA ======== -->
-<div id="update-bar" role="status" data-modal-exempt><span>✨ Nouvelle version disponible</span><button class="btn small primary" id="update-reload">Recharger</button></div>
+<div id="update-bar" role="status" data-modal-exempt><span>Nouvelle version disponible</span><button class="btn small primary" id="update-reload">Recharger</button></div>
 
 <!-- ======== BANDEAU ÉCHEC DE SAUVEGARDE (stockage plein) ======== -->
-<div id="save-warning" role="alert" hidden data-modal-exempt><span>⚠ Sauvegarde impossible — stockage plein. Tes dernières modifications risquent d’être perdues.</span><button class="btn small primary" id="save-warning-export">Exporter maintenant</button></div>
+<div id="save-warning" role="alert" hidden data-modal-exempt><span>Sauvegarde impossible — stockage plein. Tes dernières modifications risquent d’être perdues.</span><button class="btn small primary" id="save-warning-export">Exporter maintenant</button></div>
 
 <!-- ======== MODALE GÉNÉRIQUE (confirmation / saisie / choix) ======== -->
 <div class="dialog-ov" id="ov-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">

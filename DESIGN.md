@@ -1,12 +1,15 @@
 # Tome — identité & rituel de release
 
 *Référence issue du dossier de recherche « anti-look-IA » (vérifié à la source, 29/08/2026).
-L'identité s'appelle **Ex-Libris** (clair) / **Reliure** (sombre).*
+L'identité s'appelle **Fiche de bibliothèque** (clair) / **Reliure** (sombre).*
 
 ## L'identité en cinq lignes
 
 - **Typo** : Fraunces (titres, axe WONK sur les grands corps) + Newsreader (prose de lecture). Auto-hébergées dans `fonts/` — jamais de CDN, jamais Inter/Roboto/Space Grotesk.
-- **Couleurs** : clair = encre `#231d16` + rouge sang `#9c332a` sur ivoire froid `#e9e4d8` ; sombre = dorure `#cba351` sur noir chaud `#15120d`. Le token s'appelle `--green` (historique) mais sa valeur est encre/or.
+- **Couleurs** : clair = encre `#141311` + **bleu de tampon** `#2b4c8c` sur papier blanc `#f7f6f2` (le rouge `#b8322b` ne sert qu'aux tampons et alertes) ; sombre = dorure `#cba351` sur noir chaud `#15120d`. Le token s'appelle `--green` (historique) mais sa valeur est bleu/or. JAMAIS crème + terracotta : c'est le défaut de tous les générateurs et de la moitié des sites de 2026.
+- **Mono** : Plex Mono (`--font-mono`) pour TOUT ce qui est chiffre, date, libellé technique (titre courant, folio, kickers, tuiles de stats, progression). C'est le contraste qui empêche le tout-serif de tourner à la brochure.
+- **Filets, pas de boîtes** : « Aujourd'hui » se compose comme une page (titre courant, filet `--rule`, marginalia) ; tuiles de stats sur filet ; rayons secs (`--r-sm` 4 px). Une carte arrondie à bordure n'est pas interdite, mais elle doit se justifier.
+- **Zéro emoji** : glyphes typographiques seulement (♥ ★ ❝ ✓ ✦) et le fleuron d'imprimeur ❦ dans les états vides. Un emoji change de dessin selon l'appareil et signe le gabarit.
 - **Encres** : placeholders, avatars et pastilles puisent dans les palettes `PH_INKS` / `AVATAR_INKS` — jamais de teinte HSL aléatoire.
 - **Matière** : grain de papier (`body::before`), tranches de pages (`--page`/`--page-edge`), filets d'imprimeur, tramage Bayer sur les cartes de partage.
 - **Motion** : UNE signature (`bookopen`, la fiche s'ouvre du dos, 260 ms) — tout le reste < 300 ms, easing sortant, `reduced-motion` coupe tout.
