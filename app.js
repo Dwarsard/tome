@@ -356,6 +356,7 @@ function normalizeBook(b){
     year: numIn(b.year, -3000, 3000),
     pages: numIn(b.pages, 0, 100000),
     cover: cleanCover(b.cover),
+    isbn: (typeof isbnOf==='function' ? isbnOf(String(b.isbn||'')) : String(b.isbn||'').replace(/[^0-9Xx]/g,'')) || '',
     status: STATUS_LABEL[b.status] ? b.status : 'wishlist',
     rating: cleanRating(b.rating),
     review: typeof b.review==='string' ? b.review.slice(0,20000) : '',
@@ -2051,6 +2052,7 @@ async function searchGoogleBooks(q, opts={}){
       year: +(v.publishedDate||'').slice(0,4) || null,
       pages: numOrNull(v.pageCount),
       cover: v.imageLinks ? (v.imageLinks.thumbnail||v.imageLinks.smallThumbnail||'').replace('http://','https://') : '',
+      isbn: (()=>{ const ids = v.industryIdentifiers||[]; const i13 = ids.find(x=>x.type==='ISBN_13'), i10 = ids.find(x=>x.type==='ISBN_10'); return (i13&&i13.identifier) || (i10&&i10.identifier) || ''; })(),
       type: guessType((v.categories||[]).join(' '), v.title),
       description: typeof v.description==='string' ? v.description : '',
     };
@@ -2058,7 +2060,7 @@ async function searchGoogleBooks(q, opts={}){
 }
 async function searchOpenLibrary(q){
   const isbn = isbnOf(q);
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&limit=15&lang=fr&fields=title,author_name,first_publish_year,number_of_pages_median,cover_i,subject,first_sentence`;
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&limit=15&lang=fr&fields=title,author_name,first_publish_year,number_of_pages_median,cover_i,subject,first_sentence,isbn`;
   const data = await (await fetch(url)).json();
   return (data.docs||[]).filter(d=>d.title).map(d => ({
     title: d.title,
@@ -2066,6 +2068,7 @@ async function searchOpenLibrary(q){
     year: numOrNull(d.first_publish_year),
     pages: numOrNull(d.number_of_pages_median),
     cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : '',
+    isbn: (d.isbn||[]).find(x=>/^\d{13}$/.test(x)) || (d.isbn||[]).find(x=>/^\d{9}[\dX]$/i.test(x)) || '',
     type: guessType((d.subject||[]).slice(0,25).join(' '), d.title),
     description: Array.isArray(d.first_sentence) ? String(d.first_sentence[0]||'') : (typeof d.first_sentence==='string' ? d.first_sentence : ''),
   }));
@@ -2120,7 +2123,7 @@ $('#search-results').addEventListener('click', e => {
   const pt = parseTome(r.title) || {};
   const data = {
     title:r.title, authors:r.authors||[], type:r.type||'livre',
-    year:r.year||null, pages:r.pages||null, cover:cleanCover(r.cover||''),
+    year:r.year||null, pages:r.pages||null, cover:cleanCover(r.cover||''), isbn:r.isbn||'',
     synopsis:cleanSynopsis(r.description||''), status:ui.defaultStatus,
     series:pt.series||'', volume:pt.volume ?? null,
   };
@@ -2618,6 +2621,7 @@ function openDetail(id, opts={}){
         <a class="btn buy amz" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter</a>
         <a class="btn buy" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle</a>
         ${social.me ? `<button type="button" class="btn buy" data-reco="${esc(b.id)}" title="Recommander ce livre à un ami">${ic('share',16)} Recommander</button>` : ''}
+        ${!isDemoBook(b) ? `<a class="btn buy" href="/livre/${esc(bookSlugOf(b))}" title="La page publique de ce livre sur Tome (avis des lecteurs)">${ic('link',16)} Page du livre</a>` : ''}
         ${AMAZON_TAG ? `<span class="buy-note" tabindex="0" title="En tant que Partenaire Amazon, ce site perçoit une commission sur les achats remplissant les conditions requises. Aucun surcoût pour toi.">Partenaire Amazon</span>` : ''}
       </div>
 
@@ -3643,6 +3647,7 @@ function rowToBook(get, source){
   };
   if(addedAt) raw.addedAt = addedAt;
   const isbn = csvIsbn(get(source==='goodreads' ? 'ISBN13' : 'ISBN/UID')) || csvIsbn(get('ISBN'));
+  if(isbn) raw.isbn = isbn;
   return { book: normalizeBook(raw), isbn };
 }
 // Récupération non bloquante des couvertures par ISBN via Open Library (concurrence limitée)
@@ -3837,6 +3842,10 @@ async function disablePush(){
 /* =============== Page publique /@pseudo ===============
    Lisible sans compte : c’est le lien qu’on met dans une bio. Elle n’affiche QUE ce que le
    serveur accepte de rendre public (opt-in + mode de partage) — le front ne décide rien. */
+function publicBookSlugFromURL(){
+  const m = location.pathname.match(/^\/livre\/([a-z0-9-]{8,120})$/i);
+  return m ? m[1].toLowerCase() : '';
+}
 function publicUsernameFromURL(){
   const m = location.pathname.match(/^\/@([a-z0-9_.-]{3,20})$/i);
   if(m) return m[1].toLowerCase();
@@ -3911,6 +3920,78 @@ async function showPublicProfile(uname){
     </section>`;
   const ppRep = body.querySelector('[data-pp-report]');
   if(ppRep) ppRep.addEventListener('click', ()=>reportContent('profile', ppRep.dataset.ppReport));
+}
+
+/* =============== Page publique /livre/<slug> ===============
+   Le catalogue commun : la page d'un livre, lisible sans compte, avec ce que le serveur accepte
+   de rendre public — statistiques anonymes (≥ 3 notes) et critiques des membres à page publique. */
+async function showPublicBook(slug){
+  const host = $('#pubprofile'), body = $('#pp-body');
+  host.hidden = false; document.body.style.overflow='hidden';
+  syncModalIsolation();
+  body.innerHTML = `<div class="pp-empty">Chargement du livre…</div>`;
+  let d;
+  try{ d = await api('/api/book/'+encodeURIComponent(slug)); }
+  catch(e){
+    body.innerHTML = `<div class="pp-empty">
+      <p>${e.message==='offline' ? 'Page indisponible hors ligne.' : 'Ce livre n’a pas encore de page publique.'}</p>
+      <p style="margin-top:16px"><a class="btn primary" href="/">Découvrir Tome</a></p></div>`;
+    return;
+  }
+  const b = d.book, st = d.stats||{}, reviews = d.reviews||[];
+  const mine = state.books.find(x=>shelfKey(x)===b.key) || null;
+  const meta = [b.type==='bd' ? 'BD' : b.type==='manga' ? 'Manga' : 'Livre', b.series ? `${b.series}${b.volume!=null ? ' · tome '+b.volume : ''}` : '', b.year || '', b.pages ? `${b.pages} pages` : ''].filter(Boolean).join(' · ');
+  const stars = st.avg!=null ? `<b>${String(st.avg).replace('.',',')} ★</b><span>note moyenne · ${st.rated} avis</span>` : `<b>${st.readers||0}</b><span>lecteur${(st.readers||0)>1?'s':''} public${(st.readers||0)>1?'s':''}</span>`;
+  document.title = `${b.title}${b.authors ? ' — ' + b.authors : ''} · Tome`;
+  const cta = social.me
+    ? (mine ? `<button class="btn primary lp-big" data-pb-mine="${esc(mine.id)}">Ma fiche</button>`
+            : `<button class="btn primary lp-big" data-pb-add>Ajouter à ma pile</button>`)
+    : `<a class="btn primary lp-big" href="/">Créer ma bibliothèque</a><a class="btn lp-big" href="/" data-pb-try>Essayer sans compte</a>`;
+  body.innerHTML = `
+    <header class="pp-head pb-head">
+      <div class="pp-fav-cov pb-cov">${b.cover ? `<img src="${esc(b.cover)}" alt=""${xorigin(b.cover)} referrerpolicy="no-referrer">` : `<div class="pp-ph" style="background:${phInk({title:b.title, type:b.type})}"><span>${esc((b.title||'?').slice(0,1))}</span></div>`}</div>
+      <div class="pb-txt">
+        <div class="pp-fav-kicker">${meta || 'Livre'}</div>
+        <h1 class="pp-name">${esc(b.title)}</h1>
+        ${b.authors ? `<div class="pp-user">${esc(b.authors)}</div>` : ''}
+        <div class="pp-stats"><div class="pp-stat">${stars}</div>${st.avg==null && st.readers ? `<div class="pp-stat"><b>${st.rated||0}</b><span>note${(st.rated||0)>1?'s':''} — moyenne dès 3</span></div>` : ''}</div>
+        <div class="pb-actions">${cta}<button class="btn" data-pb-share>Partager la page</button></div>
+      </div>
+    </header>
+    ${b.synopsis ? `<div class="pp-sec">Résumé</div><p class="pb-synopsis">${esc(b.synopsis)}</p>` : ''}
+    <div class="pp-sec">${reviews.length ? `Avis des lecteurs` : 'Avis'}</div>
+    ${reviews.length ? `<div class="pb-reviews">${reviews.map(r=>`<article class="pb-review">
+        <div class="pb-review-head">${avatarHTML(r.displayName,'sm')}<a class="pb-review-who" href="/@${esc(r.username)}"><b>${esc(r.displayName)}</b> <span>@${esc(r.username)}</span></a>
+          ${r.rating ? `<span class="pb-review-stars">${starsTxt(r.rating)}</span>` : ''}${r.readDate ? `<time class="pb-review-when">${esc(r.readDate.slice(0,4))}</time>` : ''}</div>
+        <p class="pb-review-txt">${esc(r.review)}</p>
+        <button type="button" class="linkish pb-report" data-pb-report="${esc(r.username)}|${esc(b.key)}">\u2690 Signaler</button>
+      </article>`).join('')}</div>`
+      : `<div class="pp-empty">Pas encore d’avis public. Les membres qui publient leur page font vivre celle-ci.</div>`}
+    <section class="pp-cta">
+      <h3>Et toi, tu l’as lu ?</h3>
+      <p>Note-le, écris ce que tu en penses, et retrouve tes amis lecteurs. Gratuit, sans publicité.</p>
+      ${social.me ? '' : `<a class="btn primary lp-big" href="/">Créer ma bibliothèque</a>`}
+    </section>`;
+  body.onclick = async e=>{
+    const share = e.target.closest('[data-pb-share]');
+    if(share){ const url = location.origin + '/livre/' + b.slug; if(navigator.share){ try{ await navigator.share({ title:b.title, url }); return; }catch(_){ } }
+      try{ await navigator.clipboard.writeText(url); toast('Lien de la page copié ✓'); }catch(_){ } return; }
+    const rep = e.target.closest('[data-pb-report]');
+    if(rep){ reportContent('review', rep.dataset.pbReport); return; }
+    const add = e.target.closest('[data-pb-add]');
+    if(add){
+      const nb = normalizeBook({ title:b.title, authors:String(b.authors||'').split(',').map(x=>x.trim()).filter(Boolean), type:b.type||'livre',
+        series:b.series||'', volume:b.volume??null, cover:b.cover||'', isbn:b.isbn||'', synopsis:b.synopsis||'', year:b.year||null, pages:b.pages||null, status:'wishlist', tags:[], review:'', readings:[] });
+      state.books.unshift(nb); save(); render();
+      toast(`« ${b.title} » ajouté à ta pile ✓`);
+      add.outerHTML = `<button class="btn primary lp-big" data-pb-mine="${esc(nb.id)}">Ma fiche</button>`;
+      return;
+    }
+    const mineBtn = e.target.closest('[data-pb-mine]');
+    if(mineBtn){ host.hidden = true; document.body.style.overflow=''; syncModalIsolation(); try{ history.replaceState(history.state,'','/'); }catch(_){ } openDetail(mineBtn.dataset.pbMine); return; }
+    const tryBtn = e.target.closest('[data-pb-try]');
+    if(tryBtn){ e.preventDefault(); host.hidden = true; document.body.style.overflow=''; syncModalIsolation(); try{ history.replaceState(history.state,'','/'); }catch(_){ } try{ localStorage.setItem('tome-welcomed','1'); }catch(_){ } if(!state.books.length) loadDemo(); selectView('today'); }
+  };
 }
 
 /* =============== Notation rapide ===============
@@ -4450,7 +4531,7 @@ function showUpdateBar(reg){
 if('serviceWorker' in navigator){
   addEventListener('load', async ()=>{
     try{
-      const reg = await navigator.serviceWorker.register('sw.js');
+      const reg = await navigator.serviceWorker.register('/sw.js');
       // un nouveau worker installé alors qu’un ancien contrôle déjà la page = mise à jour dispo
       reg.addEventListener('updatefound', ()=>{
         const w = reg.installing; if(!w) return;
@@ -4612,13 +4693,19 @@ function stripDemo(){
   save(); scheduleRender();
   return n;
 }
+// Slug DÉTERMINISTE de la page publique d'un livre — même fonction dans le Worker (bookSlug) :
+// titre-auteur lisibles + empreinte FNV-1a de la clé d'étagère, pour rester unique sans table.
+function fnv1a(str){ let h = 0x811c9dc5; for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8,'0').slice(0,6); }
+function slugPart(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40); }
+function bookSlug(key, title, firstAuthor){ const t = slugPart(title) || 'livre'; const a = slugPart(firstAuthor); return (a ? t + '-' + a : t) + '-' + fnv1a(String(key)); }
+function bookSlugOf(b){ return bookSlug(shelfKey(b), fullTitle(b), (b.authors||[])[0]||''); }
 function shareableBooks(){
   return state.books.filter(b=>!isDemoBook(b)).map(b=>{
     const key = shelfKey(b);
     const lastRead = (b.readings||[]).map(r=>r.date).sort().pop() || '';
     return {
       key, title:fullTitle(b), authors:authorsStr(b), type:b.type, series:b.series||'', volume:b.volume,
-      cover:b.cover||'', rating:b.rating, review:b.review||'', status:b.status, readDate:lastRead,
+      cover:b.cover||'', isbn:b.isbn||'', rating:b.rating, review:b.review||'', status:b.status, readDate:lastRead,
     };
   }).filter(b=>b.status==='read' || b.rating || b.readDate); // on ne partage pas la pile « à lire » vierge
 }
@@ -5061,6 +5148,11 @@ async function renderAccount(){
     };
   })();
   $('#acc-pub').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
+    if(!social.publicProfile){
+      const ok = await uiConfirm({ title:'Publier ma page ?', okLabel:'Publier',
+        message:'Ta page /@' + social.me.username + ' devient lisible par tout le monde, avec les lectures que tu partages.\n\nTes notes comptent alors dans la moyenne anonyme des pages publiques des livres (affichée seulement à partir de 3 notes), et tes critiques y apparaissent signées de ton pseudo si ton partage est réglé sur « Tout ».\n\nTu peux redevenir privé à tout moment : tout disparaît aussitôt.' });
+      if(!ok){ b.disabled=false; return; }
+    }
     try{ const d = await api('/api/account/public-profile', {method:'POST', body:{public: !social.publicProfile}});
       social.publicProfile = d.public;
       toast(d.public ? 'Ta page est en ligne ✓' : 'Ta page redevient privée');
@@ -5422,11 +5514,12 @@ function showPledge(){ openDialog({title:'Toujours gratuit', message:FREE_PLEDGE
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement et directeur de la publication : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n’étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d’amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l’abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus — effacée automatiquement sous 48 heures).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n’étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d’amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l’abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus — effacée automatiquement sous 48 heures). Si tu utilises les fonctions correspondantes : les recommandations de livres que tu envoies ou reçois entre amis (livre, mot d’accompagnement, expéditeur, destinataire — supprimées avec le compte de l’un ou l’autre, ou à la fin de l’amitié si elles sont encore en attente) et le réglage du rappel de lecture (heure choisie, fuseau horaire, titre de ta lecture en cours envoyé au serveur pour personnaliser le message — désactivable à tout moment dans « Mon compte »).
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l’inscription).
 Âge minimum : Tome s’adresse aux 15 ans et plus (âge du consentement numérique en France) ; en dessous, l’inscription nécessite l’accord d’un parent ou tuteur.
 Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Le partage social est réglé sur « Rien » par défaut. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n’envoie jamais rien. Exception si tu l’actives toi-même : « Ma page publique » (Amis → Mon compte) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
+Pages publiques des livres : Tome tient un catalogue commun des livres partagés (titre, auteurs, couverture, résumé — des données de livre, jamais de personne). La page publique d’un livre affiche une note moyenne ANONYME calculée uniquement sur les membres ayant publié leur page, et seulement à partir de 3 notes (jamais une personne devinable) ; elle affiche les critiques signées de leur pseudo des seuls membres à page publique réglés sur « Tout ». Rendre ta page privée retire immédiatement tes notes et critiques de ces pages.
 Services tiers : Tome n’installe aucun traceur, mais pour afficher les couvertures et proposer des recherches de livres, ton navigateur contacte directement Google Books (googleapis.com, books.google.com) et Open Library (openlibrary.org, covers.openlibrary.org) — qui reçoivent alors ta requête ou l’identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n’a lieu que quand tu la déclenches ; les « Idées du jour » ne s’activent qu’avec ton accord explicite.
 Cookies et traceurs : Tome n’utilise aucun cookie publicitaire ni de mesure d’audience — uniquement le stockage strictement nécessaire au service (ta bibliothèque sur ton appareil, ta session). Ces usages sont exemptés de consentement, c’est pourquoi il n’y a pas de bannière cookies.
 Hébergement et transferts : Cloudflare, Inc. (101 Townsend St, San Francisco, États-Unis) ; la base de données est hébergée en Europe de l’Ouest. Les flux transitant hors de l’UE sont encadrés par les garanties reconnues (certification Data Privacy Framework et clauses contractuelles types).
@@ -5442,6 +5535,7 @@ Le service : Tome te permet de tenir ta bibliothèque, de noter et critiquer tes
 Ton compte : tu es responsable de ce qui se passe avec ton compte et de la garde de ton mot de passe et de ton code de secours. Un compte = une personne réelle.
 Tes contenus : tes critiques, avis et listes restent les tiens. En les partageant (amis ou page publique), tu autorises Tome à les afficher aux personnes que TU as choisies — rien d’autre, aucune revente, aucune utilisation publicitaire.
 Contenus interdits : contenus illégaux, harcèlement, haine, spam, usurpation d’identité, ou toute utilisation visant à nuire au service ou à ses membres.
+Critiques publiques : si tu publies ta page, tes critiques peuvent apparaître sur les pages publiques des livres, signées de ton pseudo. Tu en restes l’auteur et le responsable ; elles peuvent être signalées et retirées si elles enfreignent ces règles.
 Signalement : chaque critique, commentaire et profil public peut être signalé (bouton « Signaler »). Les signalements sont examinés rapidement ; un contenu manifestement illicite est retiré, et l’auteur peut en discuter par email.
 Modération et résiliation : en cas d’abus, Tome peut retirer un contenu, suspendre ou fermer un compte — avec explication, sauf obligation légale contraire. Tu peux supprimer ton compte à tout moment (Mon compte), ce qui efface tes données du serveur.
 Disponibilité : Tome est un projet indépendant, fourni « en l’état », sans garantie de disponibilité permanente — l’export de ta bibliothèque est là pour que tes données ne dépendent jamais du service.
@@ -5809,9 +5903,11 @@ if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin().then(
 // Page d’accueil : présentée aux visiteurs qui arrivent sans compte et sans bibliothèque à eux.
 // (Les utilisateurs connectés, ou qui ont déjà des livres, entrent directement dans l’app.)
 const _pubUser = publicUsernameFromURL();
+const _pubBook = publicBookSlugFromURL();
 if(_pubUser) showPublicProfile(_pubUser);   // visiteur arrivé par un lien de bio : page publique, rien d’autre
+else if(_pubBook) showPublicBook(_pubBook); // visiteur arrivé sur la page d’un livre
 (function maybeWelcome(){
-  if(_pubUser) return;                      // ne pas superposer la page d’accueil à un profil public
+  if(_pubUser || _pubBook) return;                      // ne pas superposer la page d’accueil à un profil public
   let welcomed = false;
   try{ welcomed = !!localStorage.getItem('tome-welcomed'); }catch(_){}
   const hasRealBooks = (state.books||[]).some(b=>!(b.tags||[]).includes('exemple'));

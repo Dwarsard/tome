@@ -1327,3 +1327,19 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 #qr-scan-box{text-align:center}
 #qr-video{width:100%; max-height:280px; border-radius:var(--r-sm); background:#000; object-fit:cover}
 #qr-live .frow{margin-bottom:8px}
+
+/* ---------- Page publique d'un livre ---------- */
+.pb-head{display:grid; grid-template-columns:150px minmax(0,1fr); gap:24px; align-items:start; text-align:left}
+.pb-cov{width:150px; aspect-ratio:2/3}
+.pb-txt .pp-name{margin-top:4px}
+.pb-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px}
+.pb-synopsis{max-width:66ch; color:var(--muted); line-height:1.65}
+.pb-reviews{display:grid; gap:0; border-top:1.5px solid var(--rule)}
+.pb-review{padding:16px 0; border-bottom:1px solid var(--border)}
+.pb-review-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.pb-review-who{text-decoration:none; color:var(--text)} .pb-review-who span{color:var(--muted); font-size:var(--fs-md)}
+.pb-review-stars{color:var(--star); letter-spacing:1px}
+.pb-review-when{margin-left:auto; font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--faint)}
+.pb-review-txt{margin:8px 0 6px; max-width:66ch; line-height:1.6}
+.pb-report{font-size:var(--fs-xs); color:var(--faint)}
+@media(max-width:560px){ .pb-head{grid-template-columns:110px minmax(0,1fr); gap:14px} .pb-cov{width:110px} }
