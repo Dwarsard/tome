@@ -1344,3 +1344,5 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 .pb-report{font-size:var(--fs-xs); color:var(--faint)}
 @media(max-width:560px){ .pb-head{grid-template-columns:110px minmax(0,1fr); gap:14px} .pb-cov{width:110px} }
 .pb-source{font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--faint); margin-top:6px}
+a.btn{text-decoration:none} /* les liens habillés en bouton ne se soulignent pas */
+@media(max-width:560px){ .pb-txt .pp-stats{display:flex; gap:18px; flex-wrap:wrap} .pb-actions .btn{flex:1 1 auto; justify-content:center} }
