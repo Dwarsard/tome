@@ -3939,6 +3939,7 @@ async function showPublicBook(slug){
     return;
   }
   const b = d.book, st = d.stats||{}, reviews = d.reviews||[];
+  if(b.slug && b.slug !== slug){ try{ history.replaceState(history.state, '', '/livre/' + b.slug); }catch(_){ } } // slug canonique
   const mine = state.books.find(x=>shelfKey(x)===b.key) || null;
   const meta = [b.type==='bd' ? 'BD' : b.type==='manga' ? 'Manga' : 'Livre', b.series ? `${b.series}${b.volume!=null ? ' · tome '+b.volume : ''}` : '', b.year || '', b.pages ? `${b.pages} pages` : ''].filter(Boolean).join(' · ');
   const stars = st.avg!=null ? `<b>${String(st.avg).replace('.',',')} ★</b><span>note moyenne · ${st.rated} avis</span>` : `<b>${st.readers||0}</b><span>lecteur${(st.readers||0)>1?'s':''} public${(st.readers||0)>1?'s':''}</span>`;
@@ -3958,7 +3959,7 @@ async function showPublicBook(slug){
         <div class="pb-actions">${cta}<button class="btn" data-pb-share>Partager la page</button></div>
       </div>
     </header>
-    ${b.synopsis ? `<div class="pp-sec">Résumé</div><p class="pb-synopsis">${esc(b.synopsis)}</p>` : ''}
+    ${b.synopsis ? `<div class="pp-sec">Résumé</div><p class="pb-synopsis">${esc(b.synopsis)}</p>${b.source==='openlibrary' ? `<p class="pb-source">Résumé : <a href="https://openlibrary.org/isbn/${esc(b.isbn||'')}" target="_blank" rel="noopener">Open Library</a></p>` : b.source==='googlebooks' ? `<p class="pb-source">Résumé : <a href="https://books.google.com/books?vid=ISBN${esc(b.isbn||'')}" target="_blank" rel="noopener">Google Books</a></p>` : ''}` : ''}
     <div class="pp-sec">${reviews.length ? `Avis des lecteurs` : 'Avis'}</div>
     ${reviews.length ? `<div class="pb-reviews">${reviews.map(r=>`<article class="pb-review">
         <div class="pb-review-head">${avatarHTML(r.displayName,'sm')}<a class="pb-review-who" href="/@${esc(r.username)}"><b>${esc(r.displayName)}</b> <span>@${esc(r.username)}</span></a>
