@@ -2617,6 +2617,7 @@ function openDetail(id, opts={}){
       <div class="buy-row">
         <a class="btn buy amz" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter</a>
         <a class="btn buy" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle</a>
+        ${social.me ? `<button type="button" class="btn buy" data-reco="${esc(b.id)}" title="Recommander ce livre à un ami">${ic('share',16)} Recommander</button>` : ''}
         ${AMAZON_TAG ? `<span class="buy-note" tabindex="0" title="En tant que Partenaire Amazon, ce site perçoit une commission sur les achats remplissant les conditions requises. Aucun surcoût pour toi.">Partenaire Amazon</span>` : ''}
       </div>
 
@@ -3493,6 +3494,9 @@ $('#btn-export-csv').addEventListener('click', ()=>{
 // Parseur CSV maison, tolérant RFC-4180 (guillemets, virgules et retours-ligne dans les champs, BOM)
 function parseCSV(text){
   text = text.replace(/^﻿/, '');
+  // séparateur : « ; » si la première ligne en contient plus que de virgules (export Babelio)
+  const first = text.slice(0, text.indexOf('\n') > 0 ? text.indexOf('\n') : text.length);
+  const sep = (first.match(/;/g)||[]).length > (first.match(/,/g)||[]).length ? ';' : ',';
   const rows = []; let row = [], f = '', i = 0, q = false;
   const push = ()=>{ row.push(f); f=''; };
   while(i < text.length){
@@ -3502,7 +3506,7 @@ function parseCSV(text){
       f+=c; i++; continue;
     }
     if(c==='"'){ q=true; i++; continue; }
-    if(c===','){ push(); i++; continue; }
+    if(c===sep){ push(); i++; continue; }
     if(c==='\r'){ i++; continue; }
     if(c==='\n'){ push(); rows.push(row); row=[]; i++; continue; }
     f+=c; i++;
@@ -3510,11 +3514,17 @@ function parseCSV(text){
   if(f.length || row.length){ push(); rows.push(row); }
   return rows.filter(r => r.some(v => v!==''));
 }
+function decodeEntities(v){
+  const t = String(v||'').replace(/&#(\d+),/g, '&#$1;');
+  if(!/&[#a-z0-9]+;/i.test(t)) return t;
+  const ta = document.createElement('textarea'); ta.innerHTML = t; return ta.value;
+}
 function detectSource(headers){
   const h = headers.map(x=>String(x).trim().toLowerCase());
   if(h.includes('tome csv version') && h.includes('tome id')) return 'tome';
   if(h.includes('exclusive shelf')) return 'goodreads';
   if(h.includes('read status') || (h.includes('moods') && h.includes('pace'))) return 'storygraph';
+  if(h.includes('titre') && h.includes('auteur') && h.includes('statut')) return 'babelio';
   return null;
 }
 function csvPipeList(v){ return csvUnprotect(v).split('|').map(s=>s.trim()).filter(Boolean); }
@@ -3568,7 +3578,7 @@ function rowToBook(get, source){
     };
     return {book:normalizeBook(raw), isbn:''};
   }
-  let authors, type, year, pages, status, rating, review, tags, moods=[], pace=null, readings, addedAt;
+  let authors, type, year, pages, status, rating, review, tags, moods=[], pace=null, readings, addedAt, titleOverride='';
   const pt = parenTome(title) || {};
   if(source==='goodreads'){
     authors = [get('Author'), ...String(get('Additional Authors')||'').split(',')].map(s=>s.trim()).filter(Boolean);
@@ -3584,6 +3594,29 @@ function rowToBook(get, source){
     readings = (status==='read' && dr) ? [{id:uid(), date:dr, rating:null}] : [];
     addedAt = get('Date Added') || undefined;
     type = guessType([get('Bookshelves'), get('Binding'), get('Publisher'), title].join(' '), title);
+  }else if(source==='babelio'){
+    // Export Babelio (« ; », 8 colonnes) : ISBN;Titre;Auteur;Editeur;Date de publication;Date d`entrée;Statut;Note.
+    // Pas de date de lecture, pas de critique, pas d'étagères : on n'invente rien.
+    const auteur = decodeEntities(get('Auteur'));
+    const parts = auteur.split(/\s+/).filter(Boolean);
+    authors = auteur ? [parts.length===2 ? `${parts[1]} ${parts[0]}` : auteur] : [];   // « Nom Prénom » → « Prénom Nom »
+    const st = decodeEntities(get('Statut')).toLowerCase().replace(/[àâ]/g,'a').replace(/[éèê]/g,'e').trim();
+    status = ({'lu':'read','lus':'read','en cours':'reading','je lis':'reading','a lire':'wishlist','pense-bete':'wishlist','abandonne':'abandoned'})[st] || 'wishlist';
+    const nr = parseFloat(String(get('Note')||'').replace(',','.'));
+    rating = (Number.isFinite(nr) && nr>0) ? Math.max(0.5, Math.min(5, Math.round(nr*2)/2)) : null;
+    review = ''; tags = ['babelio']; readings = [];
+    year = numOrNull(String(get('Date de publication')||'').slice(0,4));
+    pages = null;
+    addedAt = String(get('date_entree')||'').slice(0,10) || undefined;
+    // l'éditeur trahit le type (Babelio n'exporte pas de catégorie)
+    const ed = String(get('Editeur')||'').toLowerCase();
+    const BD = ['dargaud','dupuis','casterman','delcourt','le lombard','lombard','soleil','urban comics','futuropolis','glénat bd','bamboo','vents d','rue de sèvres','sarbacane','fluide glacial','ankama','panini comics','dc comics','marvel'];
+    const MANGA = ['kana','pika','ki-oon','kurokawa','kazé','kaze','panini manga','glénat manga','tonkam','doki-doki','akata','nobi nobi','meian','soleil manga','delcourt/tonkam','mangetsu','vega'];
+    type = MANGA.some(k=>ed.includes(k)) ? 'manga' : BD.some(k=>ed.includes(k)) ? 'bd' : guessType([get('Editeur'), title].join(' '), title);
+    // « Série, tome N : Titre » (forme fréquente sur Babelio)
+    const m = decodeEntities(title).match(/^(.+?),\s*tome\s+(\d{1,4})\s*:\s*(.+)$/i);
+    if(m){ pt.series = m[1].trim(); pt.volume = +m[2]; titleOverride = m[3].trim(); }
+    else titleOverride = decodeEntities(title);
   }else{
     const contribs = String(get('Contributors')||'').split(',').map(s=>s.replace(/\([^)]*\)/g,'').trim()).filter(Boolean);
     authors = String(get('Authors')||'').split(',').map(s=>s.trim()).filter(Boolean);
@@ -3603,7 +3636,7 @@ function rowToBook(get, source){
     type = guessType([get('Tags'), get('Format'), title].join(' '), title);
   }
   const raw = {
-    title: pt.series ? stripSeriesSuffix(title) : title,
+    title: titleOverride || (pt.series ? stripSeriesSuffix(title) : title),
     authors, type, year, pages, cover:'', synopsis:'',
     status, rating, review, tags, moods, pace, readings,
     series: pt.series||'', volume: pt.volume ?? null,
@@ -3641,9 +3674,10 @@ async function importCSV(text){
   const rows = parseCSV(text);
   if(rows.length < 2){ toast('CSV vide ou illisible'); return; }
   const source = detectSource(rows[0]);
-  if(!source){ toast('Format non reconnu — attends un export Tome, Goodreads ou StoryGraph'); return; }
+  if(!source){ toast('Format non reconnu — attends un export Tome, Goodreads, StoryGraph ou Babelio'); return; }
   const headers = rows[0].map(x=>String(x).trim().toLowerCase());
-  const idx = {}; headers.forEach((x,i)=>{ if(!(x in idx)) idx[x]=i; });
+  const idx = {}; headers.forEach((x,i)=>{ if(!(x in idx)) idx[x]=i; if(x.startsWith('date d') && x.includes('entr')) idx['date_entree']=i; });
+  if(idx['titre']!=null && idx['title']==null) idx['title'] = idx['titre'];
   const mkGet = row => name => { const i = idx[String(name).toLowerCase()]; return i==null ? '' : String(row[i]||'').trim(); };
   const parsed = [];
   for(let r=1; r<rows.length && parsed.length<MAX_BOOKS; r++){
@@ -3651,10 +3685,10 @@ async function importCSV(text){
     if(res && res.book.title) parsed.push(res);
   }
   if(!parsed.length){ toast('Aucun livre exploitable dans ce fichier'); return; }
-  const sourceLabel = source==='goodreads'?'Goodreads':source==='storygraph'?'StoryGraph':'Tome CSV';
+  const sourceLabel = source==='goodreads'?'Goodreads':source==='storygraph'?'StoryGraph':source==='babelio'?'Babelio':'Tome CSV';
   const choice = await uiChoose({
     title: `Import ${sourceLabel}`,
-    message: `${parsed.length} livre(s) trouvé(s).${source==='tome'?'\n\nLe CSV contient les ouvrages, pas les listes ni les objectifs. Le JSON reste le format de sauvegarde complète.':''}\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d’abord ta bibliothèque actuelle — une sauvegarde de secours est conservée (restaurable dans Stats).`,
+    message: `${parsed.length} livre(s) trouvé(s).${source==='tome'?'\n\nLe CSV contient les ouvrages, pas les listes ni les objectifs. Le JSON reste le format de sauvegarde complète.':''}${source==='babelio'?'\n\nBabelio n’exporte ni les dates de lecture, ni les critiques, ni les étagères : tes livres lus arrivent sans date, les couvertures seront récupérées par ISBN.':''}\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d’abord ta bibliothèque actuelle — une sauvegarde de secours est conservée (restaurable dans Stats).`,
     choices: [
       { label:'Fusionner', value:'merge', variant:'primary', default:true },
       { label:'Tout remplacer', value:'replace', variant:'danger' },
@@ -3691,8 +3725,13 @@ $('#import-csv-file').addEventListener('change', e => {
   e.target.value = '';
   if(f.size > 25*1024*1024){ toast('Fichier trop volumineux'); return; }
   const reader = new FileReader();
-  reader.onload = ()=>{ try{ importCSV(String(reader.result||'')); }catch(err){ console.error(err); toast('Import CSV impossible — fichier illisible'); } };
-  reader.readAsText(f);
+  reader.onload = ()=>{
+    let text = '';
+    try{ text = new TextDecoder('utf-8', { fatal:true }).decode(reader.result); }
+    catch(_){ try{ text = new TextDecoder('windows-1252').decode(reader.result); }catch(__){ text = ''; } } // exports Babelio parfois en latin-1
+    try{ importCSV(text); }catch(err){ console.error(err); toast('Import CSV impossible — fichier illisible'); }
+  };
+  reader.readAsArrayBuffer(f);
 });
 
 $('#btn-import').addEventListener('click', ()=>$('#import-file').click());
@@ -4054,6 +4093,11 @@ document.addEventListener('click', e => {
     const blob = new Blob([JSON.stringify({ kind })], { type:'application/json' });
     navigator.sendBeacon(API_BASE + '/api/out', blob);
   }catch(_){ }
+});
+
+document.addEventListener('click', e => {
+  const t = e.target.closest && e.target.closest('[data-reco]');
+  if(t){ e.preventDefault(); recommendBook(t.dataset.reco); }
 });
 
 async function ensureCardFonts(){
@@ -4878,17 +4922,23 @@ async function renderNotifications(){
   const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
   try{
     const d = await api('/api/notifications');
+    let recos = []; try{ recos = (await api('/api/recos')).recos || []; }catch(_){ }
     // marquer lu dès l’ouverture (efface le compteur)
     if(social.unreadNotifs){ api('/api/notifications/read', {method:'POST', body:{}}).catch(()=>{}); social.unreadNotifs = 0; refreshSocBadge(); const sb=$('#friends-body .sub-badge'); if(sb) sb.remove(); }
-    if(!d.notifications.length){ el.innerHTML = `<p class="friends-empty">Aucune notification pour l’instant. Ajoute des amis et partage tes lectures !</p>`; return; }
+    if(!d.notifications.length && !recos.length){ el.innerHTML = `<p class="friends-empty">Aucune notification pour l’instant. Ajoute des amis et partage tes lectures !</p>`; return; }
     // résout le titre d’un livre à partir de sa clé (dans MA bibliothèque locale)
     const byKey = new Map(state.books.map(b=>[shelfKey(b), b]));
     const verb = { friend_request:'t’a envoyé une demande d’ami', friend_accept:'a accepté ta demande d’ami',
-                   reaction:'a aimé ta lecture', comment:'a commenté ta lecture' };
-    el.innerHTML = d.notifications.map(n=>{
+                   reaction:'a aimé ta lecture', comment:'a commenté ta lecture', reco:'te recommande un livre' };
+    const recoHTML = recos.length ? `<div class="reco-list">` + recos.map(r=>`<div class="reco">
+      <div class="reco-cov">${r.cover?`<img src="${esc(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:''}</div>
+      <div class="reco-body"><small>${esc(r.displayName)} te recommande</small><b>${esc(r.title)}</b>${r.authors?`<span>${esc(r.authors)}</span>`:''}${r.message?`<p class="reco-msg">❝ ${esc(r.message)}</p>`:''}
+        <div class="notif-actions"><button class="btn small primary" data-reco-add="${esc(r.id)}">Ajouter à ma pile</button><button class="btn small" data-reco-dismiss="${esc(r.id)}">Ignorer</button></div></div>
+    </div>`).join('') + `</div>` : '';
+    el.innerHTML = recoHTML + d.notifications.map(n=>{
       const b = n.bookKey ? byKey.get(n.bookKey) : null;
       const book = b ? ` <b>${esc(fullTitle(b))}</b>` : '';
-      const ic = { friend_request:'+', friend_accept:'✓', reaction:'♥', comment:'❝' }[n.type] || '•';
+      const ic = { friend_request:'+', friend_accept:'✓', reaction:'♥', comment:'❝', reco:'✦' }[n.type] || '•';
       // une demande d’ami s’accepte ICI : c’est l’événement le plus important de l’app
       const actions = n.type==='friend_request' && n.actorId
         ? `<div class="notif-actions"><button class="btn small primary" data-accept="${esc(n.actorId)}">Accepter</button></div>` : '';
@@ -4899,6 +4949,22 @@ async function renderNotifications(){
       </div>`;
     }).join('');
     el.onclick = async e=>{
+      const ra = e.target.closest('[data-reco-add],[data-reco-dismiss]');
+      if(ra){
+        e.stopPropagation();
+        const id = ra.dataset.recoAdd || ra.dataset.recoDismiss, added = !!ra.dataset.recoAdd;
+        const r = recos.find(x=>x.id===id), card = ra.closest('.reco');
+        if(added && r){
+          const nb = normalizeBook({ title:r.title, authors:String(r.authors||'').split(/,\s*|\s*&\s*/).map(x=>x.trim()).filter(Boolean),
+            type:r.type||'livre', series:r.series||'', volume:r.volume??null, cover:r.cover||'', status:'wishlist', tags:['reco'], review:'', readings:[] });
+          if(!nb.cover && r.isbn) queueCovers([{ id:nb.id, isbn:r.isbn }]);
+          state.books.unshift(nb); save(); render();
+          toast(`« ${r.title} » ajouté à ta pile ✓`);
+        }
+        try{ await api('/api/reco/answer', { method:'POST', body:{ id, action: added ? 'added' : 'dismissed' } }); }catch(_){ }
+        if(card) card.remove();
+        return;
+      }
       const acc = e.target.closest('[data-accept]');
       if(acc){
         if(acc.disabled) return; acc.disabled = true;
@@ -4932,6 +4998,9 @@ async function renderAccount(){
     <h4>Notifications</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Être prévenu·e quand un ami t’ajoute, aime ou commente une de tes lectures — même quand Tome est fermé. <span id="acc-push-state"></span></p>
     <div class="data-actions"><button class="btn" id="acc-push">${ic('bell',16)} Activer les notifications</button></div>
+    <h4>Rappel de lecture</h4>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Un mot chaque jour à l’heure choisie, avec ta lecture en cours. Nécessite les notifications ci-dessus.</p>
+    <div class="data-actions"><select id="acc-rem" aria-label="Heure du rappel">${[['','Aucun rappel'],...Array.from({length:18},(_,i)=>[String(i+6),`${i+6} h`])].map(([v,l])=>`<option value="${v}"${String(social.me.reminderHour??'')===v?' selected':''}>${l}</option>`).join('')}</select><button class="btn" id="acc-rem-save">Enregistrer le rappel</button></div>
     <h4>Ma page publique</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n’affiche que ce que tu partages déjà (Amis → Mon partage) — <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
     <div class="data-actions">
@@ -4964,6 +5033,16 @@ async function renderAccount(){
   $('#acc-pw').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
     try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé — autres appareils déconnectés ✓'); }
     catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
+    finally{ b.disabled=false; } };
+  $('#acc-rem-save').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
+    try{
+      const v = $('#acc-rem').value; const hour = v==='' ? null : Number(v);
+      if(hour!==null && (await pushState())!=='on'){ toast('Active d’abord les notifications (bouton ci-dessus).'); return; }
+      const reading = state.books.find(x=>x.status==='reading' && !isDemoBook(x));
+      const d = await api('/api/account/reminder', {method:'POST', body:{ hour, tz:new Date().getTimezoneOffset(), title: reading ? fullTitle(reading).slice(0,120) : '' }});
+      social.me.reminderHour = d.reminderHour; social.me.reminderTitle = d.reminderTitle;
+      toast(hour===null ? 'Rappel désactivé' : `Rappel réglé à ${hour} h ✓`);
+    }catch(err){ toast(err.message==='offline'?'Serveur injoignable':err.message); }
     finally{ b.disabled=false; } };
   (async ()=>{                                   // état réel des notifications (permission + abonnement)
     const st = await pushState(); const b = $('#acc-push'), lbl = $('#acc-push-state');
@@ -5136,7 +5215,7 @@ function renderAuth(box, mode, errMsg=''){
       try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d’accueil
       await socRefresh(); // récupère aussi tosOutdated AVANT toute sauvegarde privée
       if(stripDemo()) toast('Exemples retirés — ton compte démarre avec tes vrais livres.');
-      if(!social.tosOutdated) syncLibraryOnLogin().then(()=>pushShelf());
+      if(!social.tosOutdated) syncLibraryOnLogin().then(()=>{ pushShelf(); refreshReminderTitle(); });
       // le code AVANT renderFriends : sinon la confirmation d’invitation (#invite) écraserait le
       // dialogue du code (une seule modale à la fois) — l’invitation s’ouvrira après « C’est noté »
       if(d.recoveryCode) await showRecoveryCode(d.recoveryCode, 'Bienvenue sur Tome ! Avant tout, note ton code de secours :');
@@ -5205,6 +5284,37 @@ Et trois « jamais » :
 • Jamais de limite rétroactive : ce qui est gratuit aujourd’hui le reste.
 
 Si des options payantes arrivent, ce sera du confort EN PLUS (statistiques avancées, personnalisation, soutien) — jamais une rançon sur ce que tu utilises déjà.`;
+
+/* ---- Recommander un livre à un ami (« tiens, lis ça ») ---- */
+async function recommendBook(id){
+  const b = state.books.find(x=>x.id===id); if(!b) return;
+  if(!social.me){ toast('Connecte-toi pour recommander un livre à un ami.'); return; }
+  let friends = [];
+  try{ const d = await api('/api/friends'); friends = d.friends || []; }
+  catch(e){ toast(e.message==='offline' ? 'Serveur injoignable' : e.message); return; }
+  if(!friends.length){ toast('Ajoute d’abord un ami (onglet Amis) pour lui recommander un livre.'); return; }
+  const who = await uiChoose({ title:`Recommander « ${fullTitle(b)} »`, message:'À qui ?',
+    choices: friends.slice(0,12).map(f=>({ label:`${f.displayName||f.username} · @${f.username}`, value:f.username })) });
+  if(!who) return;
+  const msg = await uiPrompt({ title:'Un mot pour accompagner ?', message:'Optionnel — pourquoi ce livre, pour cette personne.',
+    placeholder:'Tu vas adorer le premier chapitre…', okLabel:'Envoyer' });
+  if(msg===null) return;
+  try{
+    await api('/api/reco', { method:'POST', body:{ toUsername:who, message:frTypo(String(msg||'').slice(0,280)),
+      book:{ key:shelfKey(b), title:b.title, authors:authorsStr(b), type:b.type, series:b.series||'', volume:b.volume??null, isbn:b.isbn||'', cover:b.cover||'' } } });
+    toast(`Recommandé à @${who} ✓`);
+  }catch(e){ toast(e.message==='offline' ? 'Serveur injoignable' : e.message); }
+}
+// Le rappel de lecture cite la lecture en cours : le serveur ne connaît pas la bibliothèque
+// privée, on lui envoie le titre quand il change (best-effort, silencieux).
+function refreshReminderTitle(){
+  if(!social.me || social.me.reminderHour==null) return;
+  const reading = state.books.find(x=>x.status==='reading' && !isDemoBook(x));
+  const title = reading ? fullTitle(reading).slice(0,120) : '';
+  if(title === (social.me.reminderTitle||'')) return;
+  api('/api/account/reminder', { method:'POST', body:{ hour:social.me.reminderHour, tz:new Date().getTimezoneOffset(), title } })
+    .then(()=>{ social.me.reminderTitle = title; }).catch(()=>{});
+}
 
 /* ---- Signalement de contenu (canal « notice and action ») ---- */
 async function reportContent(targetType, targetKey){

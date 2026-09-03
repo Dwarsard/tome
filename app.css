@@ -1303,3 +1303,14 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 .tile span{font-family:var(--font-mono); font-size:var(--fs-xs); letter-spacing:.08em; text-transform:uppercase}
 /* Fleuron d'imprimeur à la place des emoji dans les états vides */
 .empty .big.orn,.qr-done .big.orn,.study-done .big.orn{font-family:var(--font-display); font-size:44px; line-height:1; color:var(--green); font-variant-settings:"WONK" 1}
+
+/* ---------- Recommandations reçues (onglet Notifications) ---------- */
+.reco-list{display:grid; margin-bottom:14px; border-top:1.5px solid var(--rule)}
+.reco{display:grid; grid-template-columns:44px minmax(0,1fr); gap:12px; padding:12px 0; border-bottom:1px solid var(--border)}
+.reco-cov{width:44px; height:64px; background:var(--surface2); overflow:hidden; border-radius:2px}
+.reco-cov img{width:100%; height:100%; object-fit:cover}
+.reco-body small{display:block; font-family:var(--font-mono); font-size:var(--fs-xs); letter-spacing:.08em; text-transform:uppercase; color:var(--green)}
+.reco-body b{font-family:var(--font-display); font-size:var(--fs-xl); display:block; line-height:1.15; margin:2px 0}
+.reco-body>span{color:var(--muted); font-size:var(--fs-md)}
+.reco-msg{color:var(--text); font-style:italic; margin:6px 0 2px}
+#acc-rem{padding:8px 10px; border:1px solid var(--control-border); border-radius:var(--r-sm); background:var(--surface); color:var(--text); font-family:var(--font-mono)}
