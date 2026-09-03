@@ -1314,3 +1314,16 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 .reco-body>span{color:var(--muted); font-size:var(--fs-md)}
 .reco-msg{color:var(--text); font-style:italic; margin:6px 0 2px}
 #acc-rem{padding:8px 10px; border:1px solid var(--control-border); border-radius:var(--r-sm); background:var(--surface); color:var(--text); font-family:var(--font-mono)}
+
+/* ---------- Ajouter un ami : QR ---------- */
+.qr-body{display:grid; gap:14px}
+.qr-card{background:#fff; color:#141311; border:1px solid var(--border); border-radius:var(--r-md); padding:18px 16px 14px; text-align:center}
+#qr-canvas{display:block; width:min(240px, 72vw); height:auto; margin:0 auto; image-rendering:pixelated; image-rendering:crisp-edges}
+.qr-who{font-family:var(--font-mono); font-size:var(--fs-md); margin-top:10px; color:#141311}
+.qr-hint{color:#5b5952; font-size:var(--fs-md); margin:6px auto 12px; max-width:34ch}
+.qr-card .data-actions{justify-content:center}
+.qr-card .btn{background:#f7f6f2; color:#141311; border-color:#b9b6ab}
+.qr-card .btn.primary{background:#2b4c8c; color:#fff; border-color:#2b4c8c}
+#qr-scan-box{text-align:center}
+#qr-video{width:100%; max-height:280px; border-radius:var(--r-sm); background:#000; object-fit:cover}
+#qr-live .frow{margin-bottom:8px}

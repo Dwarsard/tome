@@ -4318,7 +4318,7 @@ function openOverlay(sel){
   queueMicrotask(()=>{ if(!root.contains(document.activeElement)){ const first=modalFocusables(root)[0]; if(first) first.focus({preventScroll:true}); } });
 }
 function closeOverlays(restore=true){
-  stopScan();
+  stopScan(); if(typeof stopQRScan==='function') stopQRScan();
   const etaitOuverte = $$('.overlay.open').length > 0;
   $$('.overlay').forEach(o=>o.classList.remove('open'));
   // rendre l’entrée d’historique poussée à l’ouverture (sans re-déclencher la fermeture)
@@ -5143,6 +5143,92 @@ async function shareInvite(){
   try{ await navigator.clipboard.writeText(url); toast('Lien d’invitation copié ✓ — envoie-le à un ami'); }
   catch(_){ openDialog({ title:'Mon lien d’invitation', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}] }); }
 }
+// ---- Ajouter un ami par QR code : mon code (généré par qr.js, jamais via un service tiers),
+//      mon lien, le scan du code d'un ami, et la « poignée de main » en direct : tant que la modale
+//      est ouverte, les demandes entrantes s'affichent pour être acceptées d'un geste. ----
+let _qrPoll = 0, _qrKnown = null, _qrStream = null, _qrTimer = null;
+function inviteUrl(){ return location.origin + location.pathname + '#invite/' + encodeURIComponent(social.me.username); }
+async function openFriendQR(){
+  if(!social.me) return;
+  const url = inviteUrl();
+  $('#qr-user').textContent = social.me.username;
+  try{ window.tomeQR.draw($('#qr-canvas'), url, { scale:6, margin:3, dark:'#141311', light:'#ffffff' }); }
+  catch(e){ toast('QR indisponible sur cet appareil'); }
+  $('#qr-share').hidden = !navigator.share;
+  $('#qr-scan').hidden = true;
+  if('BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    try{ const f = await BarcodeDetector.getSupportedFormats(); $('#qr-scan').hidden = !f.includes('qr_code'); }catch(_){ }
+  }
+  $('#qr-live').hidden = true; $('#qr-live').innerHTML = '';
+  openOverlay('#ov-qr');
+  // poignée de main : on surveille les demandes entrantes tant que la modale est ouverte (≤ 3 min)
+  const myPoll = ++_qrPoll; let ticks = 0; _qrKnown = null;
+  const tick = async ()=>{
+    if(myPoll !== _qrPoll || !$('#ov-qr').classList.contains('open') || ticks++ > 45) return;
+    try{
+      const d = await api('/api/friends');
+      const inc = d.incoming || [];
+      if(_qrKnown === null) _qrKnown = new Set(inc.map(u=>u.id));
+      const fresh = inc.filter(u=>!_qrKnown.has(u.id));
+      if(fresh.length){
+        const box = $('#qr-live'); box.hidden = false;
+        box.innerHTML = fresh.map(u=>`<div class="frow qr-in">${avatarHTML(u.displayName)}<div class="fi"><b>${esc(u.displayName)}</b><span>@${esc(u.username)} veut devenir ton ami</span></div>
+          <div class="fa"><button class="btn small primary" data-qr-accept="${esc(u.id)}">Accepter</button></div></div>`).join('') + box.innerHTML;
+        fresh.forEach(u=>_qrKnown.add(u.id));
+      }
+    }catch(_){ }
+    setTimeout(tick, 4000);
+  };
+  setTimeout(tick, 1500);
+}
+$('#qr-copy').addEventListener('click', async ()=>{
+  try{ await navigator.clipboard.writeText(inviteUrl()); toast('Lien d’invitation copié ✓'); }
+  catch(_){ openDialog({ title:'Mon lien d’invitation', message:inviteUrl(), actions:[{label:'Fermer', value:null, cancel:true, default:true}] }); }
+});
+$('#qr-share').addEventListener('click', shareInvite);
+$('#qr-live').addEventListener('click', async e=>{
+  const b = e.target.closest('[data-qr-accept]'); if(!b || b.disabled) return; b.disabled = true;
+  try{ await api('/api/friends/accept', {method:'POST', body:{userId: b.dataset.qrAccept}});
+    toast('Vous êtes maintenant amis ✓'); const row = b.closest('.frow'); if(row) row.remove(); socRefresh(); loadFriendLists(); }
+  catch(err){ b.disabled = false; toast(err.message==='offline'?'Serveur injoignable':err.message); }
+});
+async function startQRScan(){
+  if(_qrStream) return;
+  let stream;
+  try{ stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } }); }
+  catch(_){ toast('Caméra indisponible ou refusée'); return; }
+  if(!$('#ov-qr').classList.contains('open')){ stream.getTracks().forEach(t=>t.stop()); return; }
+  _qrStream = stream;
+  const box = $('#qr-scan-box'), video = $('#qr-video');
+  box.hidden = false; video.srcObject = stream;
+  try{ await video.play(); }catch(_){ }
+  let det; try{ det = new BarcodeDetector({ formats:['qr_code'] }); }catch(_){ stopQRScan(); toast('Scanner non supporté ici'); return; }
+  _qrTimer = setInterval(async ()=>{
+    try{
+      const codes = await det.detect(video);
+      for(const c of codes){
+        const m = String(c.rawValue||'').match(/#invite\/([a-z0-9_.-]{3,20})/i);
+        if(!m) continue;
+        stopQRScan();
+        const who = m[1].toLowerCase();
+        if(who === social.me.username){ toast('C’est ton propre code'); return; }
+        closeOverlays();
+        social.invite = who; processInvite();   // confirmation puis demande d'ami
+        return;
+      }
+    }catch(_){ }
+  }, 300);
+}
+function stopQRScan(){
+  clearInterval(_qrTimer); _qrTimer = null;
+  if(_qrStream){ _qrStream.getTracks().forEach(t=>t.stop()); _qrStream = null; }
+  const box = $('#qr-scan-box'); if(box) box.hidden = true;
+  const v = $('#qr-video'); if(v) v.srcObject = null;
+}
+$('#qr-scan').addEventListener('click', startQRScan);
+$('#qr-scan-stop').addEventListener('click', stopQRScan);
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stopQRScan(); });
+
 let _inviteBusy = false; // renderFriends est appelé souvent : un seul dialogue d’invitation à la fois
 async function processInvite(){
   if(_inviteBusy) return;
@@ -5519,11 +5605,11 @@ async function renderFriendsList(){
   el.innerHTML = `
     <div class="add-friend">
       <input id="friend-search" placeholder="Rechercher quelqu’un (pseudo ou nom)…" aria-label="Rechercher un utilisateur" autocomplete="off">
-      <button class="btn" id="friend-invite" title="Partager mon lien d’invitation">${ic('link',16)} Inviter</button>
+      <button class="btn primary" id="friend-invite" title="Mon QR code et mon lien d’invitation">${ic('link',16)} Ajouter un ami</button>
     </div>
     <div id="search-res"></div>
     <div id="friend-lists"><p class="friends-empty">Chargement…</p></div>`;
-  $('#friend-invite').addEventListener('click', shareInvite);
+  $('#friend-invite').addEventListener('click', openFriendQR);
   const addUser = async (uname, btn)=>{ if(btn.disabled) return; btn.disabled = true;
     try{ const r = await api('/api/friends/request', {method:'POST', body:{username:uname}});
       toast(r.status==='accepted'?'Vous êtes maintenant amis ✓':'Demande envoyée ✓');
@@ -5537,7 +5623,7 @@ async function renderFriendsList(){
     tmr = setTimeout(async ()=>{
       try{
         const d = await api('/api/search-users?q='+encodeURIComponent(q)); if(my!==seq) return;
-        if(!d.users.length){ res.innerHTML = `<p class="friends-empty" style="padding:8px 0">Personne pour « ${esc(q)} ». Tu peux inviter par lien .</p>`; return; }
+        if(!d.users.length){ res.innerHTML = `<p class="friends-empty" style="padding:8px 0">Personne pour « ${esc(q)} ». Tu peux l’inviter par QR code ou par lien (bouton « Ajouter un ami »).</p>`; return; }
         res.innerHTML = `<div class="search-res-h">Résultats</div>` + d.users.map(u=>{
           const act = u.relation==='friend' ? `<span class="frel">✓ ami</span>`
             : u.relation==='sent' ? `<span class="frel">en attente</span>`

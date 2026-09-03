@@ -413,6 +413,30 @@
 </div>
 
 <!-- ======== BANDEAU MISE À JOUR PWA ======== -->
+<!-- Ajouter un ami : mon QR d’invitation (généré ici, sans service tiers), lien, scan -->
+<div class="overlay" id="ov-qr" role="dialog" aria-modal="true" aria-labelledby="qr-head">
+  <div class="modal modal-sm">
+    <div class="modal-head"><h3 id="qr-head">Ajouter un ami</h3><button class="x" data-close aria-label="Fermer">✕</button></div>
+    <div class="modal-body qr-body">
+      <div class="qr-card">
+        <canvas id="qr-canvas" width="240" height="240" role="img" aria-label="Mon QR code d’invitation"></canvas>
+        <div class="qr-who">@<span id="qr-user"></span></div>
+        <p class="qr-hint">Fais scanner ce code par ton ami, ou envoie-lui ton lien. Il n’aura qu’à confirmer.</p>
+        <div class="data-actions">
+          <button class="btn" id="qr-copy">Copier mon lien</button>
+          <button class="btn" id="qr-share" hidden>Partager</button>
+          <button class="btn primary" id="qr-scan" hidden>Scanner son QR</button>
+        </div>
+      </div>
+      <div id="qr-scan-box" hidden>
+        <video id="qr-video" playsinline muted autoplay></video>
+        <div class="scan-hint">Vise le QR code de ton ami</div>
+        <button class="btn small" id="qr-scan-stop">Annuler</button>
+      </div>
+      <div id="qr-live" hidden></div>
+    </div>
+  </div>
+</div>
 <div id="update-bar" role="status" data-modal-exempt><span>Nouvelle version disponible</span><button class="btn small primary" id="update-reload">Recharger</button></div>
 
 <!-- ======== BANDEAU ÉCHEC DE SAUVEGARDE (stockage plein) ======== -->
@@ -434,6 +458,7 @@
 <div id="toast" role="status" aria-live="polite" data-modal-exempt></div>
 <section id="study-print" aria-hidden="true"></section>
 
+<script src="qr.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
