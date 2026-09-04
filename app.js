@@ -567,7 +567,25 @@ const AMAZON_TAG = '';
 /* ---- Soutien volontaire ----
    Colle ici ton lien Ko-fi ou Liberapay (ex : 'https://ko-fi.com/lucastome') : le bouton
    « Soutenir Tome » apparaîtra dans Mon compte. Vide = aucun bouton nulle part. */
-const SUPPORT_URL = '';                 // ← ton tag Amazon Partenaires ici (ex : 'lucasm-21')
+const SUPPORT_URL = '';
+/* ---- Google Books ----
+   Sans clé, Tome partage le quota anonyme mondial de l'API (épuisé une bonne partie de la
+   journée → 429). Une clé gratuite (Google Cloud, « Books API », restreinte au référent
+   montome.fr) donne 1 000 requêtes/jour propres à Tome. Vide = sans clé. */
+const GOOGLE_BOOKS_KEY = '';
+// Langue de recherche : 'auto' devine d'après l'alphabet (cyrillique → ru, grec → el, japonais → ja…),
+// sinon privilégie le français ; l'utilisateur peut forcer une langue dans la fenêtre de recherche.
+function guessSearchLang(q){
+  if(/[\u0400-\u04FF]/.test(q)) return 'ru';
+  if(/[\u0370-\u03FF]/.test(q)) return 'el';
+  if(/[\u3040-\u30FF]/.test(q)) return 'ja';
+  if(/[\u4E00-\u9FFF]/.test(q)) return 'zh';
+  if(/[\uAC00-\uD7AF]/.test(q)) return 'ko';
+  if(/[\u0590-\u05FF]/.test(q)) return 'he';
+  if(/[\u0600-\u06FF]/.test(q)) return 'ar';
+  return 'fr';
+}
+function searchLangFor(q){ const pick = (ui.searchLang||'auto'); return pick==='auto' ? guessSearchLang(q) : pick; }                 // ← ton tag Amazon Partenaires ici (ex : 'lucasm-21')
 const AMAZON_HOST = 'www.amazon.fr';
 function amazonUrl(b, kindle){
   const q = [fullTitle(b), (b.authors||[])[0]||''].filter(Boolean).join(' ');
@@ -2039,11 +2057,15 @@ function isbnOf(q){
   const n = q.replace(/[-\s]/g,'');
   return /^(?:\d{9}[\dX]|\d{13})$/i.test(n) ? n : null;
 }
+let _gbQuotaHit = false; // 429 vu pendant cette session : message honnête plutôt que « une source indisponible »
 async function searchGoogleBooks(q, opts={}){
   const isbn = isbnOf(q);
-  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&maxResults=15&printType=books${opts.lang?'&langRestrict='+opts.lang:''}`;
-  const data = await (await fetch(url)).json();
-  if(data.error) throw new Error(data.error.message);
+  const forced = (ui.searchLang && ui.searchLang!=='auto' && ui.searchLang!=='all') ? ui.searchLang : (opts.lang||'');
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&maxResults=15&printType=books${forced?'&langRestrict='+forced:''}${GOOGLE_BOOKS_KEY?'&key='+encodeURIComponent(GOOGLE_BOOKS_KEY):''}`;
+  const res = await fetch(url);
+  if(res.status===429){ _gbQuotaHit = true; throw new Error('gb-quota'); }
+  const data = await res.json();
+  if(data && data.error){ if(data.error.code===429) _gbQuotaHit = true; throw new Error('gb-'+(data.error.code||'err')); }
   return (data.items||[]).filter(it=>it.volumeInfo && it.volumeInfo.title).map(it => {
     const v = it.volumeInfo;
     return {
@@ -2060,7 +2082,7 @@ async function searchGoogleBooks(q, opts={}){
 }
 async function searchOpenLibrary(q){
   const isbn = isbnOf(q);
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&limit=15&lang=fr&fields=title,author_name,first_publish_year,number_of_pages_median,cover_i,subject,first_sentence,isbn`;
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&limit=15${(()=>{ const l = searchLangFor(q); return (l && l!=='all') ? '&lang='+l : ''; })()}&fields=title,author_name,first_publish_year,number_of_pages_median,cover_i,subject,first_sentence,isbn`;
   const data = await (await fetch(url)).json();
   return (data.docs||[]).filter(d=>d.title).map(d => ({
     title: d.title,
@@ -2093,12 +2115,14 @@ async function doSearch(q){
   }
   if(!items.length){
     box.innerHTML = `<div class="search-hint">${failed
-      ? 'Une des sources est indisponible (limite atteinte ?) et l’autre n’a rien trouvé — réessaie dans une minute ou passe par « Ajout manuel ».'
-      : 'Aucun résultat. Essaie une autre orthographe, ou passe par « Ajout manuel ».'}</div>`;
+      ? (_gbQuotaHit ? 'Google Books a atteint sa limite du jour : seule Open Library répond, et elle n’a rien trouvé. Essaie l’ISBN, une autre langue (menu Langue), ou « Ajout manuel ».'
+                     : 'Une des sources est indisponible et l’autre n’a rien trouvé — réessaie dans une minute ou passe par « Ajout manuel ».')
+      : 'Aucun résultat. Essaie une autre orthographe ou une autre langue (menu Langue), ou passe par « Ajout manuel ».'}</div>`;
     return;
   }
   window._searchItems = items;
-  box.innerHTML = items.map((r,i) => { const c = cleanCover(r.cover); return `<div class="sr">
+  const note = (failed && _gbQuotaHit) ? `<div class="search-hint" style="margin-bottom:8px">Google Books a atteint sa limite du jour — résultats Open Library seulement (moins de couvertures).</div>` : '';
+  box.innerHTML = note + items.map((r,i) => { const c = cleanCover(r.cover); return `<div class="sr">
       <div class="mini">${c ? `<img src="${esc(c)}" alt="" loading="lazy"${xorigin(c)} referrerpolicy="no-referrer">` : phHTML({title:r.title, authors:r.authors, type:r.type}, true)}</div>
       <div class="sri">
         <b>${esc(r.title)}</b>
@@ -2223,6 +2247,10 @@ function stopScan(){
   const v = $('#scan-video'); if(v) v.srcObject = null;
 }
 $('#btn-scan').addEventListener('click', startScan);
+// langue de recherche (persistée) : Auto = d'après l'alphabet ; sinon force Google et oriente Open Library
+{ const sel = $('#search-lang');
+  if(sel){ sel.value = ui.searchLang || 'auto';
+    sel.addEventListener('change', ()=>{ ui.searchLang = sel.value; persistUI(); const q = $('#search-q').value.trim(); if(q.length>=2) doSearch(q); }); } }
 $('#scan-stop').addEventListener('click', stopScan);
 // PWA mobile : couper la caméra si l’app passe en arrière-plan pendant un scan
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stopScan(); });

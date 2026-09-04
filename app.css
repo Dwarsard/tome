@@ -1346,3 +1346,4 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 .pb-source{font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--faint); margin-top:6px}
 a.btn{text-decoration:none} /* les liens habillés en bouton ne se soulignent pas */
 @media(max-width:560px){ .pb-txt .pp-stats{display:flex; gap:18px; flex-wrap:wrap} .pb-actions .btn{flex:1 1 auto; justify-content:center} }
+.seg-select{padding:5px 8px; font-size:var(--fs-sm); font-family:var(--font-mono); border:1px solid var(--control-border); border-radius:var(--r-sm); background:var(--surface); color:var(--text); max-width:150px}
