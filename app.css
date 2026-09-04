@@ -1,13 +1,10 @@
-/* Polices auto-hébergées (OFL) — servies en même origine, zéro requête externe (CSP/vie privée).
-   Variables : une seule ressource couvre toute la plage de graisses. */
-@font-face{font-family:'Fraunces';font-style:normal;font-weight:400 700;font-display:swap;src:url('./fonts/fraunces-normal-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:'Fraunces';font-style:normal;font-weight:400 700;font-display:swap;src:url('./fonts/fraunces-normal-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-@font-face{font-family:'Fraunces';font-style:italic;font-weight:400 700;font-display:swap;src:url('./fonts/fraunces-italic-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:'Fraunces';font-style:italic;font-weight:400 700;font-display:swap;src:url('./fonts/fraunces-italic-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-@font-face{font-family:'Newsreader';font-style:normal;font-weight:400 600;font-display:swap;src:url('./fonts/newsreader-normal-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:'Newsreader';font-style:normal;font-weight:400 600;font-display:swap;src:url('./fonts/newsreader-normal-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-@font-face{font-family:'Newsreader';font-style:italic;font-weight:400 500;font-display:swap;src:url('./fonts/newsreader-italic-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:'Newsreader';font-style:italic;font-weight:400 500;font-display:swap;src:url('./fonts/newsreader-italic-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+/* Police auto-hébergée (OFL) — EB Garamond, la lettre des livres français (Gallimard, Pléiade) :
+   une seule voix pour les titres (en italique) et le texte ; Plex Mono pour les chiffres.
+   Variable : une ressource par style couvre toute la plage de graisses. */
+@font-face{font-family:'EB Garamond';font-style:normal;font-weight:400 800;font-display:swap;src:url('./fonts/ebgaramond-normal-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'EB Garamond';font-style:normal;font-weight:400 800;font-display:swap;src:url('./fonts/ebgaramond-normal-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'EB Garamond';font-style:italic;font-weight:400 800;font-display:swap;src:url('./fonts/ebgaramond-italic-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'EB Garamond';font-style:italic;font-weight:400 800;font-display:swap;src:url('./fonts/ebgaramond-italic-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 
 /* Mono pour les données (chiffres, dates, libellés techniques) : le contraste qui manquait au tout-serif. */
 @font-face{font-family:'Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/plexmono-normal-400-latin.woff2') format('woff2')}
@@ -16,7 +13,7 @@
 
 :root{
   /* Échelle typographique : 12 paliers (avant : 31 valeurs dont 7 demi-pixels indistinguables) */
-  --fs-xs:11px; --fs-sm:12px; --fs-md:13px; --fs-base:14px; --fs-lg:16px; --fs-xl:18px; --fs-2xl:21px; --fs-3xl:24px; --fs-4xl:26px; --fs-5xl:32px; --fs-6xl:42px; --fs-7xl:54px;
+  --fs-xs:11.5px; --fs-sm:13px; --fs-md:14.5px; --fs-base:15.5px; --fs-lg:17px; --fs-xl:19.5px; --fs-2xl:21px; --fs-3xl:24px; --fs-4xl:26px; --fs-5xl:32px; --fs-6xl:42px; --fs-7xl:54px;
   --bg:#15120d; --bg2:#1a160f; --surface:#1f1a12; --surface2:#271f14;
   --border:#322a1b; --border-hover:#4a3d27; --control-border:#776b52; --text:#ece3d1; --muted:#a2977e; --faint:#91866f;
   --green:#cba351; --green-strong:#dcb562; --on-green:#1a1408; --blue:#6fb6d8; --orange:#e0913f; --pink:#d67a94;  /* accent = dorure */
@@ -31,8 +28,8 @@
   --shadow:var(--sh-2);
   /* Typo d'affichage : serif système chaleureux (Iowan sur Apple, Palatino sur Windows, Georgia en repli)
      — donne une identité « livre » aux grands titres, sans police externe (CSP/offline). */
-  --font-display:"Fraunces","Iowan Old Style",Georgia,"Times New Roman",serif;
-  --font-serif:"Newsreader","Iowan Old Style",Georgia,serif;
+  --font-display:"EB Garamond",Garamond,"Iowan Old Style",Georgia,"Times New Roman",serif;
+  --font-serif:"EB Garamond",Garamond,"Iowan Old Style",Georgia,serif;
   --font-mono:"Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --grad-green:linear-gradient(135deg,#dcb562,#bd9036);
   --page:#e8dfc9; --page-edge:#c9bda0;   /* tranche de papier des « livres en volume » */
@@ -62,10 +59,10 @@ html{scrollbar-color:var(--surface2) var(--bg)}
 .skip-link:focus{transform:translateY(0)}
 body{
   background:var(--bg); color:var(--text);
-  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-family:var(--font-serif); /* une seule voix, Garamond : l’interface se lit comme un livre ; les chiffres en Plex Mono */
   font-size:var(--fs-lg); line-height:1.55; min-height:100vh;   /* 15px était sous le seuil de lisibilité */
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-  text-rendering:optimizeLegibility; font-feature-settings:'kern','liga'; letter-spacing:-.006em;
+  text-rendering:optimizeLegibility; font-feature-settings:'kern','liga'; letter-spacing:0; /* Garamond respire à son approche naturelle */
   overscroll-behavior-y:contain; /* évite le pull-to-refresh accidentel en PWA */
 }
 button{font:inherit; color:inherit; background:none; border:none; cursor:pointer}
@@ -88,14 +85,8 @@ select{appearance:none; -webkit-appearance:none; padding-right:34px; cursor:poin
    en couleur d'accent, sans le carré de fond → plus éditorial, s'adapte aux deux thèmes. */
 .logo rect{fill:transparent}
 .logo path{stroke:var(--green)}
-/* L'axe WONK de Fraunces : glyphes volontairement « bancals » (imperfection signée du caractère,
-   invisible aux générations par défaut). Réservé aux GRANDS titres + au mot-marque ; les titres
-   moyens et le texte restent sages. Sans effet si la fonte n'a pas l'axe (repli silencieux). */
-.brand, .lp-nav .brand, .pp-brand,
-.today-hero h2, .lp-title, .lp-final-t, .pp-name, .onboard h3,
-.today-focus-copy h3, .today-empty h3, .today-social h3{
-  font-variation-settings:"WONK" 1;
-}
+/* Grands titres et mot-marque : en Garamond, l'italique joue le rôle que tenait l'axe WONK
+   (la signature qui distingue une page de titre d'un écran) — voir le bloc « Voix Garamond » en fin de feuille. */
 /* Balance/pretty : titres équilibrés, paragraphes sans veuves (améliorations progressives). */
 .today-hero h2,.lp-title,.lp-final-t,.pp-name,.detail h3.dt,.onboard h3{text-wrap:balance}
 .syn,.pp-bio,.lp-sub{text-wrap:pretty}
@@ -1347,3 +1338,9 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 a.btn{text-decoration:none} /* les liens habillés en bouton ne se soulignent pas */
 @media(max-width:560px){ .pb-txt .pp-stats{display:flex; gap:18px; flex-wrap:wrap} .pb-actions .btn{flex:1 1 auto; justify-content:center} }
 .seg-select{padding:5px 8px; font-size:var(--fs-sm); font-family:var(--font-mono); border:1px solid var(--control-border); border-radius:var(--r-sm); background:var(--surface); color:var(--text); max-width:150px}
+
+/* ---------- Voix Garamond : les titres de page en italique, comme une page de titre ---------- */
+.today-hero h2,.lp-title,.lp-final-t,.pp-name,.detail h3.dt,#edit-title,#detail-head{font-style:italic; font-weight:500; letter-spacing:-.005em}
+.today-hero h2{font-size:clamp(42px,6.4vw,66px)}
+.brand{font-weight:600; letter-spacing:-.01em}
+h3,h4{font-weight:600}

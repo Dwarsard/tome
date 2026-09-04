@@ -5,7 +5,7 @@ L'identité s'appelle **Fiche de bibliothèque** (clair) / **Reliure** (sombre).
 
 ## L'identité en cinq lignes
 
-- **Typo** : Fraunces (titres, axe WONK sur les grands corps) + Newsreader (prose de lecture). Auto-hébergées dans `fonts/` — jamais de CDN, jamais Inter/Roboto/Space Grotesk.
+- **Typo** : **EB Garamond** partout (la lettre des livres français — Gallimard, Pléiade), titres de page en *italique* 500, texte 400 ; Plex Mono pour les chiffres. Auto-hébergée dans `fonts/` (variable, latin + latin-ext, romain + italique) — jamais de CDN, jamais Inter/Roboto/Space Grotesk, et plus de Fraunces/Newsreader (la voix « 2025 » que tout le monde a).
 - **Couleurs** : clair = encre `#141311` + **bleu de tampon** `#2b4c8c` sur papier blanc `#f7f6f2` (le rouge `#b8322b` ne sert qu'aux tampons et alertes) ; sombre = dorure `#cba351` sur noir chaud `#15120d`. Le token s'appelle `--green` (historique) mais sa valeur est bleu/or. JAMAIS crème + terracotta : c'est le défaut de tous les générateurs et de la moitié des sites de 2026.
 - **Mono** : Plex Mono (`--font-mono`) pour TOUT ce qui est chiffre, date, libellé technique (titre courant, folio, kickers, tuiles de stats, progression). C'est le contraste qui empêche le tout-serif de tourner à la brochure.
 - **Filets, pas de boîtes** : « Aujourd'hui » se compose comme une page (titre courant, filet `--rule`, marginalia) ; tuiles de stats sur filet ; rayons secs (`--r-sm` 4 px). Une carte arrondie à bordure n'est pas interdite, mais elle doit se justifier.
