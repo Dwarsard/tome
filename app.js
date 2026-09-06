@@ -119,8 +119,11 @@ document.addEventListener('keydown',e=>{
    uiConfirm/uiPrompt/uiChoose renvoient une Promise. Se superpose aux overlays
    existants sans les fermer (z-index dédié), piège le focus, gère Échap/Entrée. */
 let _dlgResolve = null, _dlgPrevFocus = null, _dlgCancelVal = null;
-function _dlgClose(val){
-  const ov = $('#ov-dialog');
+let _dlgDepth = 0; // niveau d’historique du dialogue ouvert (0 = aucune entrée), cf. pushOverlayHistory
+// fromPop : fermeture déclenchée par le bouton Retour (popstate) — le navigateur a déjà retiré
+// l’entrée d’historique du dialogue, il ne faut surtout pas reculer une seconde fois.
+function _dlgClose(val, fromPop){
+  const ov = $('#ov-dialog'), depth = _dlgDepth; _dlgDepth = 0;
   if(!ov.classList.contains('open')) return;
   ov.classList.remove('open');
   syncModalIsolation();
@@ -128,6 +131,7 @@ function _dlgClose(val){
   // rester lisible dans le DOM d’un appareil partagé après fermeture
   $('#dialog-msg').textContent=''; $('#dialog-title').textContent=''; $('#dialog-input').value='';
   document.removeEventListener('keydown', _dlgKey, true);
+  if(!fromPop) popOverlayHistory(depth); // ✕, Échap, clic-fond, bouton : on rend l’entrée poussée à l’ouverture
   const r = _dlgResolve; _dlgResolve = null;
   if(_dlgPrevFocus && document.contains(_dlgPrevFocus)){ try{ _dlgPrevFocus.focus(); }catch(_){} }
   if(r) r(val);
@@ -153,7 +157,10 @@ function _dlgKey(e){
 // openDialog({title, message, input?, actions:[{label,value,variant,default,cancel,returnsInput}]})
 function openDialog(cfg){
   return new Promise(resolve=>{
-    if(_dlgResolve) _dlgClose(_dlgCancelVal); // une seule modale à la fois
+    // une seule modale à la fois : un dialogue déjà ouvert est remplacé et lui lègue son entrée
+    // d’historique (la rendre puis en pousser une autre ferait deux navigations pour un seul écran)
+    const remplace = !!_dlgResolve, depthHeritee = _dlgDepth;
+    if(remplace) _dlgClose(_dlgCancelVal, true);
     _dlgPrevFocus = document.activeElement;
     _dlgResolve = resolve;
     $('#dialog-title').textContent = cfg.title || '';
@@ -178,6 +185,9 @@ function openDialog(cfg){
       b.addEventListener('click', ()=> _dlgClose(a.returnsInput ? inp.value : a.value));
       acts.append(b);
     });
+    // Le dialogue entre dans l’historique : Retour (Android, geste iOS) le ferme, lui, et non la
+    // fiche en dessous — qui restait sinon ouverte avec un dialogue orphelin par-dessus.
+    _dlgDepth = remplace ? depthHeritee : pushOverlayHistory();
     $('#ov-dialog').classList.add('open');
     syncModalIsolation();
     document.addEventListener('keydown', _dlgKey, true);
@@ -535,6 +545,10 @@ const ui = {
   defaultStatus:'wishlist', typeMetric:'count',
   ideas:'ask',                             // idées du jour : 'ask' (proposer) | 'on' (activées) — jamais d’appel API sans opt-in
   selectMode:false, selection:new Set(),   // transitoires : jamais persistés ni sérialisés
+  // Pile de réouverture des modales : une fonction par couche ouverte PAR-DESSUS une autre
+  // (fiche → Modifier, série → tome…), pour revenir à celle du dessous au lieu de tout fermer.
+  modalStack:[],
+  editSnap:'',                             // transitoire : empreinte du formulaire d’édition à son ouverture (garde anti-perte de saisie)
   editId:null, detailId:null, listId:null, listMode:'list', seriesName:'', recapYear:new Date().getFullYear(),
   searchFromResult:null, heatYear:new Date().getFullYear(), lastFocus:null,
 };
@@ -545,7 +559,7 @@ function persistUI(){
     localStorage.setItem(UI_KEY, JSON.stringify({
       status:ui.status, types:[...ui.types], tag:ui.tag, sort:ui.sort,
       groupSeries:ui.groupSeries, view:ui.view, defaultStatus:ui.defaultStatus, typeMetric:ui.typeMetric, libLayout:ui.libLayout,
-      ideas:ui.ideas,
+      ideas:ui.ideas, searchLang:ui.searchLang,
     }));
   }catch(_){}
 }
@@ -569,10 +583,9 @@ const AMAZON_TAG = '';
    « Soutenir Tome » apparaîtra dans Mon compte. Vide = aucun bouton nulle part. */
 const SUPPORT_URL = '';
 /* ---- Google Books ----
-   Sans clé, Tome partage le quota anonyme mondial de l'API (épuisé une bonne partie de la
-   journée → 429). Une clé gratuite (Google Cloud, « Books API », restreinte au référent
-   montome.fr) donne 1 000 requêtes/jour propres à Tome. Vide = sans clé. */
-const GOOGLE_BOOKS_KEY = '';
+   Plus de clé ici : depuis F04, la recherche passe par /api/books (proxy du Worker), qui porte
+   la clé éventuelle et met les réponses en cache 24 h à la bordure. Le navigateur ne contacte
+   plus googleapis.com directement. */
 // Langue de recherche : 'auto' devine d'après l'alphabet (cyrillique → ru, grec → el, japonais → ja…),
 // sinon privilégie le français ; l'utilisateur peut forcer une langue dans la fenêtre de recherche.
 function guessSearchLang(q){
@@ -704,6 +717,9 @@ $('#btn-theme').addEventListener('click', ()=>{
 });
 
 /* =============== Navigation =============== */
+// Passe à true une fois la vue initiale posée : la vue restaurée au démarrage ne doit pas
+// pousser d’entrée d’historique (le premier Retour quitterait l’app sans rien changer à l’écran).
+let _navReady = false;
 $('#nav').addEventListener('click', e => {
   const btn = e.target.closest('button[data-view]'); if(!btn) return;
   selectView(btn.dataset.view);
@@ -716,7 +732,20 @@ function selectView(view){
     if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   });
   $$('.view').forEach(v=>v.classList.toggle('active', v.id === 'view-'+view));
-  if(location.hash.slice(1) !== view){ try{ history.replaceState(history.state, '', '#'+view); }catch(_){} }
+  // Sur l’écran de connexion/inscription, un « + » flottant n’a aucun sens (et recouvre le
+  // bouton de validation sur mobile) ; il revient dès qu’on change de vue ou qu’on est connecté.
+  const fab = $('#fab'); if(fab) fab.hidden = (view==='friends' && !social.me);
+  // Le profil d’un ami est un sous-écran de l’onglet Amis : quitter l’onglet l’abandonne,
+  // sinon son entrée d’historique survivrait à la navigation et Retour y reviendrait.
+  if(view!=='friends' && social.view==='profile'){ social.view=null; social.profile=null; }
+  // Retour Android/geste iOS : le PREMIER changement d’onglet pousse une entrée (marquée tomeTab,
+  // clé distincte de tomeOverlay), pour revenir à Aujourd’hui au lieu de quitter l’application ;
+  // les changements suivants la remplacent — une seule entrée d’onglet, un seul appui pour sortir.
+  try{
+    const st = history.state || {};
+    if(_navReady && view!=='today' && !st.tomeTab && !st.tomeOverlay) history.pushState({tomeTab:1}, '', '#'+view);
+    else if(location.hash.slice(1) !== view) history.replaceState(st, '', '#'+view);
+  }catch(_){}
   persistUI();
   render();
   // sans cela on arrive au milieu de la nouvelle vue, à la hauteur où on avait laissé l’ancienne
@@ -781,27 +810,27 @@ function todayMiniCards(reading){
   try{ recSnooze = +localStorage.getItem('tome-rec-snooze') || 0; }catch(_){ }
   if(social.me && social.hasRecovery===false && Date.now()-recSnooze > 30*864e5){
     cards.push(`<button class="today-mini urgent" data-today-recovery>
-      <span class="today-mini-icon" aria-hidden="true">${ic('key',22)}</span><span><small>Sécurité du compte</small><b>Aucun code de secours</b><em>Sans lui, un mot de passe oublié = compte perdu</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
+      <span><small>Sécurité du compte</small><b>Aucun code de secours</b><em>Sans lui, un mot de passe oublié = compte perdu</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
     </button>`);
   }
   const unrated = unratedBooks();
   if(unrated.length) cards.push(`<button class="today-mini" data-today-rate>
-    <span class="today-mini-icon" aria-hidden="true">${ic('star',22)}</span><span><small>Sans note</small><b>${unrated.length} lecture${unrated.length>1?'s':''}</b><em>Les noter en moins d’une minute</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
+    <span><small>Sans note</small><b>${unrated.length} lecture${unrated.length>1?'s':''}</b><em>Les noter en moins d’une minute</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
   if(due.length) cards.push(`<button class="today-mini" data-today-study>
-    <span class="today-mini-icon study" aria-hidden="true">${ic('cards',22)}</span><span><small>À réviser</small><b>${due.length} carte${due.length>1?'s':''}</b><em>Session de moins de 5 min</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
+    <span><small>À réviser</small><b>${due.length} carte${due.length>1?'s':''}</b><em>Session de moins de 5 min</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
   if(loans.length){
     const first = loans[0], detail = first.due ? first.due.text : `${loans.length} prêt${loans.length>1?'s':''} en cours`;
     cards.push(`<button class="today-mini ${first.due&&first.due.days<0?'urgent':''}" data-today-loans>
-      <span class="today-mini-icon loan" aria-hidden="true">${ic('share',22)}</span><span><small>Prêts</small><b>${loans.length} livre${loans.length>1?'s':''}</b><em>${esc(detail)}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
+      <span><small>Prêts</small><b>${loans.length} livre${loans.length>1?'s':''}</b><em>${esc(detail)}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
     </button>`);
   }
   cards.push(`<button class="today-mini" data-today-goal>
-    <span class="today-mini-icon goal" aria-hidden="true">${ic('target',22)}</span><span><small>Objectif ${new Date().getFullYear()}</small><b>${gi?`${gi.done} / ${gi.goal}`:'À définir'}</b><em>${gi?(gi.done>=gi.goal?'Objectif atteint':gi.delta<0?`${-gi.delta} lecture${gi.delta<-1?'s':''} à rattraper`:'Tu tiens le rythme'):'Donne un cap à ton année'}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
+    <span><small>Objectif ${new Date().getFullYear()}</small><b>${gi?`${gi.done} / ${gi.goal}`:'À définir'}</b><em>${gi?(gi.done>=gi.goal?'Objectif atteint':gi.delta<0?`${-gi.delta} lecture${gi.delta<-1?'s':''} à rattraper`:'Tu tiens le rythme'):'Donne un cap à ton année'}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
   if(next) cards.push(`<button class="today-mini" data-today-open="${esc(next.b.id)}">
-    <span class="today-mini-icon next" aria-hidden="true">${ic('bookmark',22)}</span><span><small>Dans ta pile</small><b>${esc(fullTitle(next.b))}</b><em>${esc(next.why)}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
+    <span><small>Dans ta pile</small><b>${esc(fullTitle(next.b))}</b><em>${esc(next.why)}</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>`);
   // Installer : proposé au bon moment (l’utilisateur a une vraie bibliothèque), une seule fois,
   // et jamais si l’app est déjà installée — le bouton des réglages reste le chemin permanent.
@@ -810,7 +839,7 @@ function todayMiniCards(reading){
   const canInstall = !isStandalone() && (installEvt || isIOSDevice()) && !installDismissed
     && (state.books||[]).filter(b=>!(b.tags||[]).includes('exemple')).length >= 3;
   const extra = canInstall ? `<button class="today-mini" data-today-install>
-    <span class="today-mini-icon" aria-hidden="true">${ic('download',22)}</span><span><small>Toujours à portée</small><b>Installer Tome</b><em>Sur ton écran d’accueil, même hors ligne</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
+    <span><small>Toujours à portée</small><b>Installer Tome</b><em>Sur ton écran d’accueil, même hors ligne</em></span><span class="today-arrow" aria-hidden="true">${ic('chevron',18)}</span>
   </button>` : '';
   return cards.slice(0,3).join('') + extra;
 }
@@ -1207,7 +1236,7 @@ function renderLibrary(){
         <button class="btn primary" id="ob-done" hidden>Voir ma bibliothèque <span id="ob-n"></span> →</button>
       </div>
     </div>`;
-    $('#ob-search').addEventListener('click', openSearch);
+    $('#ob-search').addEventListener('click', ()=>openSearch());
     $('#ob-demo').addEventListener('click', loadDemo);
     let added = 0;
     $('#ob-done').addEventListener('click', ()=>render());
@@ -2021,32 +2050,73 @@ $('#journal-body').addEventListener('click', e => {
 
 /* =============== Recherche / ajout =============== */
 const SEARCH_HINT = `<div class="search-hint">Recherche via Google Books et Open Library — couvertures et infos remplies automatiquement.<br>Astuce : « One Piece 42 » préremplit la série et le tome. Introuvable ? « Ajout manuel ».</div>`;
-function openSearch(){
+// opts.keep : réouverture depuis la pile de modales (retour du formulaire « Détails ») — on garde
+// la requête et les résultats déjà affichés, et on ne redonne pas le focus au champ (le clavier
+// mobile masquerait la liste qu’on vient justement de retrouver).
+function openSearch(opts){
+  const keep = !!(opts && opts.keep === true);
   openOverlay('#ov-search');
+  requestAnimationFrame(fitSearchResults); // après le calcul de mise en page : la liste a sa position
+  if(keep) return;
   $('#search-q').value = '';
+  _lastQ = '';
   $('#search-results').innerHTML = SEARCH_HINT;
+  $('#search-live').textContent = '';
   setTimeout(()=>$('#search-q').focus(), 60);
 }
-$('#btn-open-search').addEventListener('click', openSearch);
+// Clavier mobile : il recouvre la moitié basse de l'écran sans que la mise en page CSS bouge
+// (seul visualViewport rétrécit), donc la liste de résultats passait dessous — on ne voyait plus
+// aucun titre après avoir tapé. On borne sa hauteur à ce qui reste réellement visible.
+function fitSearchResults(){
+  const box = $('#search-results');
+  if(!box) return;
+  const vv = window.visualViewport;
+  // Tant qu'aucun clavier ne mange l'écran (ou si la mise en page, elle, a bien rétréci), on
+  // laisse faire la règle CSS (max-height:52vh) : la borne inline ne sert qu'au cas du clavier.
+  if(!vv || !$('#ov-search').classList.contains('open') || vv.height > innerHeight - 80){ box.style.maxHeight = ''; return; }
+  const top = box.getBoundingClientRect().top;
+  box.style.maxHeight = Math.max(160, vv.height + vv.offsetTop - top - 12) + 'px';
+}
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', fitSearchResults);
+  window.visualViewport.addEventListener('scroll', fitSearchResults);
+}
+$('#btn-open-search').addEventListener('click', ()=>openSearch());
 
-let searchTimer = null, searchSeq = 0;
+let searchTimer = null, searchSeq = 0, searchCtl = null, _lastQ = '';
+// Seuil de déclenchement : 3 lettres pour du texte (2 suffisaient à lancer une volée par lettre
+// et à brûler le quota), mais 2 chiffres pour un ISBN qu'on est en train de recopier.
+function searchReady(q){ return q.length >= (/^\d/.test(q) ? 2 : 3); }
 $('#search-q').addEventListener('input', e => {
   clearTimeout(searchTimer);
   const q = e.target.value.trim();
-  if(q.length < 2){
+  if(!searchReady(q)){
     searchSeq++;
+    _lastQ = '';
     $('#search-results').innerHTML = SEARCH_HINT;
+    $('#search-live').textContent = ''; // plus de résultat à l'écran : rien à annoncer
     return;
   }
-  searchTimer = setTimeout(()=>doSearch(q), 420);
+  if(q === _lastQ) return;          // effacer puis retaper la même chose : résultats déjà à l'écran
+  _lastQ = q;
+  searchTimer = setTimeout(()=>doSearch(q), 600);
 });
 $('#search-q').addEventListener('keydown', e => {
   if(e.key==='Enter'){
     clearTimeout(searchTimer);
     const q = e.target.value.trim();
-    if(q.length>=2) doSearch(q);
+    if(searchReady(q)){ _lastQ = q; doSearch(q); }
   }
 });
+// Open Library parle MARC (« fre », « ger »…), Google Books et le menu Langue parlent ISO 639-1
+// (« fr », « de »…). On ramène tout au même alphabet pour que le tri par langue et le marqueur
+// affiché soient cohérents entre les deux sources. Code inconnu = laissé tel quel, en majuscules.
+const MARC_TO_ISO = { fre:'fr', fra:'fr', eng:'en', ger:'de', deu:'de', spa:'es', ita:'it', jpn:'ja',
+  rus:'ru', por:'pt', dut:'nl', nld:'nl', chi:'zh', zho:'zh', kor:'ko', ara:'ar', heb:'he', gre:'el', ell:'el' };
+function olLang(code){
+  const c = String(code||'').toLowerCase().slice(0,3);
+  return MARC_TO_ISO[c] || c;
+}
 function guessType(hint, title){
   const h = (hint||'').toLowerCase(), t = (title||'').toLowerCase();
   if(/manga|manhwa|manhua|webtoon|shonen|shōnen|shojo|shōjo|seinen|josei|tankobon|tankōbon/.test(h) || /manga/.test(t)) return 'manga';
@@ -2057,16 +2127,26 @@ function isbnOf(q){
   const n = q.replace(/[-\s]/g,'');
   return /^(?:\d{9}[\dX]|\d{13})$/i.test(n) ? n : null;
 }
-let _gbQuotaHit = false; // 429 vu pendant cette session : message honnête plutôt que « une source indisponible »
+let _gbQuotaHit = false;   // quota Google épuisé : message honnête plutôt que « une source indisponible »
+let _gbTooFast = false;    // limite de Tome (60 recherches/min) : c'est passager, le message doit le dire
+// La recherche Google passe par /api/books (Worker) : quota propre à Tome + cache de bordure
+// 24 h, donc plus de 429 en pleine journée. Le Worker renvoie le JSON brut de Google, ou
+// {error:'gb-quota'} en 502 quand Google, lui, est à sec.
 async function searchGoogleBooks(q, opts={}){
   const isbn = isbnOf(q);
   const forced = (ui.searchLang && ui.searchLang!=='auto' && ui.searchLang!=='all') ? ui.searchLang : (opts.lang||'');
-  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&maxResults=15&printType=books${forced?'&langRestrict='+forced:''}${GOOGLE_BOOKS_KEY?'&key='+encodeURIComponent(GOOGLE_BOOKS_KEY):''}`;
-  const res = await fetch(url);
-  if(res.status===429){ _gbQuotaHit = true; throw new Error('gb-quota'); }
-  const data = await res.json();
-  if(data && data.error){ if(data.error.code===429) _gbQuotaHit = true; throw new Error('gb-'+(data.error.code||'err')); }
-  return (data.items||[]).filter(it=>it.volumeInfo && it.volumeInfo.title).map(it => {
+  const url = `${API_BASE}/api/books?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}${forced?'&lang='+encodeURIComponent(forced):''}`;
+  const res = await fetch(url, opts.signal ? {signal:opts.signal} : undefined);
+  const data = await res.json().catch(()=>null);
+  if(!res.ok || !data){
+    // seul le vrai épuisement du quota Google justifie le message « limite du jour »
+    if(data && data.error==='gb-quota') _gbQuotaHit = true;
+    // 429 vient du garde-fou de Tome, pas de Google : réessayer dans une minute suffit
+    if(res.status===429) _gbTooFast = true;
+    throw new Error('gb-'+res.status);
+  }
+  if(data.error){ if(data.error.code===429) _gbQuotaHit = true; throw new Error('gb-'+(data.error.code||'err')); }
+  const items = (data.items||[]).filter(it=>it.volumeInfo && it.volumeInfo.title).map(it => {
     const v = it.volumeInfo;
     return {
       title: v.title + (v.subtitle ? ' — '+v.subtitle : ''),
@@ -2076,35 +2156,67 @@ async function searchGoogleBooks(q, opts={}){
       cover: v.imageLinks ? (v.imageLinks.thumbnail||v.imageLinks.smallThumbnail||'').replace('http://','https://') : '',
       isbn: (()=>{ const ids = v.industryIdentifiers||[]; const i13 = ids.find(x=>x.type==='ISBN_13'), i10 = ids.find(x=>x.type==='ISBN_10'); return (i13&&i13.identifier) || (i10&&i10.identifier) || ''; })(),
       type: guessType((v.categories||[]).join(' '), v.title),
+      lang: String(v.language||''),
       description: typeof v.description==='string' ? v.description : '',
     };
   });
+  // Recherche PAR ISBN : c'est l'édition qu'on a en main. Google renvoie parfois une autre
+  // édition (traduction, poche) dont l'ISBN n'est pas celui scanné — on réimpose le nôtre.
+  if(isbn) items.forEach(r=>{ r.isbn = isbn; });
+  return items;
 }
-async function searchOpenLibrary(q){
+async function searchOpenLibrary(q, opts={}){
   const isbn = isbnOf(q);
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&limit=15${(()=>{ const l = searchLangFor(q); return (l && l!=='all') ? '&lang='+l : ''; })()}&fields=title,author_name,first_publish_year,number_of_pages_median,cover_i,subject,first_sentence,isbn`;
-  const data = await (await fetch(url)).json();
-  return (data.docs||[]).filter(d=>d.title).map(d => ({
-    title: d.title,
-    authors: d.author_name||[],
-    year: numOrNull(d.first_publish_year),
-    pages: numOrNull(d.number_of_pages_median),
-    cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : '',
-    isbn: (d.isbn||[]).find(x=>/^\d{13}$/.test(x)) || (d.isbn||[]).find(x=>/^\d{9}[\dX]$/i.test(x)) || '',
-    type: guessType((d.subject||[]).slice(0,25).join(' '), d.title),
-    description: Array.isArray(d.first_sentence) ? String(d.first_sentence[0]||'') : (typeof d.first_sentence==='string' ? d.first_sentence : ''),
-  }));
+  const l = searchLangFor(q);
+  const fr = (l === 'fr');
+  const fopts = opts.signal ? {signal:opts.signal} : undefined;
+  const base = `https://openlibrary.org/search.json?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}&limit=15${(l && l!=='all') ? '&lang='+l : ''}&fields=title,author_name,first_publish_year,number_of_pages_median,cover_i,subject,first_sentence,isbn,language`;
+  // `lang=` ne fait qu'orienter le tri d'Open Library ; c'est `language=` (code MARC, « fre »)
+  // qui filtre réellement les éditions. Repli sans le filtre si le français ne rend rien.
+  let data = await (await fetch(base + (fr ? '&language=fre' : ''), fopts)).json();
+  if(fr && !(data.docs||[]).length) data = await (await fetch(base, fopts)).json();
+  const items = (data.docs||[]).filter(d=>d.title).map(d => {
+    const all = d.isbn||[];
+    // 978-2 = domaine linguistique français, 979-10 = France : préférés quand on cherche en
+    // français, sinon on garde le premier ISBN-13 (puis ISBN-10) proposé.
+    const preferred = fr ? all.find(x=>/^(?:9782|9791)\d{9}$/.test(x)) : '';
+    return {
+      title: d.title,
+      authors: d.author_name||[],
+      year: numOrNull(d.first_publish_year),
+      pages: numOrNull(d.number_of_pages_median),
+      cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : '',
+      isbn: preferred || all.find(x=>/^\d{13}$/.test(x)) || all.find(x=>/^\d{9}[\dX]$/i.test(x)) || '',
+      type: guessType((d.subject||[]).slice(0,25).join(' '), d.title),
+      lang: olLang((d.language||[])[0]),
+      description: Array.isArray(d.first_sentence) ? String(d.first_sentence[0]||'') : (typeof d.first_sentence==='string' ? d.first_sentence : ''),
+    };
+  });
+  if(isbn) items.forEach(r=>{ r.isbn = isbn; });   // même raison que côté Google Books
+  return items;
 }
 async function doSearch(q){
   const seq = ++searchSeq;
   const box = $('#search-results');
+  // Une seule phrase est annoncée au lecteur d'écran (#search-live), pas les 20 lignes de la liste.
+  const live = $('#search-live');
+  const dire = t => { if(live) live.textContent = t; };
+  dire('Recherche…');
   box.innerHTML = Array(4).fill('<div class="sr sk"><div class="mini"></div><div class="sri"><b></b><span></span></div></div>').join('');
-  const settled = await Promise.allSettled([searchGoogleBooks(q), searchOpenLibrary(q)]);
+  // Une frappe rapide lançait jusqu'à deux requêtes par lettre et laissait courir les anciennes :
+  // on annule la volée précédente au lieu de la laisser consommer le quota et la bande passante.
+  if(searchCtl) searchCtl.abort();
+  searchCtl = new AbortController();
+  const signal = searchCtl.signal;
+  const settled = await Promise.allSettled([searchGoogleBooks(q, {signal}), searchOpenLibrary(q, {signal})]);
   if(seq !== searchSeq) return;
+  // annulation volontaire : ne rien peindre (une recherche plus récente s'en charge)
+  if(settled.some(s => s.status==='rejected' && s.reason && s.reason.name==='AbortError')) return;
   const [gb, ol] = settled.map(s => s.status==='fulfilled' ? s.value : null);
   const failed = settled.some(s => s.status==='rejected');
   if(gb===null && ol===null){
     box.innerHTML = `<div class="search-hint">Recherche indisponible (hors ligne ?). Tu peux toujours passer par « Ajout manuel ».</div>`;
+    dire('Recherche indisponible');
     return;
   }
   const items = [], seen = new Set();
@@ -2115,23 +2227,35 @@ async function doSearch(q){
   }
   if(!items.length){
     box.innerHTML = `<div class="search-hint">${failed
-      ? (_gbQuotaHit ? 'Google Books a atteint sa limite du jour : seule Open Library répond, et elle n’a rien trouvé. Essaie l’ISBN, une autre langue (menu Langue), ou « Ajout manuel ».'
-                     : 'Une des sources est indisponible et l’autre n’a rien trouvé — réessaie dans une minute ou passe par « Ajout manuel ».')
+      ? (_gbTooFast ? 'Trop de recherches d’affilée : Google Books se repose une minute. Open Library répond seule, et elle n’a rien trouvé.'
+        : _gbQuotaHit ? 'Google Books a atteint sa limite du jour : seule Open Library répond, et elle n’a rien trouvé. Essaie l’ISBN, une autre langue (menu Langue), ou « Ajout manuel ».'
+                      : 'Une des sources est indisponible et l’autre n’a rien trouvé — réessaie dans une minute ou passe par « Ajout manuel ».')
       : 'Aucun résultat. Essaie une autre orthographe ou une autre langue (menu Langue), ou passe par « Ajout manuel ».'}</div>`;
+    dire('Aucun résultat');
     return;
   }
+  // Éditions dans la langue cherchée d'abord (tri stable : à langue égale, l'ordre des sources
+  // et de pertinence est conservé) — sans quoi « L'Étranger » remonte des éditions anglaises.
+  const want = searchLangFor(q);
+  if(want && want!=='all') items.sort((a,b) => (b.lang===want) - (a.lang===want));
   window._searchItems = items;
-  const note = (failed && _gbQuotaHit) ? `<div class="search-hint" style="margin-bottom:8px">Google Books a atteint sa limite du jour — résultats Open Library seulement (moins de couvertures).</div>` : '';
+  const note = (failed && (_gbQuotaHit || _gbTooFast))
+    ? `<div class="search-hint" style="margin-bottom:8px">${_gbTooFast
+        ? 'Trop de recherches d’affilée — résultats Open Library seulement, le temps que Google Books se repose (une minute).'
+        : 'Google Books a atteint sa limite du jour — résultats Open Library seulement (moins de couvertures).'}</div>` : '';
   box.innerHTML = note + items.map((r,i) => { const c = cleanCover(r.cover); return `<div class="sr">
       <div class="mini">${c ? `<img src="${esc(c)}" alt="" loading="lazy"${xorigin(c)} referrerpolicy="no-referrer">` : phHTML({title:r.title, authors:r.authors, type:r.type}, true)}</div>
       <div class="sri">
         <b>${esc(r.title)}</b>
         <span>${esc(r.authors.join(', '))}</span>
-        <span>${[r.year, r.pages?r.pages+' p.':'' ].filter(Boolean).join(' · ')}</span>
+        <span>${[r.year, r.pages?r.pages+' p.':'' ].filter(Boolean).join(' · ')}${r.lang?` <span class="sr-lang">${esc(r.lang.toUpperCase())}</span>`:''}</span>
       </div>
       <button class="btn small add-edit" data-i="${i}" title="Ouvrir le formulaire complet">Détails</button>
       <button class="btn small primary add" data-i="${i}">Ajouter</button>
     </div>`; }).join('');
+  dire(`${items.length} résultat${items.length>1?'s':''} pour « ${q} »`
+    + ((failed && _gbTooFast) ? ' — Open Library seulement, trop de recherches d’affilée.'
+     : (failed && _gbQuotaHit) ? ' — Open Library seulement, Google Books a atteint sa limite du jour.' : ''));
 }
 function parseTome(title){
   let m = title.match(/^(.*?)[\s,–—:-]*(?:tome|t\.|vol(?:ume)?\.?|#)\s*(\d{1,4})\b/i);
@@ -2152,9 +2276,9 @@ $('#search-results').addEventListener('click', e => {
     series:pt.series||'', volume:pt.volume ?? null,
   };
   if(edit){
-    // « Détails » : passer par le formulaire complet
+    // « Détails » : passer par le formulaire complet. Pas de closeOverlays : openOverlay gère la
+    // transition et empile la recherche, pour y revenir (requête et résultats intacts) après coup.
     ui.searchFromResult = data;
-    closeOverlays();
     openEdit(null);
     return;
   }
@@ -2166,7 +2290,29 @@ $('#search-results').addEventListener('click', e => {
   if(row){ row.classList.add('added'); btn.textContent = 'Ajouté ✓'; btn.disabled = true; }
   toast('Ajouté ✓', {label:'✎ Modifier', onAction:()=>{ openEdit(b.id); }}); // openOverlay ferme la recherche
 });
-$('#btn-manual').addEventListener('click', ()=>{ ui.searchFromResult = null; openEdit(null); });
+// « One Piece 42 » tapé à la main : un nombre isolé à la fin de la requête est un tome.
+// L’espace est exigée et le nombre plafonné pour ne pas transformer « Catch-22 » en série
+// « Catch » ni « Fahrenheit 451 » en tome 451. parenTome, lui, ne lit que « (Série, #N) »
+// et « tome N » — les deux se complètent.
+function typedTome(q){
+  const m = String(q).match(/^(.+?)\s+(\d{1,3})$/);
+  return (m && +m[2] <= 300) ? { series:m[1].trim(), volume:+m[2] } : null;
+}
+$('#btn-manual').addEventListener('click', ()=>{
+  // Ne pas jeter ce qui vient d’être tapé : la requête devient le titre (sauf si c’est un ISBN,
+  // qui n’est pas un titre), et la série et le tome sont déduits quand ils sont explicites.
+  const q = $('#search-q').value.trim();
+  const pt = parenTome(q) || typedTome(q) || {};
+  ui.searchFromResult = {
+    // Tome déduit : le titre devient la série seule (convention d’addNextTome). Sinon fullTitle
+    // recollait le numéro déjà tapé : « One Piece, tome 42 — One Piece 42 ».
+    title: isbnOf(q) ? '' : (pt.series || q),
+    status: ui.defaultStatus,
+    series: pt.series || '',
+    volume: pt.volume ?? null,
+  };
+  openEdit(null);
+});
 $('#search-status').addEventListener('click', e => {
   const b = e.target.closest('button[data-s]'); if(!b) return;
   ui.defaultStatus = b.dataset.s;
@@ -2223,18 +2369,28 @@ async function startScan(){
   video.srcObject = scanStream;
   try{ await video.play(); }catch(_){ }
   let detector;
-  try{ detector = new BarcodeDetector({formats:['ean_13','ean_8']}); }
+  // Un ISBN est TOUJOURS un EAN-13 en 978/979 : accepter l'EAN-8 (et les 13 chiffres qui n'en
+  // sont pas, comme le code-barres prix d'un magasin) lançait une recherche vouée à l'échec.
+  try{ detector = new BarcodeDetector({formats:['ean_13']}); }
   catch(e){ stopScan(); toast('Scanner non supporté sur cet appareil'); return; }
+  let badScanAt = 0;
   scanTimer = setInterval(async ()=>{
     try{
       const codes = await detector.detect(video);
-      const hit = codes.find(c=>/^\d{8}$|^\d{13}$/.test(c.rawValue));
+      const hit = codes.find(c=>/^97[89]\d{10}$/.test(c.rawValue));
       if(hit){
         const isbn = hit.rawValue;
         stopScan();
         $('#search-q').value = isbn;
+        _lastQ = isbn;
         toast('Code-barres lu ✓');
         doSearch(isbn);
+        return;
+      }
+      // code-barres lu mais pas un ISBN : on guide sans couper le scan (ni répéter le message)
+      if(codes.length && Date.now() - badScanAt > 4000){
+        badScanAt = Date.now();
+        toast('Ce code n’est pas un ISBN — vise celui qui commence par 978');
       }
     }catch(_){ }
   }, 350);
@@ -2250,12 +2406,29 @@ $('#btn-scan').addEventListener('click', startScan);
 // langue de recherche (persistée) : Auto = d'après l'alphabet ; sinon force Google et oriente Open Library
 { const sel = $('#search-lang');
   if(sel){ sel.value = ui.searchLang || 'auto';
-    sel.addEventListener('change', ()=>{ ui.searchLang = sel.value; persistUI(); const q = $('#search-q').value.trim(); if(q.length>=2) doSearch(q); }); } }
+    // changer de langue doit relancer la MÊME requête : on lève la garde anti-doublon
+    sel.addEventListener('change', ()=>{ ui.searchLang = sel.value; persistUI(); const q = $('#search-q').value.trim(); if(searchReady(q)){ _lastQ = q; doSearch(q); } }); } }
 $('#scan-stop').addEventListener('click', stopScan);
 // PWA mobile : couper la caméra si l’app passe en arrière-plan pendant un scan
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stopScan(); });
 
 /* =============== Édition =============== */
+// Empreinte de tous les champs du formulaire : comparée à celle prise à l’ouverture, elle dit
+// si l’utilisateur a saisi quelque chose. U+0001 comme séparateur — aucun champ ne peut le
+// contenir, donc deux répartitions différentes du même texte ne peuvent pas se confondre.
+const editSnapshot = () => $$('#ov-edit input, #ov-edit select, #ov-edit textarea').map(e=>e.value).join('\u0001');
+// Feu vert pour fermer le formulaire : immédiat s’il n’a pas bougé, sinon on demande. Le
+// formulaire est le seul écran de l’app où un geste malheureux (✕, Échap, Retour) détruit du
+// travail non enregistré.
+async function tryCloseEdit(){
+  if(!$('#ov-edit').classList.contains('open')) return true;
+  if(editSnapshot() === ui.editSnap) return true;
+  return await uiConfirm({
+    title:'Abandonner les modifications ?',
+    message:'Ce que tu as saisi sera perdu.',
+    okLabel:'Abandonner', cancelLabel:'Continuer la saisie', danger:true
+  });
+}
 function openEdit(id){
   ui.editId = id;
   const b = id ? state.books.find(x=>x.id===id) : null;
@@ -2264,17 +2437,27 @@ function openEdit(id){
   $('#f-title').value = pre.title||'';
   $('#f-authors').value = (pre.authors||[]).join(', ');
   $('#f-type').value = pre.type||'livre';
-  $('#f-status').value = (b && b.status) || pre.status || 'wishlist';
+  // ui.defaultStatus en dernier ressort : le « + » reprend le statut choisi au dernier ajout
+  $('#f-status').value = (b && b.status) || pre.status || ui.defaultStatus || 'wishlist';
   $('#f-series').value = pre.series||'';
   $('#f-volume').value = pre.volume ?? '';
   $('#f-stotal').value = pre.seriesTotal ?? '';
   $('#f-year').value = pre.year ?? '';
+  $('#f-year').max = String(new Date().getFullYear()+1); // l’année ne peut pas être calculée dans le HTML
   $('#f-pages').value = pre.pages ?? '';
   $('#f-cover').value = pre.cover||'';
   $('#f-syn').value = pre.synopsis||'';
   $('#f-tags').value = (pre.tags||[]).join(', ');
+  // le formulaire est un DOM unique réutilisé : une erreur laissée par la saisie précédente
+  // (« Année entre 1000 et 2027 ») s’afficherait sous un champ pourtant vierge
+  $$('#ov-edit .field-err').forEach(el=>el.remove());
+  $$('#ov-edit .invalid').forEach(el=>el.classList.remove('invalid'));
+  // replié seulement pour un ajout manuel à froid : rien à cacher quand ces champs sont remplis
+  const more = $('.frm-more');
+  if(more) more.open = !!(b || pre.series || pre.year || pre.cover || pre.synopsis);
   ui.searchFromResult = null;
   openOverlay('#ov-edit');
+  ui.editSnap = editSnapshot(); // référence de la garde anti-perte de saisie
   setTimeout(()=>$('#f-title').focus(), 60);
 }
 // Micro-typographie française : appliquée à la SAISIE des textes de lecture (critique, passages,
@@ -2301,10 +2484,15 @@ function fieldError(inputSel, msg){
   let e = inp.parentElement.querySelector('.field-err');
   if(!e){ e = document.createElement('div'); e.className='field-err'; e.setAttribute('role','alert'); inp.after(e); }
   e.textContent = msg;
+  // champ dans un bloc replié (« Plus de détails ») : l’ouvrir, sinon le focus part sur un
+  // élément invisible et le message d’erreur reste caché
+  const det = inp.closest('details'); if(det) det.open = true;
   inp.classList.add('invalid'); inp.focus();
   inp.addEventListener('input', ()=>{ e.remove(); inp.classList.remove('invalid'); }, {once:true});
 }
-$('#btn-save-edit').addEventListener('click', () => {
+// Entrée depuis n’importe quel champ, clic sur « Enregistrer » : un seul chemin (submit du form)
+$('#edit-form').addEventListener('submit', e => { e.preventDefault(); saveEdit(); });
+function saveEdit(){
   const title = $('#f-title').value.trim();
   if(!title){ fieldError('#f-title', 'Donne un titre à cette lecture.'); return; }
   const data = {
@@ -2321,20 +2509,33 @@ $('#btn-save-edit').addEventListener('click', () => {
     synopsis: cleanSynopsis($('#f-syn').value),
     tags: $('#f-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
   };
+  // Une année hors de portée (2 0 2 5 tapé à côté, 20255) fausserait le tri, les stats et le
+  // rétro de l’année : on la refuse là où elle a été saisie plutôt que de l’enregistrer.
+  const yMax = new Date().getFullYear()+1;
+  if(data.year != null && (data.year < 1000 || data.year > yMax)){
+    fieldError('#f-year', `Année entre 1000 et ${yMax}.`); return;
+  }
   const wasNew = !ui.editId;
   if(ui.editId){
     const b = state.books.find(x=>x.id===ui.editId);
     if(!b) return;
     const wasRead = b.status==='read';
     Object.assign(b, data);
+    // pagination corrigée à la baisse : une progression au-delà de la dernière page donnerait
+    // 118 % sur la fiche et sur Aujourd’hui
+    if(b.currentPage != null && data.pages && b.currentPage > data.pages) b.currentPage = data.pages;
     if(b.status==='read' && !wasRead && !(b.readings||[]).length) b.readings = [{id:uid(), date:today(), rating:null}];
   }else{
     state.books.unshift(newBook(data));
   }
   ui.editId = null;
-  save(); closeOverlays(); render();
+  ui.editSnap = editSnapshot(); // enregistré : plus rien à sauver, la garde ne doit pas se déclencher
+  // Enregistrer revient à la fiche d’origine quand le formulaire a été ouvert depuis elle
+  // (closeTopOverlay ferme tout si le formulaire était le premier niveau) ; le fond est repeint
+  // par scheduleRender, différé tant qu’une modale reste ouverte.
+  save(); scheduleRender(); closeTopOverlay();
   toast(wasNew ? 'Ajouté à ta bibliothèque ✓' : 'Modifié ✓');
-});
+}
 // Construit un livre neuf complet à partir de champs partiels
 function newBook(data){
   const b = Object.assign({
@@ -2590,7 +2791,7 @@ $('#study-body').addEventListener('click',e=>{
   if(grade){ const cur=currentStudyCard(); if(!cur)return; gradeStudyCard(cur.card,grade.dataset.studyGrade); touchStudy(cur.book); save(); studySession.reviewed++; studySession.index++; studySession.revealed=false; renderStudyReview(); return; }
   if(e.target.closest('[data-review-more]')){ startStudyReview(studySession.bookId); return; }
   if(e.target.closest('[data-review-editor]')){ const id=studySession.bookId; if(id)openStudy(id); return; }
-  if(e.target.closest('[data-review-exit]')){ studySession.bookId?openStudy(studySession.bookId):closeOverlays(); return; }
+  if(e.target.closest('[data-review-exit]')){ studySession.bookId?openStudy(studySession.bookId):closeTopOverlay(); return; }
 });
 $('#study-body').addEventListener('keydown',e=>{
   if($('#study-head').textContent!=='Révision') return;
@@ -3228,7 +3429,7 @@ function renderStats(){
           <button class="btn" id="stats-lib">Voir ma bibliothèque</button>
         </div>`;
       $('#view-stats').appendChild(d);
-      $('#stats-add').addEventListener('click', openSearch);
+      $('#stats-add').addEventListener('click', ()=>openSearch());
       $('#stats-lib').addEventListener('click', ()=>selectView('library'));
     } else vide.hidden = false;
     return;
@@ -4160,8 +4361,7 @@ function presentCard(cv, filename, shareText){
       const a = document.createElement('a'); a.href = _cardUrl; a.download = filename; a.click();
       toast('Carte téléchargée ✓');
     });
-    $('#ov-card').classList.add('open'); // par-dessus la modale ouverte (rétro/détail), sans la fermer
-    syncModalIsolation(); // sinon la carte reste inerte : clics traversés vers la fiche → données modifiées
+    openCard(); // par-dessus la modale ouverte (rétro/détail), sans la fermer
   }, 'image/png');
 }
 // Le canvas ne rend une police QUE si elle est déjà chargée : on précharge les graisses
@@ -4372,20 +4572,79 @@ async function shareYearCard(year){
 /* =============== Overlays & focus =============== */
 // Une modale ouverte pousse une entrée d’historique : le bouton Retour (matériel Android,
 // geste iOS, ou de la souris) ferme la modale au lieu de quitter l’application.
+// Chaque couche qui s’empile par-dessus (dialogue uiConfirm/uiPrompt, lightbox de couverture,
+// carte à partager) pousse SA propre entrée : Retour ferme le bon niveau, la fiche reste ouverte.
+// _overlayDepth = hauteur de la pile ; chaque couche mémorise le niveau qu’elle occupe
+// (_dlgDepth, _coverDepth, _cardDepth — 0 = pas d’entrée).
 let _overlayDepth = 0;
+// Vrai pendant que la garde « abandonner les modifications ? » attend une réponse après un
+// Retour : l’entrée d’historique a été repoussée, aucun autre écouteur ne doit réagir au popstate.
+let _editGuardBusy = false;
+// Après un rechargement, l’entrée courante porte encore le marqueur de la modale ouverte avant :
+// on l’efface (aucune modale n’est ouverte au chargement), sinon Retour croirait descendre
+// dans une pile qui n’existe pas et laisserait la première fiche ouverte.
+try{ if((history.state||{}).tomeOverlay){ const s={...history.state}; delete s.tomeOverlay; history.replaceState(s, ''); } }catch(_){ }
+// Les entrées rendues sont mises en attente, puis rendues EN UN SEUL history.go(-n) au tour
+// suivant. Deux history.back() enchaînés dans le même tour (dialogue fermé PUIS modale fermée
+// dans la foulée, cf. #d-delete) ne sont pas fiables : le navigateur résout les deux deltas
+// depuis la même position et n’en applique qu’un, laissant une entrée fantôme.
+let _histDebt = 0, _histTimer = 0;
+function scheduleHistoryPop(n){
+  _histDebt += n;
+  if(_histTimer) return;
+  _histTimer = setTimeout(()=>{
+    _histTimer = 0;
+    const d = _histDebt; _histDebt = 0;
+    if(d > 0) try{ history.go(-d); }catch(_){ }
+  }, 0);
+}
+// Renvoie le niveau occupé, 0 si le navigateur a refusé l’entrée (quota Safari) : la pile
+// logique ne doit alors pas compter une entrée que le navigateur n’a pas.
 function pushOverlayHistory(){
-  try{ history.pushState({ tomeOverlay: ++_overlayDepth }, ''); }catch(_){ }
+  // Une entrée vient d’être rendue mais pas encore consommée et une couche la remplace tout de
+  // suite (showRecoveryCode qui se réaffiche en boucle, modale → dialogue) : on la reprend telle
+  // quelle — elle porte déjà le bon marqueur. Sans cela, back() puis pushState se marchent dessus
+  // et l’historique enfle d’une entrée à chaque tour de boucle.
+  if(_histDebt > 0){ _histDebt--; return ++_overlayDepth; }
+  try{ history.pushState({ tomeOverlay: _overlayDepth+1 }, ''); }catch(_){ return 0; }
+  return ++_overlayDepth;
+}
+// Rend l’entrée d’une couche que l’utilisateur ferme lui-même (✕, Échap, clic-fond, bouton) :
+// même état d’historique qu’un Retour, donc pas d’entrée fantôme. Seulement si la couche est au
+// sommet de la pile — fermée en cascade sous une autre, son niveau sera simplement sauté.
+function popOverlayHistory(depth){
+  if(!depth || depth !== _overlayDepth) return;
+  _overlayDepth--;
+  scheduleHistoryPop(1);
 }
 window.addEventListener('popstate', e=>{
-  const st = e.state || {};
-  if(_overlayDepth > 0 && !st.tomeOverlay){        // on remonte au-dessus de la pile de modales
-    _overlayDepth = 0;
-    if($$('.overlay.open').length || !$('#ov-dialog').hidden) closeOverlays(true);
-    const card=$('#ov-card'), cov=$('#ov-cover');
-    if(card) card.classList.remove('open');
-    if(cov) cov.classList.remove('open');
-    syncModalIsolation();
+  const target = (e.state||{}).tomeOverlay || 0;
+  if(target >= _overlayDepth) return; // Suivant, ou entrée qui n’est pas à nous : rien à fermer
+  // Retour alors que le formulaire d’édition a une saisie non enregistrée : on REPOUSSE tout de
+  // suite l’entrée que le navigateur vient de consommer (on reste donc à la même place), puis on
+  // demande. Repousser d’abord, plutôt qu’après la réponse, évite de croiser le va-et-vient
+  // d’historique du dialogue lui-même. Refus = rien à faire ; accord = fermeture normale.
+  if($('#ov-edit').classList.contains('open') && !$('#ov-dialog').classList.contains('open')
+     && editSnapshot() !== ui.editSnap){
+    try{ history.pushState({ tomeOverlay:_overlayDepth }, ''); }catch(_){ }
+    _editGuardBusy = true; // l’autre écouteur de popstate (navigation par hash) doit passer son tour
+    tryCloseEdit().then(ok=>{ _editGuardBusy = false; if(ok) closeTopOverlay(); });
+    return;
   }
+  // On descend d’un niveau (Retour) — ou de plusieurs d’un coup (appui long sur Retour) : on
+  // ferme la couche VISIBLE la plus haute, sans history.back() (le navigateur y est déjà).
+  // Regarder ce qui est ouvert plutôt que le niveau mémorisé évite de gâcher un appui sur Retour
+  // quand une couche a été refermée en cascade sans rendre son entrée.
+  while(_overlayDepth > target){
+    _overlayDepth--;
+    if($('#ov-dialog').classList.contains('open')){ _dlgClose(_dlgCancelVal, true); continue; }
+    if($('#ov-cover').classList.contains('open')){ closeCover(true, true); continue; }
+    if($('#ov-card').classList.contains('open')){ closeCard(true); continue; }
+    // modale ouverte par-dessus une autre : Retour rouvre celle du dessous (la fiche d’origine)
+    if(ui.modalStack.length && _overlayDepth > 0 && $$('.overlay.open').length){ reopenUnder(true); continue; }
+    if($$('.overlay.open').length) closeOverlays(true, true); // dernier niveau : la modale de fond
+  }
+  syncModalIsolation();
 });
 // Clé de re-sélection d’un élément (id, puis data-id) : après un render(), le nœud mémorisé
 // n’est plus dans le document — on retrouve son remplaçant par cette clé.
@@ -4402,22 +4661,42 @@ function focusKey(el){
   }
   return '';
 }
+// Comment rouvrir la modale qu’on quitte, pour y revenir au ✕ / Échap / Retour. L’identifiant
+// (livre, série, liste) est capturé MAINTENANT : ui.detailId aura changé quand on dépilera.
+// null pour les couches qui ne se rouvrent pas (lightbox, carte à partager, QR).
+function reopenerFor(ov){
+  if(!ov) return null;
+  switch(ov.id){
+    case 'ov-detail': { const id = ui.detailId; return id ? ()=>openDetail(id) : null; }
+    case 'ov-list': {
+      if(ui.listMode==='series'){ const n = ui.seriesName; return n ? ()=>openSeries(n) : null; }
+      if(ui.listMode==='recap'){ const y = ui.recapYear; return ()=>showRecap(y); }
+      const id = ui.listId; return id ? ()=>openList(id) : null;
+    }
+    case 'ov-rate': return ()=>{ renderQuickRate(); openOverlay('#ov-rate'); };
+    case 'ov-search': return ()=>openSearch({keep:true});
+    default: return null;
+  }
+}
 function openOverlay(sel){
   const root=$(sel);
   // Sommes-nous déjà dans la pile de modales ? (root déjà ouverte = simple re-rendu ;
   // une AUTRE overlay ouverte = transition A→B ; ou une entrée d’historique déjà posée.)
   const dansPile = _overlayDepth > 0 || $$('.overlay.open').length > 0;
   if(dansPile){
-    // Re-rendu OU transition modale→modale : on échange visuellement SANS toucher l’historique.
-    // L’ancien closeOverlays(false)+pushOverlayHistory faisait un history.back() ASYNCHRONE →
-    // popstate → applyHashView → closeOverlays, qui refermait la nouvelle modale ~50 ms après
-    // (aussi bien pour un re-rendu de la même fiche que pour une transition fiche→étude/édition).
+    // Re-rendu de la MÊME modale : on échange le contenu sans toucher à l’historique.
+    // Transition A→B (fiche → Modifier, série → tome, file de notation → fiche) : B occupe un
+    // niveau de plus et on retient comment rouvrir A. Surtout pas de closeOverlays(false)+push,
+    // dont le history.back() ASYNCHRONE refermait B ~50 ms plus tard (popstate → applyHashView).
+    const sortante = root.classList.contains('open') ? null : $$('.overlay.open').find(o=>o!==root);
+    const rouvrir = (sortante && _overlayDepth > 0) ? reopenerFor(sortante) : null;
     $$('.overlay.open').forEach(o=>{ if(o!==root) o.classList.remove('open'); });
     // Ne PAS écraser la référence vers l’appelant d’origine (une carte hors modale) : sinon la
     // restauration de focus à la fermeture viserait un bouton devenu display:none (retour <body>).
     const ae = document.activeElement;
     if(!(ae && ae.closest && ae.closest('.overlay'))){ ui.lastFocus = ae; ui.lastFocusKey = focusKey(ae); }
     if(_overlayDepth === 0) pushOverlayHistory(); // filet : une overlay ouverte sans entrée d’historique
+    else if(rouvrir){ ui.modalStack.push(rouvrir); pushOverlayHistory(); }
   }else{
     ui.lastFocus = document.activeElement; ui.lastFocusKey = focusKey(ui.lastFocus);
     pushOverlayHistory();
@@ -4427,12 +4706,41 @@ function openOverlay(sel){
   // remonter le panneau au ré-affichage, à chaque clic sur un contrôle sans id (statut, rythme…).
   queueMicrotask(()=>{ if(!root.contains(document.activeElement)){ const first=modalFocusables(root)[0]; if(first) first.focus({preventScroll:true}); } });
 }
-function closeOverlays(restore=true){
+// Ferme UNE seule couche : quand la modale a été ouverte par-dessus une autre (Modifier, mode
+// étude, tome d’une série, fiche ouverte depuis la file de notation), on rouvre celle du dessous
+// au lieu de tout fermer ; sinon fermeture complète, comme avant.
+function closeTopOverlay(){
+  if(!ui.modalStack.length || _overlayDepth <= 0){ closeOverlays(); return; }
+  _overlayDepth--;        // l’entrée d’historique de la couche fermée est rendue…
+  scheduleHistoryPop(1);  // …en un seul history.go(-n) au tour suivant (cf. scheduleHistoryPop)
+  reopenUnder();
+}
+// Dépile et rouvre la modale du dessous. L’entrée d’historique vient d’être rendue (✕, Échap,
+// bouton) ou consommée par le navigateur (Retour) : openOverlay ne doit donc pas en repousser
+// une — d’où la fermeture AVANT l’appel, qui lui présente une pile vide (aucune transition A→B).
+function reopenUnder(fromPop){
+  const rouvrir = ui.modalStack.pop();
+  $$('.overlay').forEach(o=>o.classList.remove('open'));
+  _coverDepth = 0; _cardDepth = 0;
+  rouvrir();
+  if($$('.overlay.open').length){ syncModalIsolation(); return; }
+  // La cible a disparu entre-temps (livre supprimé, série vidée) : on ne reste pas sur un écran
+  // vide, et on rend les entrées d’historique restantes — sauf en revenant d’un Retour, où le
+  // navigateur a déjà quitté ces niveaux (la boucle du popstate finit de redescendre).
+  if(!fromPop && _overlayDepth > 0){ const n = _overlayDepth; _overlayDepth = 0; scheduleHistoryPop(n); }
+  closeOverlays();
+}
+// fromPop : appel depuis le popstate (Retour) — les entrées sont déjà retirées, ne pas reculer.
+function closeOverlays(restore=true, fromPop=false){
+  ui.modalStack.length = 0; // toute la pile se ferme : plus rien à rouvrir
   stopScan(); if(typeof stopQRScan==='function') stopQRScan();
   const etaitOuverte = $$('.overlay.open').length > 0;
   $$('.overlay').forEach(o=>o.classList.remove('open'));
-  // rendre l’entrée d’historique poussée à l’ouverture (sans re-déclencher la fermeture)
-  if(etaitOuverte && _overlayDepth > 0 && (history.state||{}).tomeOverlay){ _overlayDepth = 0; try{ history.back(); }catch(_){ } }
+  { const sb = $('#search-results'); if(sb) sb.style.maxHeight = ''; } // borne posée pour le clavier mobile
+  _coverDepth = 0; _cardDepth = 0; // #ov-cover et #ov-card sont des .overlay : fermés ici en cascade
+  // rendre d’un coup les entrées d’historique de toute la pile (modale + couches empilées dessus),
+  // sans re-déclencher la fermeture : le popstate ne trouve plus rien au-dessus du niveau cible
+  if(!fromPop && etaitOuverte && _overlayDepth > 0){ const n = _overlayDepth; _overlayDepth = 0; scheduleHistoryPop(n); }
   syncModalIsolation();
   if(_dirtyBg){ _dirtyBg=false; render(); } // rattrape le rendu de fond différé AVANT de restaurer le focus
   if(restore){
@@ -4442,12 +4750,15 @@ function closeOverlays(restore=true){
     try{ t && t.focus({ preventScroll:true }); }catch(_){ }
   }
 }
-let _coverLastFocus = null;
-function closeCover(restore=true){
-  const ov = $('#ov-cover');
+let _coverLastFocus = null, _coverDepth = 0, _cardDepth = 0;
+// Lightbox et carte : chacun occupe son propre niveau d’historique par-dessus la fiche, pour que
+// Retour ne referme que lui (fromPop : le navigateur a déjà retiré l’entrée, ne pas reculer).
+function closeCover(restore=true, fromPop=false){
+  const ov = $('#ov-cover'), depth = _coverDepth; _coverDepth = 0;
   if(!ov.classList.contains('open')) return;
   ov.classList.remove('open');
   syncModalIsolation();
+  if(!fromPop) popOverlayHistory(depth);
   if(restore && _coverLastFocus && document.contains(_coverLastFocus)){
     try{ _coverLastFocus.focus(); }catch(_){ }
   }
@@ -4457,31 +4768,66 @@ function openCover(url){
   const ov = $('#ov-cover');
   _coverLastFocus = document.activeElement;
   ov.querySelector('img').src = url;
+  if(!ov.classList.contains('open')) _coverDepth = pushOverlayHistory();
   ov.classList.add('open');
   syncModalIsolation();
   queueMicrotask(()=>$('#cover-close').focus({preventScroll:true}));
 }
+function closeCard(fromPop=false){ // se ferme seul, sans fermer la modale en dessous
+  const ov = $('#ov-card'), depth = _cardDepth; _cardDepth = 0;
+  if(!ov.classList.contains('open')) return;
+  ov.classList.remove('open');
+  syncModalIsolation();
+  if(!fromPop) popOverlayHistory(depth);
+}
+function openCard(){
+  const ov = $('#ov-card');
+  if(!ov.classList.contains('open')) _cardDepth = pushOverlayHistory();
+  ov.classList.add('open');
+  syncModalIsolation(); // sinon la carte reste inerte : clics traversés vers la fiche → données modifiées
+}
 $('#ov-cover').addEventListener('click', e=>{
   if(e.target===$('#ov-cover') || e.target.closest('#cover-close')) closeCover();
 });
-$('#ov-card').addEventListener('click', e=>{ // se ferme seul, sans fermer la modale en dessous
-  if(e.target===$('#ov-card') || e.target.closest('#card-close')){ $('#ov-card').classList.remove('open'); syncModalIsolation(); }
+$('#ov-card').addEventListener('click', e=>{
+  if(e.target===$('#ov-card') || e.target.closest('#card-close')) closeCard();
 });
-$$('.overlay').forEach(o => o.addEventListener('click', e => {
+$$('.overlay').forEach(o => o.addEventListener('click', async e => {
   if(o.id==='ov-cover' || o.id==='ov-card') return; // fermés par leur propre handler
-  if(e.target === o || e.target.closest('[data-close]')) closeOverlays();
+  if(!(e.target === o || e.target.closest('[data-close]'))) return;
+  // Le fond gris du formulaire ne ferme plus rien sur mobile : le pouce l’effleure sans arrêt en
+  // remontant la page, et la saisie était perdue d’un coup. ✕ et « Annuler » restent la sortie.
+  if(o.id==='ov-edit' && e.target === o && matchMedia('(max-width:640px)').matches) return;
+  if(!await tryCloseEdit()) return; // saisie en cours dans le formulaire : on demande d’abord
+  closeTopOverlay(); // rouvre la modale du dessous s’il y en a une
 }));
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', async e => {
   if(e.key!=='Escape') return;
   const cov = $('#ov-cover');
   if(cov.classList.contains('open')){ closeCover(); return; } // ferme d’abord le lightbox
-  const ocd = $('#ov-card');
-  if(ocd.classList.contains('open')){ ocd.classList.remove('open'); syncModalIsolation(); return; } // puis l’aperçu de carte
-  if($$('.overlay.open').length){ closeOverlays(); return; }
+  if($('#ov-card').classList.contains('open')){ closeCard(); return; } // puis l’aperçu de carte
+  if($$('.overlay.open').length){                                     // puis UNE couche de modale
+    if(!await tryCloseEdit()) return;
+    closeTopOverlay(); return;
+  }
   if(ui.selectMode){ clearSelection(); renderLibrary(); }
 });
 // Navigation par hash entre les onglets et deep-link #book/<id>
-window.addEventListener('popstate', ()=>applyHashView());
+window.addEventListener('popstate', e=>{
+  // Le formulaire d’édition retient le Retour le temps d’une question : l’entrée d’historique a
+  // déjà été repoussée, la vue de fond ne bouge pas (sinon applyHashView fermerait le formulaire).
+  if(_editGuardBusy) return;
+  // Retour À L’INTÉRIEUR de la pile de modales (un dialogue ou le lightbox vient de se fermer, la
+  // fiche reste ouverte) : la vue de fond ne change pas — applyHashView fermerait tout.
+  if((e.state||{}).tomeOverlay && _overlayDepth > 0) return;
+  // Retour depuis le profil d’un ami : on revient au sous-onglet d’où l’on venait (le fil, les
+  // notifications…) sans quitter la vue Amis ni toucher au hash.
+  if(social.view==='profile' && !(e.state||{}).tomeProfile && ui.view==='friends'){
+    social.view=null; social.profile=null; social.tab=social.profileFrom||'friends';
+    renderFriends(); return;
+  }
+  applyHashView();
+});
 window.addEventListener('hashchange', ()=>applyHashView());
 const INVITE_RE = /^invite\/([a-z0-9_.-]{3,20})$/i; // même contrainte que les pseudos serveur
 function applyHashView(hash){
@@ -4664,7 +5010,7 @@ function loadPendingInvite(){
   }catch(_){ return ''; }
 }
 function clearPendingInvite(){ try{ localStorage.removeItem(PENDING_INVITE); }catch(_){ } }
-const social = { me:null, tab:'feed', view:null, profile:null, sessionError:'' };
+const social = { me:null, tab:'feed', view:null, profile:null, profileFrom:'friends', sessionError:'' };
 function socToken(){ try{ return localStorage.getItem(SOC_TOKEN)||''; }catch(_){ return ''; } }
 async function api(path, opts={}){
   const headers = Object.assign({}, opts.headers);
@@ -4993,9 +5339,16 @@ window.addEventListener('online', ()=>{
   if(_libDirty) scheduleLibPush(0);
   if(_shelfDirty) scheduleShelfPush(0);
 });
+// Les cinq sous-onglets du réseau, dans l’ordre d’affichage : une seule source pour le rendu
+// (renderFriends) et pour la navigation au clavier (flèches / Origine / Fin).
+const SOC_TABS = [['feed','Fil'], ['friends','Amis'], ['notifs','Notifs'], ['me','Partage'], ['account','Compte']];
 function renderFriends(){
   const box = $('#friends-body');
+  // Le titre de la vue suit l’état : « Amis » n’a de sens qu’une fois connecté ; avant, c’est
+  // son compte que l’utilisateur vient créer ou retrouver.
+  const h = $('#view-friends h2.section'); if(h) h.textContent = social.me ? 'Amis' : 'Mon compte';
   if(!social.me){ renderAuth(box); return; }
+  const fab = $('#fab'); if(fab) fab.hidden = false;   // caché par renderAuth tant qu’on n’était pas connecté
   if(social.invite || loadPendingInvite()) processInvite(); // invitation (même persistée après un rechargement) traitée dès qu’on est connecté
   if(social.view==='profile' && social.profile){ renderProfile(box, social.profile); return; }
   box.innerHTML = `
@@ -5009,13 +5362,20 @@ function renderFriends(){
       <button class="btn small" id="soc-logout">Se déconnecter</button>
     </div>
     <div class="friends-sub" role="tablist" aria-label="Sections du réseau">
-      <button data-tab="feed" role="tab" aria-selected="${social.tab==='feed'}" class="${social.tab==='feed'?'on':''}">Fil</button>
-      <button data-tab="friends" role="tab" aria-selected="${social.tab==='friends'}" class="${social.tab==='friends'?'on':''}">Amis</button>
-      <button data-tab="notifs" role="tab" aria-selected="${social.tab==='notifs'}" aria-label="Notifications${social.unreadNotifs?` (${social.unreadNotifs} non lue${social.unreadNotifs>1?'s':''})`:''}" class="${social.tab==='notifs'?'on':''}" style="position:relative">${social.unreadNotifs?`<span class="sub-badge" aria-hidden="true">${social.unreadNotifs>9?'9+':social.unreadNotifs}</span>`:''}</button>
-      <button data-tab="me" role="tab" aria-selected="${social.tab==='me'}" class="${social.tab==='me'?'on':''}">Partage</button>
-      <button data-tab="account" role="tab" aria-selected="${social.tab==='account'}" class="${social.tab==='account'?'on':''}">Compte</button>
+      ${SOC_TABS.map(([k,lbl])=>{
+        const on = social.tab===k;
+        // Notifs porte l’icône cloche et, s’il y a lieu, la pastille de non-lus (décorative :
+        // le compte passe par le nom accessible, qui commence par le libellé visible pour que
+        // la commande vocale « Notifs » atteigne bien l’onglet).
+        const n = k==='notifs' ? (social.unreadNotifs||0) : 0;
+        const alabel = k==='notifs' && n ? ` aria-label="Notifs, ${n} notification${n>1?'s':''} non lue${n>1?'s':''}"` : '';
+        // tabindex roving : un seul onglet dans l’ordre de tabulation, les flèches font le reste.
+        return `<button type="button" data-tab="${k}" id="soc-tab-${k}" role="tab" aria-controls="soc-tab"
+          aria-selected="${on}" tabindex="${on?0:-1}"${alabel} class="${on?'on':''}"${k==='notifs'?' style="position:relative"':''}
+          >${k==='notifs'?ic('bell',15):''}${lbl}${n?`<span class="sub-badge" aria-hidden="true">${n>9?'9+':n}</span>`:''}</button>`;
+      }).join('')}
     </div>
-    <div id="soc-tab"></div>`;
+    <div id="soc-tab" role="tabpanel" aria-labelledby="soc-tab-${social.tab}"></div>`;
   const tosA = $('#tos-accept');
   if(tosA) tosA.addEventListener('click', async ()=>{
     if(tosA.disabled) return; tosA.disabled = true;
@@ -5040,7 +5400,10 @@ async function renderNotifications(){
     const d = await api('/api/notifications');
     let recos = []; try{ recos = (await api('/api/recos')).recos || []; }catch(_){ }
     // marquer lu dès l’ouverture (efface le compteur)
-    if(social.unreadNotifs){ api('/api/notifications/read', {method:'POST', body:{}}).catch(()=>{}); social.unreadNotifs = 0; refreshSocBadge(); const sb=$('#friends-body .sub-badge'); if(sb) sb.remove(); }
+    if(social.unreadNotifs){ api('/api/notifications/read', {method:'POST', body:{}}).catch(()=>{}); social.unreadNotifs = 0; refreshSocBadge();
+      const sb=$('#friends-body .sub-badge'); if(sb) sb.remove();
+      // le nom accessible annonçait « N non lues » : sans pastille, on repasse au libellé visible seul
+      const nb=$('#soc-tab-notifs'); if(nb) nb.removeAttribute('aria-label'); }
     if(!d.notifications.length && !recos.length){ el.innerHTML = `<p class="friends-empty">Aucune notification pour l’instant. Ajoute des amis et partage tes lectures !</p>`; return; }
     // résout le titre d’un livre à partir de sa clé (dans MA bibliothèque locale)
     const byKey = new Map(state.books.map(b=>[shelfKey(b), b]));
@@ -5377,6 +5740,9 @@ function renderAuth(box, mode, errMsg=''){
   // un visiteur sans jeton n’a par définition pas de compte : lui présenter l’inscription,
   // pas un mur de connexion (surtout s’il arrive par l’invitation d’un ami)
   if(!mode) mode = (socToken() && !social.invite && !loadPendingInvite()) ? 'login' : 'signup';
+  // renderAuth peut être appelé directement (page d’accueil, « Inviter un ami ») sans passer par
+  // renderFriends : le titre est donc aussi posé ici
+  const h = $('#view-friends h2.section'); if(h) h.textContent = social.me ? 'Amis' : 'Mon compte';
   box.innerHTML = `
     ${social.invite ? `<div class="invite-banner"><b>@${esc(social.invite)}</b> t’invite sur Tome — connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : ''}
     <div class="auth-card">
@@ -5426,6 +5792,11 @@ function renderAuth(box, mode, errMsg=''){
       // le code AVANT renderFriends : sinon la confirmation d’invitation (#invite) écraserait le
       // dialogue du code (une seule modale à la fois) — l’invitation s’ouvrira après « C’est noté »
       if(d.recoveryCode) await showRecoveryCode(d.recoveryCode, 'Bienvenue sur Tome ! Avant tout, note ton code de secours :');
+      // Un nouvel inscrit sans livre ni invitation n’a rien à voir dans un fil vide : on l’amène
+      // sur Aujourd’hui, où la carte « Bienvenue dans Tome / Ajouter mon premier livre » prend le
+      // relais. Avec une invitation, l’onglet Amis reste la bonne destination (processInvite).
+      const invite = social.invite || loadPendingInvite();
+      if(mode==='signup' && !invite && !state.books.some(b=>!isDemoBook(b))){ selectView('today'); return; }
       renderFriends();
     }catch(e){
       showErr(e.message==='offline' ? 'Serveur injoignable — réessaie plus tard.' : e.message);
@@ -5436,6 +5807,7 @@ function renderAuth(box, mode, errMsg=''){
   const legal = $('#friends-body [data-legal]'); if(legal) legal.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
   const cgu = $('#friends-body [data-cgu]'); if(cgu) cgu.addEventListener('click', ()=>openDialog({title:"Conditions d’utilisation", message:TERMS_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
   $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>a.dataset.auth==='recover' ? renderRecover(box) : renderAuth(box, a.dataset.auth)));
+  const fab = $('#fab'); if(fab) fab.hidden = true;   // pas de « + » flottant par-dessus le formulaire
 }
 // Récupération de compte par code de secours (« mot de passe oublié »)
 function renderRecover(box, errMsg=''){
@@ -5549,7 +5921,7 @@ Base légale : ton consentement (recueilli à l’inscription).
 Âge minimum : Tome s’adresse aux 15 ans et plus (âge du consentement numérique en France) ; en dessous, l’inscription nécessite l’accord d’un parent ou tuteur.
 Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi seul(e). Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Le partage social est réglé sur « Rien » par défaut. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis → Mon partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n’envoie jamais rien. Exception si tu l’actives toi-même : « Ma page publique » (Amis → Mon compte) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
 Pages publiques des livres : Tome tient un catalogue commun des livres partagés (titre, auteurs, couverture, résumé — des données de livre, jamais de personne). La page publique d’un livre affiche une note moyenne ANONYME calculée uniquement sur les membres ayant publié leur page, et seulement à partir de 3 notes (jamais une personne devinable) ; elle affiche les critiques signées de leur pseudo des seuls membres à page publique réglés sur « Tout ». Rendre ta page privée retire immédiatement tes notes et critiques de ces pages.
-Services tiers : Tome n’installe aucun traceur, mais pour afficher les couvertures et proposer des recherches de livres, ton navigateur contacte directement Google Books (googleapis.com, books.google.com) et Open Library (openlibrary.org, covers.openlibrary.org) — qui reçoivent alors ta requête ou l’identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n’a lieu que quand tu la déclenches ; les « Idées du jour » ne s’activent qu’avec ton accord explicite.
+Services tiers : Tome n’installe aucun traceur. Ta recherche de livres transite par le serveur de Tome, qui interroge Google Books à ta place : le texte cherché sert à construire cet appel puis disparaît — il n’est ni journalisé, ni conservé, ni rattaché à un compte, et Google ne voit ni ton adresse IP ni ton navigateur. La réponse (des données de livre, jamais de personne) est mise en cache 24 heures pour tout le monde. En revanche, pour interroger Open Library et pour afficher les couvertures, ton navigateur contacte directement openlibrary.org, covers.openlibrary.org et books.google.com — qui reçoivent alors ta requête ou l’identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n’a lieu que quand tu la déclenches ; les « Idées du jour » ne s’activent qu’avec ton accord explicite.
 Cookies et traceurs : Tome n’utilise aucun cookie publicitaire ni de mesure d’audience — uniquement le stockage strictement nécessaire au service (ta bibliothèque sur ton appareil, ta session). Ces usages sont exemptés de consentement, c’est pourquoi il n’y a pas de bannière cookies.
 Hébergement et transferts : Cloudflare, Inc. (101 Townsend St, San Francisco, États-Unis) ; la base de données est hébergée en Europe de l’Ouest. Les flux transitant hors de l’UE sont encadrés par les garanties reconnues (certification Data Privacy Framework et clauses contractuelles types).
 Liens d’achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d’affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d’Amazon qui s’appliquent.
@@ -5820,8 +6192,19 @@ async function renderMyShare(){
 async function openProfile(username){
   try{
     const d = await api('/api/users/'+encodeURIComponent(username));
+    // Le profil est un écran à part entière : sa propre entrée d’historique (marqueur tomeProfile,
+    // distinct de tomeOverlay et tomeTab) pour que Retour ramène au sous-onglet d’où l’on vient
+    // — le fil, les notifications, la recherche — et non à la vue précédente.
+    social.profileFrom = social.tab;
+    if(!(history.state||{}).tomeProfile){ try{ history.pushState({tomeProfile:1}, ''); }catch(_){ } }
     social.profile = d; social.view = 'profile'; renderFriends();
   }catch(e){ toast(e.message==='offline'?'Serveur injoignable':e.message); }
+}
+// Quitte le profil : on repasse par l’historique quand l’entrée existe (le popstate remet le
+// sous-onglet), sinon on revient à la main — pushState a pu être refusé (quota Safari).
+function leaveProfile(){
+  if((history.state||{}).tomeProfile){ try{ history.back(); return; }catch(_){ } }
+  social.view=null; social.profile=null; social.tab=social.profileFrom||'friends'; renderFriends();
 }
 function renderProfile(box, d){
   const myBooks = shareableBooks();
@@ -5846,7 +6229,9 @@ function renderProfile(box, d){
         <h3 style="font-size:20px">${esc(d.user.displayName)}</h3>
         <div class="muted" style="color:var(--muted)">@${esc(d.user.username)}</div>
       </div>
-      ${d.friendState!=='self' ? `<button class="btn small" data-block="${esc(d.user.username)}" title="Bloquer"></button>` : ''}
+      ${d.friendState!=='self' ? (d.iBlocked
+        ? `<button type="button" class="btn small" data-unblock="${esc(d.user.username)}">Débloquer</button>`
+        : `<button type="button" class="btn small danger" data-block="${esc(d.user.username)}" aria-label="Bloquer ${esc(d.user.displayName)}">Bloquer</button>`) : ''}
     </div>
     ${d.user.bio ? `<p style="color:var(--muted);font-size:14px;margin-bottom:14px">${esc(d.user.bio)}</p>` : ''}
     ${affinity!=null ? `<div class="affinity-ring"><span class="pct">${affinity}%</span><div><b>d’affinité de goût</b><div class="muted" style="color:var(--muted);font-size:12.5px">sur ${rated.length} livre(s) noté(s) tous les deux</div></div></div>` : ''}
@@ -5861,14 +6246,23 @@ function renderProfile(box, d){
         </div><div class="under">${b.rating?`<span class="stars">${starsTxt(b.rating)}</span>`:''}</div></div>`).join('')}</div>`
       : `<p class="friends-empty">${esc(d.user.displayName)} ne partage rien pour le moment.</p>`)
     : (d.iBlocked ? `<p class="friends-empty">Tu as bloqué cet utilisateur.</p>` : `<p class="friends-empty">Vous n’êtes pas encore amis — sa bibliothèque est privée.</p>`)}`;
-  $('#prof-back').addEventListener('click', ()=>{ social.view=null; social.profile=null; social.tab='friends'; renderFriends(); });
+  $('#prof-back').addEventListener('click', leaveProfile);
   const blockBtn = box.querySelector('[data-block]');
   if(blockBtn) blockBtn.addEventListener('click', async ()=>{
     if(blockBtn.disabled) return;
     if(!await uiConfirm({title:'Bloquer '+d.user.displayName+' ?', message:'Vous ne serez plus amis et il ne pourra plus t’ajouter.', okLabel:'Bloquer', danger:true})) return;
     blockBtn.disabled = true;
-    try{ await api('/api/block', {method:'POST', body:{username:d.user.username}}); toast('Utilisateur bloqué'); social.view=null; social.profile=null; social.tab='friends'; renderFriends(); }
+    try{ await api('/api/block', {method:'POST', body:{username:d.user.username}}); toast('Utilisateur bloqué'); social.profileFrom='friends'; leaveProfile(); }
     catch(e){ blockBtn.disabled = false; toast(e.message); }
+  });
+  // Le serveur ne signale le blocage que dans un sens (celui qu’on a posé) : on propose donc
+  // le déblocage ici, sans obliger à passer par Compte › Utilisateurs bloqués.
+  const unblockBtn = box.querySelector('[data-unblock]');
+  if(unblockBtn) unblockBtn.addEventListener('click', async ()=>{
+    if(unblockBtn.disabled) return;
+    unblockBtn.disabled = true;
+    try{ await api('/api/unblock', {method:'POST', body:{username:d.user.username}}); toast('Utilisateur débloqué ✓'); openProfile(d.user.username); }
+    catch(e){ unblockBtn.disabled = false; toast(e.message==='offline'?'Serveur injoignable':e.message); }
   });
 }
 // écouteur délégué unique pour toute la vue Amis
@@ -5888,6 +6282,21 @@ $('#friends-body').addEventListener('click', async e => {
   const prof = e.target.closest('[data-profile]');
   if(prof){ openProfile(prof.dataset.profile); return; }
 });
+// Motif ARIA Tabs : dans une barre d’onglets, les flèches changent d’onglet et la tabulation
+// sort de la barre. Sans ça, les cinq boutons obligent à cinq Tab pour atteindre le contenu.
+$('#friends-body').addEventListener('keydown', e => {
+  const sub = e.target.closest && e.target.closest('.friends-sub button');
+  if(!sub) return;
+  const step = {ArrowLeft:-1, ArrowRight:1, Home:'first', End:'last'}[e.key];
+  if(step===undefined) return;
+  e.preventDefault();
+  const i = SOC_TABS.findIndex(t=>t[0]===sub.dataset.tab); if(i<0) return;
+  const j = step==='first' ? 0 : step==='last' ? SOC_TABS.length-1 : (i+step+SOC_TABS.length) % SOC_TABS.length;
+  if(j===i) return;
+  social.tab = SOC_TABS[j][0]; renderFriends();
+  // renderFriends a reconstruit la barre : on retrouve le bouton par son id, pas par la référence
+  const el = $('#soc-tab-'+social.tab); if(el) el.focus();
+});
 
 /* =============== Restauration des préférences d’affichage =============== */
 (function restoreUI(){
@@ -5902,6 +6311,7 @@ $('#friends-body').addEventListener('click', async e => {
     if(['wishlist','reading','read'].includes(saved.defaultStatus)) ui.defaultStatus = saved.defaultStatus;
     if(['ask','on'].includes(saved.ideas)) ui.ideas = saved.ideas;
     if(['count','pages'].includes(saved.typeMetric)) ui.typeMetric = saved.typeMetric;
+    if(['auto','all','fr','en','ru','es','de','it','ja'].includes(saved.searchLang)) ui.searchLang = saved.searchLang;
     if(['grid','list'].includes(saved.libLayout)) ui.libLayout = saved.libLayout;
     if(['today','library','journal','lists','stats','friends'].includes(saved.view)) ui.view = saved.view;
   }
@@ -5918,6 +6328,7 @@ const _initHash = location.hash;
 const _hash = _initHash.slice(1);
 if(['today','library','journal','lists','stats','friends'].includes(_hash)) ui.view = _hash;
 selectView(ui.view);
+_navReady = true;   // à partir d’ici, changer d’onglet pousse une entrée d’historique (cf. selectView)
 refreshResume();
 const _origRender = render;
 render = function(){ _origRender(); refreshResume(); updateStreakPill(); };

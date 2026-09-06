@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://www.googleapis.com https://openlibrary.org http://localhost:8787; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' https://openlibrary.org http://localhost:8787; worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#15120d" id="meta-theme">
@@ -312,13 +312,19 @@
       <button class="x" data-close aria-label="Fermer">✕</button>
     </div>
     <div class="modal-body">
-      <input type="search" id="search-q" placeholder="Titre, auteur, série, ISBN… (ex : One Piece 42, Camus)" autocomplete="off" aria-label="Rechercher un ouvrage">
+      <!-- enterkeyhint/inputmode : la touche « Entrée » du clavier mobile affiche « Rechercher ».
+           Placeholder court : à 375 px il était tronqué, et l’exemple « One Piece 42 » figure
+           déjà dans l’astuce affichée sous le champ (SEARCH_HINT). -->
+      <input type="search" id="search-q" placeholder="Titre, auteur, ISBN…" enterkeyhint="search" inputmode="search" autocomplete="off" aria-label="Rechercher un ouvrage">
       <div id="scan-box" hidden>
         <video id="scan-video" playsinline muted autoplay></video>
         <div class="scan-hint">Vise le code-barres (ISBN) au dos du livre</div>
         <button class="btn small" id="scan-stop">Annuler le scan</button>
       </div>
-      <div class="search-results" id="search-results" role="status" aria-live="polite"></div>
+      <!-- La liste elle-même n’est plus une région live : chaque frappe relisait les 20 lignes
+           (titre, auteurs, année, boutons). Seul ce résumé d’une phrase est annoncé. -->
+      <div class="search-results" id="search-results"></div>
+      <p id="search-live" class="sr-only" role="status" aria-live="polite"></p>
     </div>
   </div>
 </div>
@@ -328,8 +334,12 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-title">
     <div class="modal-head"><h3 id="edit-title">Nouvelle lecture</h3><button class="x" data-close aria-label="Fermer">✕</button></div>
     <div class="modal-body">
+      <!-- Un vrai <form> : la touche Entrée depuis n’importe quel champ enregistre (submit),
+           au lieu de ne rien faire. novalidate : les erreurs sont rendues par fieldError,
+           sous le champ concerné et en français, pas par les bulles du navigateur. -->
+      <form id="edit-form" novalidate>
       <div class="frm">
-        <div class="full"><label for="f-title">Titre *</label><input id="f-title"></div>
+        <div class="full"><label for="f-title">Titre <span aria-hidden="true">*</span><span class="sr-only">(obligatoire)</span></label><input id="f-title" required aria-required="true"></div>
         <div class="full"><label for="f-authors">Auteur·e·s (séparés par des virgules)</label><input id="f-authors"></div>
         <div><label for="f-type">Type</label>
           <select id="f-type">
@@ -346,19 +356,28 @@
             <option value="abandoned">Abandonné</option>
           </select>
         </div>
-        <div class="full"><label for="f-series">Série (optionnel)</label><input id="f-series" placeholder="ex : Berserk"></div>
-        <div><label for="f-volume">Tome n°</label><input id="f-volume" type="number" min="0"></div>
-        <div><label for="f-stotal">Tomes parus (série)</label><input id="f-stotal" type="number" min="1" placeholder="ex : 41"></div>
-        <div><label for="f-year">Année de parution</label><input id="f-year" type="number"></div>
-        <div><label for="f-pages">Pages</label><input id="f-pages" type="number" min="0"></div>
-        <div class="full"><label for="f-cover">Couverture (URL d’image)</label><input id="f-cover" placeholder="https://…"></div>
-        <div class="full"><label for="f-syn">Synopsis (optionnel)</label><textarea id="f-syn" rows="2" placeholder="Résumé de l’ouvrage — rempli automatiquement quand la recherche le connaît"></textarea></div>
-        <div class="full"><label for="f-tags">Tags (séparés par des virgules)</label><input id="f-tags" placeholder="ex : SF, coup de cœur, emprunté"></div>
+        <!-- Champs secondaires repliés : un ajout manuel à froid ne demande que titre, auteur,
+             type et statut. Ouverts d’office en modification ou quand la recherche les a remplis
+             (cf. openEdit) — et par fieldError quand l’erreur porte sur un champ replié. -->
+        <details class="frm-more full">
+          <summary>Plus de détails (série, année, couverture, synopsis…)</summary>
+          <div class="frm-more-grid">
+            <div class="full"><label for="f-series">Série (optionnel)</label><input id="f-series" placeholder="ex : Berserk"></div>
+            <div><label for="f-volume">Tome n°</label><input id="f-volume" type="number" min="0"></div>
+            <div><label for="f-stotal">Tomes parus (série)</label><input id="f-stotal" type="number" min="1" placeholder="ex : 41"></div>
+            <div><label for="f-year">Année de parution</label><input id="f-year" type="number" min="1000"></div>
+            <div><label for="f-pages">Pages</label><input id="f-pages" type="number" min="0"></div>
+            <div class="full"><label for="f-cover">Couverture (URL d’image)</label><input id="f-cover" placeholder="https://…"></div>
+            <div class="full"><label for="f-syn">Synopsis (optionnel)</label><textarea id="f-syn" rows="2" placeholder="Résumé de l’ouvrage — rempli automatiquement quand la recherche le connaît"></textarea></div>
+            <div class="full"><label for="f-tags">Tags (séparés par des virgules)</label><input id="f-tags" placeholder="ex : SF, coup de cœur, emprunté"></div>
+          </div>
+        </details>
       </div>
       <div class="frm-actions">
-        <button class="btn" data-close>Annuler</button>
-        <button class="btn primary" id="btn-save-edit">Enregistrer</button>
+        <button type="button" class="btn" data-close>Annuler</button>
+        <button type="submit" class="btn primary" id="btn-save-edit">Enregistrer</button>
       </div>
+      </form>
     </div>
   </div>
 </div>
