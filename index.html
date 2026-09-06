@@ -79,7 +79,7 @@
         <button class="btn primary lp-big" data-lp="signup">Créer mon compte — c’est gratuit</button>
         <button class="lp-link lp-try" data-lp="try">Essayer d’abord →</button>
       </div>
-      <div class="lp-trust">Gratuit · sans publicité · tes données t’appartiennent — <button type="button" class="linkish" data-lp="pledge">notre promesse</button></div>
+      <div class="lp-trust">Gratuit · sans pub · sans email · import Goodreads, Babelio et StoryGraph — <button type="button" class="linkish" data-lp="pledge">notre promesse</button></div>
     </div>
     <div class="lp-hero-visual" aria-hidden="true">
       <div class="lp-shelf">
@@ -100,6 +100,8 @@
       <li><button type="button" class="lp-toc-line" data-lp="try"><span class="lp-toc-t">Noter &amp; critiquer</span><span class="lp-toc-dots" aria-hidden="true"></span><span class="lp-toc-d">demi-étoiles, ambiances, citations — ton avis, à ta façon</span></button></li>
       <li><button type="button" class="lp-toc-line" data-lp="try"><span class="lp-toc-t">Suivre tes lectures</span><span class="lp-toc-dots" aria-hidden="true"></span><span class="lp-toc-d">progression, objectif annuel, rétro de fin d’année</span></button></li>
       <li><button type="button" class="lp-toc-line" data-lp="try"><span class="lp-toc-t">Lire entre amis</span><span class="lp-toc-dots" aria-hidden="true"></span><span class="lp-toc-d">réactions, réponses — sans pub, sans spoilers, sans classement</span></button></li>
+      <!-- Le lecteur qui vient d’ailleurs a déjà une bibliothèque : lui dire ici qu’il peut l’emporter. -->
+      <li><button type="button" class="lp-toc-line" data-lp="import"><span class="lp-toc-t">Importer</span><span class="lp-toc-dots" aria-hidden="true"></span><span class="lp-toc-d">ta bibliothèque Goodreads, Babelio ou StoryGraph, en un fichier</span></button></li>
     </ol>
   </section>
 
@@ -146,6 +148,11 @@
     </nav>
     <div class="header-actions">
       <span id="offline-badge" hidden>Hors ligne</span>
+      <!-- État de la sauvegarde sur le compte. Sans lui la synchro est totalement invisible : un
+           échec passe inaperçu et l’utilisateur croit sa bibliothèque à l’abri. Un <button> plutôt
+           qu’un <span role=status> parce qu’en cas d’échec il devient actionnable (« Exporter ») et
+           doit rester atteignable au clavier ; aria-live="polite" fait le travail de role="status". -->
+      <button type="button" id="lib-status" aria-live="polite" hidden disabled></button>
       <button class="btn icon" id="btn-streak" hidden><span aria-hidden="true">✦</span><span id="streak-n"></span></button>
       <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
       <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg></button>
@@ -299,7 +306,10 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="search-title">
     <div class="modal-head">
       <h3 id="search-title">Ajouter</h3>
-      <div class="seg-mini" id="search-status" role="group" aria-label="Statut par défaut">
+      <!-- « Ajouter en » : sans ce mot, le segment ressemblait à un filtre de résultats. Le
+           lecteur d'écran l'entend par l'aria-label du groupe, d'où l'aria-hidden ici. -->
+      <span class="seg-lbl" aria-hidden="true">Ajouter en</span>
+      <div class="seg-mini" id="search-status" role="group" aria-label="Ajouter en">
         <button data-s="wishlist" class="on" aria-pressed="true">À lire</button>
         <button data-s="reading" aria-pressed="false">En cours</button>
         <button data-s="read" aria-pressed="false">Lu</button>
@@ -385,7 +395,7 @@
 <!-- ======== MODAL DÉTAIL ======== -->
 <div class="overlay" id="ov-detail">
   <div class="modal" style="max-width:680px" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-    <div class="modal-head"><h3 id="detail-head">Détail</h3><button class="x" data-close aria-label="Fermer">✕</button></div>
+    <div class="modal-head"><h3 id="detail-head">Détail</h3><button class="x" id="d-edit-top" type="button" aria-label="Modifier ce livre" title="Modifier">✎</button><button class="x" data-close aria-label="Fermer">✕</button></div>
     <div class="modal-body"><div class="detail" id="detail-body"></div></div>
   </div>
 </div>
@@ -464,12 +474,20 @@
 <!-- ======== BANDEAU ÉCHEC DE SAUVEGARDE (stockage plein) ======== -->
 <div id="save-warning" role="alert" hidden data-modal-exempt><span>Sauvegarde impossible — stockage plein. Tes dernières modifications risquent d’être perdues.</span><button class="btn small primary" id="save-warning-export">Exporter maintenant</button></div>
 
+<!-- ======== BANDEAU DONNÉES ILLISIBLES (sauvegarde corrompue au chargement) ========
+     Un toast de 2,4 s ne laisse ni le temps de lire ni celui d’agir : le bandeau reste
+     jusqu’à ce qu’on le ferme ou qu’une restauration ait abouti. -->
+<div id="data-warning" role="alert" hidden data-modal-exempt><span>Ta bibliothèque n’a pas pu être lue — une copie de secours a été conservée.</span><button type="button" class="btn small primary" id="data-warning-restore">Récupérer</button><button type="button" class="x" id="data-warning-close" aria-label="Fermer l’alerte">✕</button></div>
+
 <!-- ======== MODALE GÉNÉRIQUE (confirmation / saisie / choix) ======== -->
 <div class="dialog-ov" id="ov-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
   <div class="modal" style="max-width:440px">
     <div class="modal-head"><h3 id="dialog-title"></h3></div>
     <div class="modal-body">
       <p id="dialog-msg"></p>
+      <!-- Code à recopier (code de secours) : hors du message pour rester la chose la plus grande
+           du dialogue, en Plex Mono, sélectionnable d’un seul geste. Rempli par openDialog({code}). -->
+      <code id="dialog-code" class="dlg-code" hidden></code>
       <input id="dialog-input" hidden aria-labelledby="dialog-title">
       <textarea id="dialog-textarea" rows="6" hidden aria-labelledby="dialog-title"></textarea>
       <div id="dialog-actions"></div>

@@ -17,7 +17,9 @@
   --bg:#15120d; --bg2:#1a160f; --surface:#1f1a12; --surface2:#271f14;
   --border:#322a1b; --border-hover:#4a3d27; --control-border:#776b52; --text:#ece3d1; --muted:#a2977e; --faint:#91866f;
   --green:#cba351; --green-strong:#dcb562; --on-green:#1a1408; --blue:#6fb6d8; --orange:#e0913f; --pink:#d67a94;  /* accent = dorure */
-  --red:#e06a5f; --star:#cba351; --star-off:#3c3222;
+  /* étoile vide : #3c3222 se noyait dans le fond, un livre non noté n’affichait rien à toucher.
+     #7c6a47 tient le 3:1 de la 1.4.11 sur --surface tout en restant nettement en retrait de --star. */
+  --red:#e06a5f; --star:#cba351; --star-off:#7c6a47;
   --accent-soft:color-mix(in srgb, var(--green) 15%, transparent);
   --header-bg:rgba(21,18,13,.9); --chip-bg:rgba(10,8,4,.72); --chip-text:#ece3d1;
   --overlay-dim:rgba(8,6,3,.74);
@@ -40,7 +42,7 @@
      tampons et aux alertes. Volontairement loin du crème/terracotta devenu le défaut de tout le monde. */
   --bg:#f7f6f2; --bg2:#fbfaf7; --surface:#ffffff; --surface2:#ecebe5;
   --border:#d9d7cf; --border-hover:#b9b6ab; --control-border:#7a776e; --text:#141311; --muted:#5b5952; --faint:#5b5952;
-  --green:#2b4c8c; --green-strong:#1f3a6e; --on-green:#ffffff; --star:#141311; --star-off:#d6d4cb;
+  --green:#2b4c8c; --green-strong:#1f3a6e; --on-green:#ffffff; --star:#141311; --star-off:#8a877e;  /* idem en clair : #d6d4cb était invisible sur le blanc de la fiche */
   --red:#b8322b; --orange:#8a5a12;
   --blue:#2b4c8c; --pink:#8c2b5a;
   --grad-green:linear-gradient(135deg,#2f5397,#1f3a6e);
@@ -354,8 +356,25 @@ body.selecting .card .qk{display:none}
 #save-warning{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:220; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--red) 55%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:var(--fs-base); max-width:calc(100vw - 28px)}
 #save-warning:not([hidden]){display:flex}
 #save-warning span{color:var(--text)}
-/* Badge hors-ligne */
-#offline-badge{color:var(--orange); font-size:var(--fs-sm); font-weight:700; align-self:center; white-space:nowrap}
+/* Bandeau « données illisibles » — même famille que #save-warning, mais en orange : la situation
+   est récupérable (une copie de secours existe), alors que le stockage plein est bloquant. */
+/* centré par left/right + margin auto plutôt que par translateX(-50%) : avec left:50%, la largeur
+   disponible tombe à la moitié de l'écran et le texte se replie en colonne sur mobile. */
+#data-warning{position:fixed; left:14px; right:14px; margin-inline:auto; width:fit-content; bottom:calc(20px + env(safe-area-inset-bottom)); z-index:219; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--orange) 55%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:var(--fs-base); max-width:calc(100vw - 28px)}
+#data-warning:not([hidden]){display:flex}
+#data-warning span{color:var(--text)}
+#data-warning .x{color:var(--muted); font-size:var(--fs-lg); line-height:1; padding:4px 8px; border-radius:6px; min-height:24px; margin-left:auto}
+#data-warning .x:hover{color:var(--text); background:var(--surface)}
+/* Badge hors-ligne et état de la sauvegarde sur le compte : même gabarit dans l'en-tête */
+#offline-badge,#lib-status{font-size:var(--fs-sm); font-weight:700; align-self:center; white-space:nowrap}
+#offline-badge{color:var(--orange)}
+/* Le libellé reste court pour tenir dans l'en-tête d'un téléphone à côté du « + » : l'explication
+   complète est portée par le title (et par le toast au clic quand il y a quelque chose à faire).
+   Neutre par défaut — seul un problème mérite une couleur d'alerte. */
+#lib-status{color:var(--muted); padding:0}
+#lib-status:disabled{cursor:default}
+#lib-status[data-s=error],#lib-status[data-s=tooLarge]{color:var(--red)}
+#lib-status[data-s=offline]{color:var(--orange)}
 /* Lightbox couverture */
 #ov-cover{background:rgba(5,8,11,.9); align-items:center; padding:20px}
 #ov-cover img{max-width:92vw; max-height:92vh; border-radius:var(--r-sm); box-shadow:var(--sh-3); animation:pop .16s ease}
@@ -511,6 +530,12 @@ body.selecting .card .qk{display:none}
 .dialog-ov .modal{animation:pop .14s ease}
 #dialog-msg{color:var(--muted); font-size:var(--fs-base); line-height:1.55; white-space:pre-line}
 #dialog-msg:empty{display:none}
+/* Code de secours : plus grand que le titre du dialogue (fs-2xl > fs-xl du .modal-head h3), chiffres
+   en Plex Mono ; user-select:all pour le recopier d’un geste si le presse-papiers est refusé.
+   :not([hidden]) — sinon display:block écraserait l’attribut hidden (styles auteur > UA). */
+.dlg-code:not([hidden]){display:block; font-family:var(--font-mono); font-size:var(--fs-2xl); letter-spacing:.06em;
+  user-select:all; -webkit-user-select:all; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-sm);
+  padding:12px 14px; margin-top:12px; text-align:center; overflow-wrap:anywhere; line-height:1.45; color:var(--text)}
 #dialog-input:not([hidden]),#dialog-textarea:not([hidden]){display:block; margin-top:14px}
 #dialog-actions{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:20px}
 #dialog-actions .btn{justify-content:center}
@@ -532,6 +557,11 @@ body.selecting .card .qk{display:none}
 .sr .sri span .sr-lang{display:inline; font-family:var(--font-mono); font-size:var(--fs-xs); letter-spacing:.08em; color:var(--muted)}
 .sr .add{flex-shrink:0}
 .sr.added{opacity:.6}
+/* Déjà dans la bibliothèque : la ligne s'efface d'un ton et le dit dans le titre, au lieu de
+   laisser ajouter un second exemplaire du même livre. Son bouton ouvre la fiche existante. */
+.sr.owned{opacity:.75}
+.sr.owned .sri b::after{content:' · déjà là'; color:var(--muted); font-weight:400}
+.sr .sr-owned{flex-shrink:0}
 .search-hint{color:var(--faint); font-size:var(--fs-md); text-align:center; padding:18px 0}
 /* Skeleton de recherche */
 .sk{pointer-events:none}
@@ -545,12 +575,18 @@ body.selecting .card .qk{display:none}
   .sr .sri{flex:1 1 calc(100% - 56px)}
   .sr .sri b{white-space:normal; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical}
   .sr .add-edit, .sr .add{flex:1 1 45%; justify-content:center; margin-top:6px}
+  .sr .sr-owned{flex:1 1 100%; justify-content:center; margin-top:6px}
 }
 /* Segmented control statut par défaut (recherche) */
 .seg-mini{display:flex; flex-shrink:0; border:1px solid var(--control-border); border-radius:var(--r-sm); overflow:hidden; margin-left:auto}
 .seg-mini button{padding:5px 9px; font-size:var(--fs-sm); font-weight:600; color:var(--muted); border-right:1px solid var(--border); white-space:nowrap}
 .seg-mini button:last-child{border-right:none}
 .seg-mini button.on{background:var(--accent-soft); color:var(--green)}
+/* « Ajouter en » : le segment sans étiquette passait pour un filtre de résultats. C'est lui qui
+   pousse l'espace libre à gauche ; le segment se contente alors de le suivre. */
+.seg-lbl{margin-left:auto; align-self:center; font-family:var(--font-mono); font-size:var(--fs-xs);
+  letter-spacing:.08em; text-transform:uppercase; color:var(--muted); white-space:nowrap}
+.seg-lbl + .seg-mini{margin-left:0}
 
 /* Edit form */
 .frm{display:grid; grid-template-columns:1fr 1fr; gap:12px}
@@ -647,16 +683,27 @@ body.selecting .card .qk{display:none}
 .clear-rate:hover{color:var(--text)}
 .dblock{margin-bottom:14px}
 .dblock label{display:block; font-size:var(--fs-sm); font-weight:700; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.06em}
-.prog-row{display:flex; align-items:center; gap:10px}
+/* les raccourcis ＋10/＋25 passent à la ligne sur mobile plutôt que d’écraser la barre */
+.prog-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 .prog-row input{width:84px}
+.prog-row .btn{flex:0 0 auto}
 .prog-row .lbl2{font-size:var(--fs-md); color:var(--muted); white-space:nowrap}
-.prog-row .track{flex:1; height:8px; background:var(--surface2); border-radius:4px; overflow:hidden}
+.prog-row .track{flex:1 1 80px; height:8px; background:var(--surface2); border-radius:4px; overflow:hidden}
 .prog-row .fill{height:100%; background:var(--green)}
 .prog-row b{font-size:var(--fs-md)}
 .readings{display:flex; flex-direction:column; gap:6px; margin-bottom:8px}
 .reading-row{display:flex; align-items:center; gap:10px; font-size:var(--fs-base); color:var(--muted); flex-wrap:wrap}
 .reading-row .del{color:var(--faint); padding:0 6px}
 .reading-row .del:hover{color:var(--red)}
+/* Date d’une lecture : modifiable sur place. Dessinée en filet pointillé plutôt qu’en champ-boîte
+   (charte : des filets, pas des cartes) tout en disant « ça se corrige ». Pas de font-size ici :
+   le champ hérite des 17 px du mobile, qui évitent le rezoom automatique d’iOS. */
+.rdate-wrap{display:inline-flex; align-items:center; gap:6px; cursor:pointer}
+.rdate{font-family:var(--font-mono); color:var(--text); background:none; border:0; border-bottom:1px dashed var(--control-border); border-radius:0; width:auto; padding:3px 2px; min-height:32px}
+.rdate:hover{border-bottom-color:var(--text)}
+.rdate:focus{border-bottom-color:var(--green)}
+/* un seul calendrier par ligne : le nôtre, qui suit le thème (l’indicateur natif reste noir en sombre) */
+.rdate::-webkit-calendar-picker-indicator{display:none}
 .rstars{display:inline-flex; cursor:pointer; font-size:var(--fs-lg); user-select:none}
 .rstars .rst{color:var(--star-off); padding:0 .5px}
 .rstars .rst.full{color:var(--star)}
@@ -666,19 +713,29 @@ body.selecting .card .qk{display:none}
 .chips-line{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
 .pill{font-size:var(--fs-sm); background:var(--surface2); border-radius:999px; padding:3px 10px; color:var(--muted); display:inline-flex; align-items:center; gap:5px}
 .pill button{color:var(--faint)} .pill button:hover{color:var(--red)}
+/* Liens marchands : tous neutres, y compris « Acheter ». Le jaune Amazon en faisait le bouton le
+   plus voyant de la fiche, avant la note — et il jurait avec la charte (aucune autre couleur de
+   marque n’entre dans Tome). */
 .buy-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:14px 0 2px}
 .btn.buy{font-size:var(--fs-md); text-decoration:none; background:var(--surface); border:1px solid var(--border)}
 .btn.buy:hover{background:var(--surface2); border-color:var(--border-hover)}
-.btn.buy.amz{background:#ffb200; border-color:#e79a00; color:#1a1200; font-weight:700}
-.btn.buy.amz:hover{filter:brightness(1.05); border-color:#e79a00}
 .buy-note{font-size:var(--fs-xs); color:var(--faint); cursor:help; border-bottom:1px dotted var(--faint)}
+/* Livre pas encore lu : une ligne au filet à la place des quatre blocs « après lecture » */
+.wish-cta{border-top:1px solid var(--border); padding-top:12px}
+.wish-cta .btn{width:100%; justify-content:center}
+/* Ma critique : la boîte suit le texte au lieu de le regarder par une fente de trois lignes.
+   min-height en lh pour rester lisible à vide, max-height pour garder les boutons atteignables. */
+#d-review{field-sizing:content; min-height:5lh; max-height:60vh}
 .detail-footer{display:flex; gap:10px; margin-top:18px; padding-top:14px; border-top:1px solid var(--border); flex-wrap:wrap}
 .detail-footer .spacer{flex:1}
 .list-add{display:flex; gap:8px}
 .list-add select{flex:1}
 
 /* Mode étude : fiche guidée + cartes mémoire */
-.study-entry{display:flex; align-items:center; gap:12px; padding:12px 14px; margin-bottom:14px; border:1px solid color-mix(in srgb,var(--green) 34%,var(--border)); border-radius:var(--r-md); background:linear-gradient(135deg,var(--accent-soft),var(--bg2))}
+/* Entrée du mode étude : bloc neutre. En dégradé vert, c’était l’élément le plus voyant de la
+   fiche alors que l’immense majorité des lectures est du loisir — l’alerte à réviser (.study-alert)
+   garde l’accent, elle. */
+.study-entry{display:flex; align-items:center; gap:12px; padding:12px 14px; margin-bottom:14px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg2)}
 .study-entry .study-copy{flex:1; min-width:0}
 .study-entry b{display:block; font-size:var(--fs-base)}
 .study-entry span{display:block; color:var(--muted); font-size:var(--fs-md); margin-top:2px}
@@ -810,12 +867,15 @@ body.selecting .card .qk{display:none}
 .delta{font-size:var(--fs-sm); font-weight:700; margin-left:8px}
 .delta.ahead{color:var(--green)} .delta.behind{color:var(--muted)}
 .rating-histo .bar.on.month{background:var(--green)}
-/* Bandeau données d'exemple */
+/* Bandeau données d'exemple — en tête de #main-content, donc présent dans toutes les vues */
 .demo-banner{
-  display:flex; align-items:center; gap:12px; background:var(--accent-soft);
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:var(--accent-soft);
   border:1px solid color-mix(in srgb, var(--green) 30%, var(--border)); border-radius:var(--r-md);
   padding:10px 14px; margin-bottom:16px; font-size:var(--fs-base);
 }
+/* « Retirer les 8 exemples » est plus long que l'ancien « Tout effacer » : sous ~420 px le
+   bouton passe à la ligne plutôt que d'écraser la phrase. */
+#demo-banner > span{flex:1 1 240px}
 .demo-banner .db-x{margin-left:auto}
 /* FAB mobile */
 .fab{display:none}
@@ -827,6 +887,33 @@ body.selecting .card .qk{display:none}
 .auth-card .switch{margin-top:14px; font-size:var(--fs-base); color:var(--muted); text-align:center}
 .auth-card .switch a{color:var(--green); font-weight:600; cursor:pointer}
 .auth-err{color:var(--red); font-size:var(--fs-md); margin-top:10px; min-height:16px}
+/* Les libellés de .auth-card sont en petites capitales : la mention « (optionnel) » et l'aide
+   sous le champ reviennent à une casse et une graisse normales pour rester des phrases. */
+.auth-card .lbl-opt{text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted)}
+.field-help{display:block; margin:5px 0 2px; font-size:var(--fs-sm); color:var(--muted); line-height:1.4}
+/* Le partage se règle après l'inscription (Amis › Partage) : ce rappel remplace le choix à trois
+   branches qui allongeait le formulaire d'un écran entier. */
+.auth-card p.sub.auth-note{margin:12px 0 0; font-size:var(--fs-md)}
+/* Afficher / masquer le mot de passe : le bouton se pose DANS le champ, avec une cible de 44 px
+   (doigt) même si l'input n'en fait que ~40. Le padding droit réserve la place de « Masquer ».
+   Sélecteur doublé là aussi : .linkish est déclaré plus bas dans la feuille et gagnerait à
+   spécificité égale. */
+.pw-wrap{position:relative}
+/* La marge basse des champs de l'écran Compte (.acct input) entrerait dans la hauteur du
+   conteneur et décalerait le bouton vers le bas : on la déplace sur le conteneur lui-même.
+   Sélecteur avec le type d'élément pour passer devant « .acct input », déclaré plus loin. */
+div.pw-wrap > input{padding-right:88px; margin-bottom:0}
+.acct .pw-wrap{margin-bottom:8px}
+.pw-wrap .pw-eye{position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  display:flex; align-items:center; min-height:44px; padding:0 10px; font-size:var(--fs-md)}
+/* Case de consentement : 24 px de côté et une rangée de 44 px, sinon la cible est sous le seuil
+   tactile. Sélecteur doublé (.auth-card .consent-row) parce que .auth-card label impose des
+   petites capitales grasses avec une spécificité supérieure — c'est ce que les styles en ligne
+   contournaient jusqu'ici. */
+.auth-card .consent-row{display:flex; gap:10px; align-items:center; min-height:44px; padding:8px 0; margin:12px 0 0;
+  text-transform:none; letter-spacing:0; font-weight:400; color:var(--text); font-size:var(--fs-md); cursor:pointer}
+#soc-consent{width:24px; height:24px; flex:0 0 auto; accent-color:var(--green)}
+.consent-row .linkish{padding:8px 2px}
 /* Cinq onglets ne tiennent pas dans 375 px : plutôt que de comprimer les libellés, la barre
    défile. Un conteneur défilant rogne ce qui déborde : le padding compense le margin-bottom
    négatif des boutons (leur filet actif) et le débord haut de la pastille de non-lus. */
@@ -844,6 +931,12 @@ body.selecting .card .qk{display:none}
 .me-bar b{font-size:var(--fs-base)}
 .me-bar .muted{color:var(--muted); font-size:var(--fs-md)}
 .me-bar .spacer{flex:1}
+/* La barre « moi » est devenue le raccourci vers Compte : elle doit se voir cliquable, et garder
+   un anneau de focus visible puisqu’elle est atteignable au clavier (role=button, tabindex 0). */
+.me-bar[role="button"]{cursor:pointer}
+.me-bar[role="button"]:hover{border-color:var(--green)}
+.me-bar[role="button"]:focus-visible{outline:2px solid var(--green); outline-offset:2px}
+.me-go{font-size:var(--fs-md); color:var(--muted); white-space:nowrap}
 .frow{display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg2); border:1px solid transparent; border-radius:var(--r-md); margin-bottom:8px}
 .frow:hover{border-color:var(--border-hover)}
 .frow .avatar{width:38px; height:38px; border-radius:50%; background:var(--accent-soft); color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0}
@@ -1069,9 +1162,12 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 .lp-foot a{color:var(--faint); text-decoration:underline; cursor:pointer}
 .lp-foot a:hover{color:var(--green)}
 @media(max-width:820px){
-  .lp-hero{grid-template-columns:1fr; gap:24px; text-align:center; padding-top:20px}
-  .lp-sub{margin-left:auto; margin-right:auto}
-  .lp-cta{justify-content:center}
+  /* Sur téléphone, l'éventail passait devant le texte (order:-1) et repoussait les deux appels
+     à l'action sous la ligne de flottaison : à 375 x 667 il fallait défiler pour voir « Créer mon
+     compte ». On resserre donc tout ce qui précède les boutons (gap, retrait haut, chapeau). */
+  .lp-hero{grid-template-columns:1fr; gap:14px; text-align:center; padding-top:8px}
+  .lp-sub{margin-left:auto; margin-right:auto; margin-bottom:18px; font-size:16px}
+  .lp-cta{justify-content:center; margin-bottom:10px}   /* les arguments (sans email, import) doivent rester lisibles sous les boutons */
   .lp-hero-visual{order:-1}
   .lp-shelf{height:clamp(230px,38vh,300px)}
   .lp-features{grid-template-columns:repeat(2,1fr)}
@@ -1080,9 +1176,11 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
   .lp-features{grid-template-columns:1fr}
   /* L'éventail débordait des DEUX bords sur téléphone (couvertures extérieures tournées + décalées
      vers l'extérieur → boîte projetée hors écran, rognée). On resserre : pan plus étroit, couvertures
-     rapprochées et moins inclinées. Ça tient dans la colonne sans rognage. */
-  .lp-shelf{width:min(300px,80vw); height:clamp(220px,36vh,290px)}
-  .lp-book{width:46%}
+     rapprochées et moins inclinées. Ça tient dans la colonne sans rognage.
+     Hauteur réduite (et couvertures plus étroites, pour qu'elles ne débordent pas par le haut) :
+     l'éventail coûtait 240 px avant le titre, les boutons tombaient hors écran. */
+  .lp-shelf{width:min(300px,80vw); height:clamp(150px,22vh,190px)}
+  .lp-book{width:38%}
   .lp-book.b1{left:3%; transform:rotate(-11deg)}
   .lp-book.b2{left:19%; transform:rotate(-4deg)}
   .lp-book.b3{right:19%; transform:rotate(4deg)}
@@ -1113,7 +1211,10 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 .avatar.sm{width:22px; height:22px; font-size:var(--fs-xs); flex-shrink:0}
 .cmt-body{flex:1; min-width:0; font-size:var(--fs-md); line-height:1.45; overflow-wrap:anywhere}
 .cmt-date{font-size:var(--fs-xs); color:var(--faint); margin-left:6px; white-space:nowrap}
-.cmt-del{background:none; border:none; color:var(--faint); font-size:var(--fs-lg); cursor:pointer; padding:0 4px; line-height:1}
+/* Supprimer et Signaler se touchaient : deux cibles de 32 px, séparées par le gap de .cmt-row,
+   pour ne plus signaler une réponse en croyant l’effacer (et l’inverse). */
+.cmt-del{background:none; border:none; color:var(--faint); font-size:var(--fs-lg); cursor:pointer; padding:0 4px; line-height:1;
+  min-width:32px; min-height:32px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0}
 .cmt-del:hover{color:var(--red)}
 .cmt-none{font-size:var(--fs-md); color:var(--faint); padding:4px 0}
 .cmt-compose{display:flex; gap:8px; margin-top:6px}
@@ -1234,6 +1335,14 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
   .bulkbar .bb-actions{ gap:8px }       /* écarte « Supprimer » de « + Liste » pour éviter les mis-tap */
   #nav{ gap:6px }                       /* 2 px entre onglets = touches manquées */
   .star-input .st{ padding:4px 5px }    /* étoiles : zone de frappe élargie sans changer la taille visuelle */
+  /* Étoiles d’une relecture : 17 px et 1 px d’écart, c’était intouchable au doigt.
+     À 26 px, date + 5 étoiles + ✕ ne tiennent plus sur 306 px : plutôt que de laisser le ✕
+     s’échouer seul sur une 3e ligne, on donne sa ligne aux étoiles et on garde le ✕ au bout
+     de la ligne de date (l’ordre de tabulation, lui, ne change pas : le ✕ reste après la date). */
+  .rstars{ font-size:var(--fs-4xl); order:2; flex:0 0 100% }
+  .rstars .rst{ padding:6px 4px }
+  .reading-row{ gap:6px }
+  .reading-row .del{ order:1; min-width:44px; min-height:44px; margin-left:auto; display:inline-flex; align-items:center; justify-content:center }
 }
 
 /* ===== Boutons stylés en lien =====
@@ -1261,6 +1370,13 @@ button:disabled:hover, .btn:disabled:hover{background:var(--surface); border-col
 #toast{bottom:calc(140px + env(safe-area-inset-bottom))}                           /* le plus éphémère, au-dessus */
 /* Un toast porteur d'action ne doit jamais recouvrir une modale ouverte */
 body:has(.overlay.open) #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
+/* Le bandeau « données illisibles » n'apparaît qu'au chargement : il prend le cran du bas et
+   pousse les autres d'un cran, mais SEULEMENT quand il est là (sinon on creuserait un trou). */
+#data-warning{bottom:calc(20px + env(safe-area-inset-bottom))}
+body:has(#data-warning:not([hidden])) #save-warning{bottom:calc(80px + env(safe-area-inset-bottom))}
+body:has(#data-warning:not([hidden])) #update-bar{bottom:calc(140px + env(safe-area-inset-bottom))}
+body:has(#data-warning:not([hidden])) #toast{bottom:calc(200px + env(safe-area-inset-bottom))}
+body:has(#data-warning:not([hidden])):has(.overlay.open) #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
 
 /* ===== Retour au toucher =====
    Sur écran tactile il n'y a pas de survol : sans :active, rien ne confirme l'appui. */
@@ -1310,6 +1426,11 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
   #update-bar{bottom:calc(204px + env(safe-area-inset-bottom))}
   #toast{bottom:calc(264px + env(safe-area-inset-bottom))}
   body:has(.overlay.open) #toast{bottom:calc(80px + env(safe-area-inset-bottom))}
+  #data-warning{bottom:calc(144px + env(safe-area-inset-bottom))}
+  body:has(#data-warning:not([hidden])) #save-warning{bottom:calc(204px + env(safe-area-inset-bottom))}
+  body:has(#data-warning:not([hidden])) #update-bar{bottom:calc(264px + env(safe-area-inset-bottom))}
+  body:has(#data-warning:not([hidden])) #toast{bottom:calc(324px + env(safe-area-inset-bottom))}
+  body:has(#data-warning:not([hidden])):has(.overlay.open) #toast{bottom:calc(80px + env(safe-area-inset-bottom))}
   .bulkbar{bottom:calc(52px + env(safe-area-inset-bottom))}
 }
 
@@ -1330,6 +1451,10 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
   #search-status{grid-row:2; grid-column:1/3; margin:0}
   #search-lang{grid-row:2; grid-column:3/5; max-width:none; width:100%}
   #ov-search .modal-head .btn.small{justify-content:center}
+  /* L'étiquette « Ajouter en » ne tient pas à côté du segment et du menu Langue à 375 px, et une
+     3e ligne d'en-tête repousserait les résultats sous le clavier. Sur mobile, l'information est
+     portée par les boutons de chaque résultat, qui disent « Ajouter · lu ». */
+  .seg-lbl{display:none}
 }
 
 /* ---------- Données en mono ---------- */
