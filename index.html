@@ -37,7 +37,7 @@
   "name": "Tome",
   "alternateName": "Tome — Journal de lecture",
   "url": "https://montome.fr/",
-  "description": "Ta bibliothèque et ton journal de lecture pour les livres, BD et manga : note, collectionne, suis tes séries et partage avec tes amis. Gratuit, sans publicité.",
+  "description": "Ta bibliothèque et ton journal de lecture pour les livres, BD et manga : note, collectionne, suis tes séries et partage avec tes amis. Gratuit, sans publicité.",
   "applicationCategory": "LifestyleApplication",
   "operatingSystem": "Any",
   "inLanguage": "fr",
@@ -139,15 +139,15 @@
       Tome<em>.</em>
     </h1>
     <nav id="nav" aria-label="Navigation principale">
-      <button data-view="today" class="active" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v10h12V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-wide">Aujourd’hui</span><span class="nav-short">Accueil</span></button>
-      <button data-view="library"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7c-2-1.3-5-1.3-7-.5v10c2-.8 5-.8 7 .5 2-1.3 5-1.3 7-.5v-10c-2-.8-5-.8-7 .5z"/><path d="M12 7v10.5"/></svg><span class="nav-wide">Bibliothèque</span><span class="nav-short">Biblio</span></button>
+      <button data-view="today" class="active" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v10h12V10"/><path d="M10 20v-6h4v6"/></svg><span class="nav-lbl">Aujourd’hui</span></button>
+      <button data-view="library"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7c-2-1.3-5-1.3-7-.5v10c2-.8 5-.8 7 .5 2-1.3 5-1.3 7-.5v-10c-2-.8-5-.8-7 .5z"/><path d="M12 7v10.5"/></svg><span class="nav-lbl">Bibliothèque</span></button>
       <button data-view="journal"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h4"/></svg><span class="nav-lbl">Journal</span></button>
       <button data-view="lists"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6v.01M4 12v.01M4 18v.01"/></svg><span class="nav-lbl">Listes</span></button>
       <button data-view="stats"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V6M4 19h16"/><path d="M8 15v-3M12 17v-7M16 13V8"/></svg><span class="nav-lbl">Stats</span></button>
       <button data-view="friends" style="position:relative"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="nav-ic" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.4a3.2 3.2 0 0 1 0 5.2M17.5 13.6a5.5 5.5 0 0 1 3 5.4"/></svg><span class="nav-lbl">Amis</span><span class="nav-badge" id="nav-friends-badge" hidden></span></button>
     </nav>
     <div class="header-actions">
-      <span id="offline-badge" hidden>Hors ligne</span>
+      <span id="offline-badge" role="status" hidden>Hors ligne</span>
       <!-- État de la sauvegarde sur le compte. Sans lui la synchro est totalement invisible : un
            échec passe inaperçu et l’utilisateur croit sa bibliothèque à l’abri. Un <button> plutôt
            qu’un <span role=status> parce qu’en cas d’échec il devient actionnable (« Exporter ») et
@@ -156,11 +156,16 @@
       <button class="btn icon" id="btn-streak" hidden><span aria-hidden="true">✦</span><span id="streak-n"></span></button>
       <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
       <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg></button>
-      <button class="btn primary" id="btn-open-search" aria-label="Ajouter un livre"><span aria-hidden="true">＋</span> <span class="lbl-txt">Ajouter</span></button>
+      <!-- Le « ＋ » pleine chasse (U+FF0B) est hors de l’unicode-range d’EB Garamond : le navigateur
+           allait le chercher dans une police système, plus grasse et mal alignée. Même dessin que
+           ic('plus',16), en SVG inline pour éviter le clignotement avant le boot de app.js. -->
+      <button class="btn primary" id="btn-open-search" aria-label="Ajouter un livre"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:16px;height:16px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span class="lbl-txt">Ajouter</span></button>
     </div>
   </div>
 </header>
-<button class="fab" id="fab" aria-label="Ajouter" title="Ajouter">＋</button>
+<!-- Seul « + » de l’écran sur téléphone (l’ajout de l’en-tête y est masqué) : son nom est réécrit
+     par selectView selon l’onglet — « Ajouter un livre » partout, « Nouvelle liste » dans Listes. -->
+<button class="fab" id="fab" aria-label="Ajouter un livre" title="Ajouter un livre"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:24px;height:24px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
 
 <main id="main-content" tabindex="-1">
   <!-- ======== AUJOURD’HUI ======== -->
@@ -206,7 +211,7 @@
         <option value="year">Année de parution</option>
       </select>
       <button class="btn small" id="btn-pick-next" hidden title="Choisir une prochaine lecture dans ma pile" aria-label="Choisir ma prochaine lecture"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h4v4"/><path d="M4 19 20 4"/><path d="M16 20h4v-4"/><path d="m14.5 14.5 5.5 5.5"/><path d="M4 5l4.5 4.5"/></svg> <span class="pick-label">Prochaine lecture</span></button>
-      <button class="btn small" id="lib-savefilter" title="Enregistrer les filtres actuels comme collection">＋ Filtre</button>
+      <button class="btn small" id="lib-savefilter" hidden title="Garder cette combinaison de filtres sous un nom"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12a1 1 0 0 1 1 1v15l-7-4-7 4V5a1 1 0 0 1 1-1z"/></svg> Mémoriser</button>
       <button class="btn small" id="lib-layout" aria-pressed="false" title="Passer en liste"></button>
       <button class="btn small" id="lib-select" aria-pressed="false" title="Sélectionner plusieurs titres"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L15.5 10"/></svg> Sélection</button>
       <button class="btn small" id="lib-more" aria-expanded="false" title="Afficher tous les filtres et options"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/></svg> Filtres</button>
@@ -232,7 +237,9 @@
   <section class="view" id="view-lists">
     <div style="display:flex; align-items:center; margin-bottom:16px">
       <h2 class="section" style="flex:1; margin-bottom:0; border:none; padding:0">Mes listes</h2>
-      <button class="btn" id="btn-new-list">＋ Nouvelle liste</button>
+      <!-- Même « + » que le FAB (qui déclenche ce bouton dans Listes) : deux dessins différents
+           pour la même action, c’était le glyphe système d’un côté et l’icône de l’autre. -->
+      <button class="btn" id="btn-new-list"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Nouvelle liste</button>
     </div>
     <div class="lists-grid" id="lists-grid"></div>
     <div id="lists-empty"></div>
@@ -247,9 +254,12 @@
       <h4>Régularité</h4>
       <div class="heat-years chips" id="heat-years"></div>
       <p class="heat-summary" id="heat-summary" role="status" aria-live="polite"></p>
-      <div class="heat-wrap" aria-hidden="true"><div class="heat" id="heat"></div></div>
+      <!-- La grille était masquée aux lecteurs d’écran et sans repère de mois : impossible de savoir
+           quelle colonne on regarde. La rangée de mois et la légende rendent la carte lisible. -->
+      <div class="heat-wrap"><div class="heat-cal"><div class="heat-months" id="heat-months" aria-hidden="true"></div><div class="heat" id="heat"></div></div></div>
+      <div class="heat-legend" aria-hidden="true"><span>moins</span><i></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><span>plus</span></div>
     </div>
-    <div class="panel"><h4>Rythme mois par mois</h4><div class="rating-histo" id="month-bars"></div></div>
+    <div class="panel"><h4>Rythme mois par mois <span id="month-year"></span></h4><div class="rating-histo" id="month-bars"></div></div>
     <div class="stat-cols">
       <div class="panel"><h4>Notes attribuées</h4><div class="rating-histo" id="histo"></div></div>
       <div class="panel">
@@ -285,7 +295,7 @@
         <button class="btn" id="btn-export"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/></svg> Sauvegarde complète (JSON)</button>
         <button class="btn" id="btn-export-csv"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/></svg> Mes livres (CSV)</button>
         <button class="btn" id="btn-import"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V9M7.5 13.5 12 9l4.5 4.5"/><path d="M4 5h16"/></svg> Importer (JSON)</button>
-        <button class="btn" id="btn-import-csv"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V9M7.5 13.5 12 9l4.5 4.5"/><path d="M4 5h16"/></svg> Importer un CSV (Tome / Goodreads / StoryGraph / Babelio)</button>
+        <button class="btn" id="btn-import-csv"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V9M7.5 13.5 12 9l4.5 4.5"/><path d="M4 5h16"/></svg> Importer depuis Goodreads, StoryGraph ou Babelio (format détecté automatiquement)</button>
         <button class="btn" id="btn-restore" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a8 8 0 1 1 .7 5"/><path d="M4 5v5h5"/></svg> Restaurer une sauvegarde</button>
         <button class="btn" id="btn-install" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/></svg> Installer Tome</button>
         <input type="file" id="import-file" accept=".json" hidden aria-label="Fichier d’import JSON">
@@ -314,11 +324,11 @@
         <button data-s="reading" aria-pressed="false">En cours</button>
         <button data-s="read" aria-pressed="false">Lu</button>
       </div>
-      <button class="btn small" id="btn-scan" hidden aria-label="Scanner un code-barres">Scan</button>
+      <button class="btn small" id="btn-scan" hidden aria-label="Scanner un code-barres">Scanner</button>
       <select id="search-lang" class="seg-select" aria-label="Langue de recherche" title="Langue des résultats">
-        <option value="auto">Langue : auto</option><option value="fr">Français</option><option value="en">Anglais</option><option value="ru">Russe</option><option value="es">Espagnol</option><option value="de">Allemand</option><option value="it">Italien</option><option value="ja">Japonais</option><option value="all">Toutes</option>
+        <option value="auto">Langue détectée</option><option value="all">Toutes</option><option value="fr">Français</option><option value="en">Anglais</option><option value="ru">Russe</option><option value="es">Espagnol</option><option value="de">Allemand</option><option value="it">Italien</option><option value="ja">Japonais</option>
       </select>
-      <button class="btn small" id="btn-manual">Manuel</button>
+      <button class="btn small" id="btn-manual" title="Remplir la fiche toi-même, sans passer par la recherche">Ajout manuel</button>
       <button class="x" data-close aria-label="Fermer">✕</button>
     </div>
     <div class="modal-body">
@@ -350,7 +360,7 @@
       <form id="edit-form" novalidate>
       <div class="frm">
         <div class="full"><label for="f-title">Titre <span aria-hidden="true">*</span><span class="sr-only">(obligatoire)</span></label><input id="f-title" required aria-required="true"></div>
-        <div class="full"><label for="f-authors">Auteur·e·s (séparés par des virgules)</label><input id="f-authors"></div>
+        <div class="full"><label for="f-authors">Auteurs et autrices (séparés par des virgules)</label><input id="f-authors"></div>
         <div><label for="f-type">Type</label>
           <select id="f-type">
             <option value="livre">Livre</option>
@@ -372,14 +382,14 @@
         <details class="frm-more full">
           <summary>Plus de détails (série, année, couverture, synopsis…)</summary>
           <div class="frm-more-grid">
-            <div class="full"><label for="f-series">Série (optionnel)</label><input id="f-series" placeholder="ex : Berserk"></div>
+            <div class="full"><label for="f-series">Série (optionnel)</label><input id="f-series" placeholder="ex : Berserk"></div>
             <div><label for="f-volume">Tome n°</label><input id="f-volume" type="number" min="0"></div>
-            <div><label for="f-stotal">Tomes parus (série)</label><input id="f-stotal" type="number" min="1" placeholder="ex : 41"></div>
+            <div><label for="f-stotal">Tomes parus (série)</label><input id="f-stotal" type="number" min="1" placeholder="ex : 41"></div>
             <div><label for="f-year">Année de parution</label><input id="f-year" type="number" min="1000"></div>
             <div><label for="f-pages">Pages</label><input id="f-pages" type="number" min="0"></div>
             <div class="full"><label for="f-cover">Couverture (URL d’image)</label><input id="f-cover" placeholder="https://…"></div>
             <div class="full"><label for="f-syn">Synopsis (optionnel)</label><textarea id="f-syn" rows="2" placeholder="Résumé de l’ouvrage — rempli automatiquement quand la recherche le connaît"></textarea></div>
-            <div class="full"><label for="f-tags">Tags (séparés par des virgules)</label><input id="f-tags" placeholder="ex : SF, coup de cœur, emprunté"></div>
+            <div class="full"><label for="f-tags">Tags (séparés par des virgules)</label><input id="f-tags" placeholder="ex : SF, coup de cœur, emprunté"></div>
           </div>
         </details>
       </div>
@@ -469,7 +479,8 @@
     </div>
   </div>
 </div>
-<div id="update-bar" role="status" data-modal-exempt><span>Nouvelle version disponible</span><button class="btn small primary" id="update-reload">Recharger</button></div>
+<!-- « Plus tard » : sans lui le bandeau restait planté toute la session, à recouvrir le contenu. -->
+<div id="update-bar" role="status" data-modal-exempt><span>Nouvelle version disponible</span><button type="button" class="btn small" id="update-later">Plus tard</button><button type="button" class="btn small primary" id="update-reload">Recharger</button></div>
 
 <!-- ======== BANDEAU ÉCHEC DE SAUVEGARDE (stockage plein) ======== -->
 <div id="save-warning" role="alert" hidden data-modal-exempt><span>Sauvegarde impossible — stockage plein. Tes dernières modifications risquent d’être perdues.</span><button class="btn small primary" id="save-warning-export">Exporter maintenant</button></div>

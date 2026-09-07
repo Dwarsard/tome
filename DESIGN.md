@@ -14,6 +14,18 @@ L'identité s'appelle **Fiche de bibliothèque** (clair) / **Reliure** (sombre).
 - **Matière** : grain de papier (`body::before`), tranches de pages (`--page`/`--page-edge`), filets d'imprimeur, tramage Bayer sur les cartes de partage.
 - **Motion** : UNE signature (`bookopen`, la fiche s'ouvre du dos, 260 ms) — tout le reste < 300 ms, easing sortant, `reduced-motion` coupe tout.
 
+## La voix (micro-copie)
+
+Tome tutoie, parle à une personne et non à « l'utilisateur », et dit quoi faire plutôt que ce qui a échoué. Les règles qui évitent de réécrire dix fois la même phrase :
+
+- **Épicène sans point médian** : jamais « auteur·e », « prévenu·e », « seul(e) », « le/la ». On tourne la phrase autrement — « Auteurs et autrices », « Recevoir une alerte », « visible de toi uniquement », « Plume de l'année », « Cette personne », « Sois la première personne à répondre ». Le point médian casse la lecture à voix haute et les lecteurs d'écran.
+- **Pluriels par `plur(n, 'livre')`** (ou `plur(n, 'livre existe', 'livres existent')` quand le verbe s'accorde) : plus de « titre(s) » ni de `${n>1?'s':''}` en clair. `fmtPct(42)` → « 42 % », `fmtRatio(3, 10)` → « 3 / 10 », `fmtDec(3.5)` → « 3,5 » — espaces insécables comprises.
+- **Typographie française dans le code aussi** : espace insécable (U+00A0) avant `? ! :` et à l'intérieur des guillemets « », apostrophe typographique ’, jamais de « 42% » collé. `frTypo()` s'occupe des textes saisis ; les chaînes de l'interface s'écrivent directement avec les bons caractères (le selftest le vérifie sur `SEARCH_HINT`).
+- **Une seule voix pour le réseau** : toute erreur d'`api()` passe par `netMsg(e)` — « Pas de connexion — réessaie quand le réseau sera revenu. », « Trop de demandes d'un coup — attends une minute. », « Tome a un souci de son côté, réessaie dans un instant. » Pas de « Serveur injoignable » ni de « Erreur 503 ».
+- **Libellés qui disent l'action, pas la technique** : « Ajout manuel » plutôt que « Manuel », « Scanner », « Compléter… » plutôt que « Détails », « Mémoriser » plutôt que « ＋ Filtre », « Importer depuis Goodreads, StoryGraph ou Babelio » plutôt que « Importer un CSV », « Texte (.md) » plutôt que « Markdown », « Suppression du compte » plutôt que « Zone danger », « à réconcilier » plutôt que « conflit-sync ».
+- **Le geste réellement disponible** : sur écran tactile (`pointer:coarse`), pas de « Appuie sur Espace » ni de « clique ici » — « Touche la carte », une flèche →.
+- **Bandeaux courts** : deux phrases à l'écran, le détail derrière un « Comment ça marche ? » qui ouvre une modale.
+
 ## Checklist avant chaque release (le rituel)
 
 La structure trahit plus que la teinte. Vérifier qu'aucune nouvelle surface n'introduit :

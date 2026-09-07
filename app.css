@@ -118,7 +118,6 @@ nav{display:flex; gap:2px; margin-left:6px}
 nav button{padding:7px 13px; border-radius:8px; color:var(--muted); font-weight:600; font-size:var(--fs-base)}
 nav button:hover{color:var(--text); background:var(--surface)}
 nav button.active{color:var(--green); background:var(--accent-soft); font-weight:700}
-.nav-short{display:none}
 .nav-ic{display:none; width:22px; height:22px; flex-shrink:0}
 .header-actions{margin-left:auto; display:flex; gap:8px}
 .btn{
@@ -156,7 +155,9 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
 .today-focus:after{display:none}
 .today-focus-main{display:flex; gap:24px; align-items:center; min-height:265px; margin-top:12px; position:relative; z-index:1}
 .today-cover{width:142px; aspect-ratio:2/3; flex:0 0 auto; overflow:hidden; border-radius:2px; background:var(--surface2); box-shadow:0 14px 32px rgba(0,0,0,.35); border:1px solid var(--border); text-align:left}
-.today-cover:hover{transform:translateY(-3px) rotate(-.5deg); box-shadow:0 18px 38px rgba(0,0,0,.42)}
+/* Sur écran tactile, :hover reste « collé » après le retour d’une modale : la couverture restait
+   soulevée et penchée sans que rien ne la survole. Les effets de survol sont réservés à la souris. */
+@media (hover:hover){ .today-cover:hover{transform:translateY(-3px) rotate(-.5deg); box-shadow:0 18px 38px rgba(0,0,0,.42)} }
 .today-cover img,.today-cover .ph{width:100%; height:100%; object-fit:cover}
 .today-cover .ph{border:0; border-radius:0}
 .today-focus-copy{flex:1; min-width:0}
@@ -194,7 +195,7 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
 .today-social h3{font-size:var(--fs-3xl); margin:1px 0 0}
 .today-feed{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px}
 .today-feed-row{display:grid; grid-template-columns:40px minmax(0,1fr); gap:10px; position:relative; min-width:0; text-align:left; padding:10px; border-radius:10px; background:var(--surface); border:1px solid transparent}
-.today-feed-row:hover{border-color:var(--border-hover); transform:translateY(-2px)}
+@media (hover:hover){ .today-feed-row:hover{border-color:var(--border-hover); transform:translateY(-2px)} }
 .today-feed-cover{width:40px; height:58px; display:grid; place-items:center; overflow:hidden; border-radius:5px; background:var(--surface2)}
 .today-feed-cover img{width:100%; height:100%; object-fit:cover}
 .today-feed-copy{min-width:0; display:flex; flex-direction:column; justify-content:center; font-size:var(--fs-md)}
@@ -235,11 +236,13 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
   flex:0 0 auto; display:flex; gap:10px; align-items:center; background:var(--bg2);
   border:1px solid var(--control-border); border-radius:10px; padding:8px 12px; cursor:pointer; max-width:280px; position:relative;
 }
-.now-card:hover{border-color:var(--border-hover); box-shadow:var(--sh-1)}
+@media (hover:hover){ .now-card:hover{border-color:var(--border-hover); box-shadow:var(--sh-1)} }
 .now-card .mini{width:36px; height:54px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
 .now-card .mini img{width:100%; height:100%; object-fit:cover}
 .now-card .ni{min-width:0}
-.now-card .nt{font-size:var(--fs-md); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px}
+/* Pas de max-width : la carte est déjà bornée à 280 px et .ni a min-width:0, la coupure à
+   150 px tronquait « Le Comte de Monte-… » alors qu’il restait 60 px de libres à droite. */
+.now-card .nt{font-size:var(--fs-md); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:none}
 .now-card .track{height:5px; background:var(--surface2); border-radius:3px; overflow:hidden; margin:4px 0}
 .now-card .fill{height:100%; background:var(--green)}
 .now-card .np{font-size:var(--fs-xs); color:var(--muted); white-space:nowrap}
@@ -250,16 +253,24 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
 .card{position:relative; cursor:pointer; border-radius:var(--r-sm); content-visibility:auto; contain-intrinsic-size:0 260px}
 .card-hit,.now-hit,.ld-hit{position:absolute; inset:0; z-index:1; width:100%; height:100%; border-radius:inherit; background:transparent}
 .card-hit:focus-visible,.now-hit:focus-visible,.ld-hit:focus-visible{outline:2px solid var(--green); outline-offset:3px}
-.card:hover{transform:translateY(-4px)}
+@media (hover:hover){ .card:hover{transform:translateY(-4px)} }
+/* Au doigt, l’équivalent est un enfoncement bref pendant l’appui, pas un soulèvement qui reste. */
+.card:active .cover{transform:scale(.98)}
+/* L’appui long sur une couverture ouvre le mode sélection (cf. app.js). Sans ces lignes, iOS et
+   Android glissent d’abord LEUR menu « Enregistrer l’image / Copier » par-dessus : le geste maison
+   n’aboutit jamais, et un simple défilement part en glisser-déposer d’image. */
+.card, .card img, .cover, .today-cover, .today-cover img{
+  -webkit-touch-callout:none; user-select:none; -webkit-user-select:none; -webkit-user-drag:none;
+}
 .card:nth-child(-n+14){animation:cardin .3s ease backwards}
 .cover{
   aspect-ratio:2/3; border-radius:var(--r-sm); overflow:hidden; background:var(--surface);
   border:1px solid var(--border); box-shadow:var(--sh-1), inset 0 1px 0 rgba(255,255,255,.05);
   display:flex; align-items:center; justify-content:center; position:relative;
 }
-.card:hover .cover{border-color:color-mix(in srgb, var(--green) 45%, var(--border)); box-shadow:var(--sh-2)}
+@media (hover:hover){ .card:hover .cover{border-color:color-mix(in srgb, var(--green) 45%, var(--border)); box-shadow:var(--sh-2)} }
 .card.series .cover{box-shadow:3px 3px 0 -1px var(--bg2), 3px 3px 0 0 var(--border-hover), 6px 6px 0 -2px var(--bg2), 6px 6px 0 -1px var(--border-hover)}
-.card.series:hover .cover{box-shadow:3px 3px 0 -1px var(--bg2), 3px 3px 0 0 var(--border-hover), 6px 6px 0 -2px var(--bg2), 6px 6px 0 -1px var(--border-hover), var(--sh-2)}
+@media (hover:hover){ .card.series:hover .cover{box-shadow:3px 3px 0 -1px var(--bg2), 3px 3px 0 0 var(--border-hover), 6px 6px 0 -2px var(--bg2), 6px 6px 0 -1px var(--border-hover), var(--sh-2)} }
 .cover img{width:100%; height:100%; object-fit:cover; display:block; animation:fadein .35s ease}
 .cover .ph{
   width:100%; height:100%; display:flex; flex-direction:column; justify-content:center;
@@ -324,7 +335,7 @@ body.selecting .lrow .selbox{display:flex}
 .filterbar.compact #status-chips .chip[data-status="loan"]:not(.active),
 .filterbar.compact #type-chips .chip[data-type]:not(.active),
 .filterbar.compact #chip-series,
-.filterbar.compact #lib-savefilter,
+/* #lib-savefilter n'est plus masqué ici : renderLibrary le montre seulement quand un filtre est actif, et c'est précisément là qu'il sert */
 .filterbar.compact #lib-select:not(.active),
 .filterbar.compact #lib-tag:not(.has-value){ display:none }
 #lib-more[aria-expanded="true"]{ background:color-mix(in srgb, var(--green) 16%, var(--surface)); border-color:var(--green); color:var(--green) }
@@ -352,6 +363,10 @@ body.selecting .card .qk{display:none}
 /* Bandeau mise à jour PWA */
 #update-bar{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:210; display:none; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--green) 40%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:var(--fs-base); max-width:calc(100vw - 28px)}
 #update-bar.show{display:flex}
+/* Deux boutons (« Plus tard », « Recharger ») : sur un téléphone c'est le libellé qui se replie, pas
+   les boutons — un « Plus / tard » sur deux lignes ferait déborder la hauteur réservée (--h-ub). */
+#update-bar span{flex:1; min-width:0}
+#update-bar .btn{white-space:nowrap; flex-shrink:0}
 /* Bandeau d'échec de sauvegarde (stockage plein) — persistant tant que non résolu */
 #save-warning{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:220; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--red) 55%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:var(--fs-base); max-width:calc(100vw - 28px)}
 #save-warning:not([hidden]){display:flex}
@@ -383,7 +398,7 @@ body.selecting .card .qk{display:none}
 
 /* ---------- Journal ---------- */
 .goal-line{
-  display:flex; align-items:center; gap:12px; background:var(--bg2); border:1px solid var(--border);
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap; row-gap:6px; background:var(--bg2); border:1px solid var(--border);
   border-radius:10px; padding:10px 14px; margin-bottom:18px; cursor:pointer; font-size:var(--fs-base);
 }
 .goal-line:hover{border-color:var(--border-hover)}
@@ -392,13 +407,18 @@ body.selecting .card .qk{display:none}
 .goal-line b{white-space:nowrap}
 .goal-line .pace{color:var(--muted); white-space:nowrap}
 .goal-line .pace.ahead{color:var(--green)} .goal-line .pace.behind{color:var(--orange)}
+/* Puces d’années du journal : même motif que #heat-years (Stats), en tête de la liste.
+   Masquées tant qu’une seule année est représentée — un filtre à un seul choix n’en est pas un. */
+#journal-years{margin-bottom:18px}
 .month{margin-bottom:26px}
 .month h3{font-size:var(--fs-lg); color:var(--text); margin-bottom:10px; text-transform:capitalize; letter-spacing:-.01em}
+/* Le compte de lectures du mois se lit comme une mention, pas comme le titre du mois. */
+.month h3 .mcount{color:var(--muted); font-weight:400; font-size:var(--fs-md); text-transform:none}
 .entry{
   display:flex; align-items:center; gap:14px; padding:10px 12px; border-radius:var(--r-md);
   background:var(--bg2); border:1px solid transparent; margin-bottom:8px; cursor:pointer;
 }
-.entry:hover{border-color:var(--border-hover); background:var(--surface)}
+@media (hover:hover){ .entry:hover{border-color:var(--border-hover); background:var(--surface)} }
 .entry .day{width:34px; text-align:center; flex-shrink:0}
 .entry .day b{display:block; font-size:var(--fs-xl); line-height:1.1; font-variant-numeric:tabular-nums}
 .entry .day span{font-size:var(--fs-xs); color:var(--faint); text-transform:uppercase}
@@ -418,7 +438,7 @@ body.selecting .card .qk{display:none}
   background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-md);
   padding:14px; cursor:pointer;
 }
-.list-card:hover{border-color:var(--border-hover); transform:translateY(-2px); box-shadow:var(--sh-1)}
+@media (hover:hover){ .list-card:hover{border-color:var(--border-hover); transform:translateY(-2px); box-shadow:var(--sh-1)} }
 .list-card .fan{display:flex; margin-bottom:10px; height:78px}
 .list-card .fan .mini{
   width:52px; height:78px; border-radius:4px; overflow:hidden; background:var(--surface2);
@@ -444,7 +464,11 @@ body.selecting .card .qk{display:none}
 .panel.clickable:hover{border-color:var(--border-hover)}
 .goal-edit{display:block; width:100%; text-align:left; border-radius:var(--r-sm); padding:2px}
 .goal-edit:focus-visible{outline-offset:4px}
-.goal-title{display:block; font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700; margin-bottom:14px}
+.goal-title{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700; margin-bottom:14px}
+/* Le panneau et la ligne d’objectif étaient cliquables sans le dire : l’indice le rend visible. */
+.goal-edit-hint{font-size:var(--fs-sm); font-weight:400; text-transform:none; letter-spacing:0; color:var(--faint); white-space:nowrap}
+.goal-line .goal-edit-hint{margin-left:auto}
+#month-year{font-family:var(--font-mono); letter-spacing:.04em}
 .heat-summary{font-size:var(--fs-md); color:var(--muted); margin:-4px 0 10px}
 .goal-big{display:flex; align-items:center; gap:16px; flex-wrap:wrap}
 .goal-big .gnum{font-size:var(--fs-5xl); font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums; letter-spacing:-.02em}
@@ -460,13 +484,34 @@ body.selecting .card .qk{display:none}
 .hbar .val{width:34px; text-align:right; color:var(--muted); font-size:var(--fs-sm); font-variant-numeric:tabular-nums}
 .rating-histo{display:flex; align-items:flex-end; gap:4px; height:90px; padding-top:6px}
 .rating-histo .col{flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:4px; height:100%}
-.rating-histo .bar{width:100%; background:var(--surface2); border-radius:3px 3px 0 0; min-height:2px}
+/* La barre se mesure en % de cette piste, pas de la colonne entière : sinon le compte et
+   l’étiquette lui volent de la place et une barre de 3 finit plus courte qu’une barre de 2.
+   Hauteur explicite (colonne moins le compte 13px, l’étiquette 14px et les deux gouttières
+   de 4px) pour que le pourcentage de la barre se calcule sur une base définie. */
+.rating-histo .barwrap{flex:0 0 auto; height:calc(100% - 35px); width:100%; display:flex; align-items:flex-end}
+/* margin:0 : les barres du rythme mensuel portent la classe « month », qui sert aussi aux mois du
+   Journal (.month{margin-bottom:26px}) — elles flottaient 26 px au-dessus de leur ligne de base. */
+.rating-histo .bar{width:100%; background:var(--surface2); border-radius:3px 3px 0 0; min-height:2px; margin:0}
 .rating-histo .bar.on{background:var(--star)}
-.rating-histo .rl{font-size:var(--fs-xs); color:var(--faint); white-space:nowrap}
-.heat-wrap{overflow-x:auto; padding-bottom:6px}
+/* Hauteurs fixes pour l’étiquette et le compte : la barre est dimensionnée en % de la colonne,
+   une étiquette vide (les demi-étoiles) lui donnerait sinon plus de place qu’aux voisines. */
+.rating-histo .rl{font-size:var(--fs-xs); color:var(--faint); white-space:nowrap; height:14px; line-height:14px}
+/* Compte au-dessus de chaque barre : une hauteur relative ne dit pas combien de lectures. */
+.rating-histo .cnt{font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--muted); height:13px; line-height:13px}
+.heat-wrap{overflow-x:auto; overscroll-behavior-x:contain; padding-bottom:6px}
+.heat-cal{width:max-content}
 .heat{display:grid; grid-auto-flow:column; grid-template-rows:repeat(7,11px); grid-auto-columns:11px; gap:3px}
 .heat i{border-radius:2px; background:var(--surface2)}
 .heat i.l1{background:var(--heat1)} .heat i.l2{background:var(--heat2)} .heat i.l3{background:var(--heat3)}
+/* Le jour même, cerclé : sans lui on ne sait pas où l’on se trouve dans l’année. */
+.heat i.today{outline:1.5px solid var(--green); outline-offset:1px}
+.heat i[data-day]{cursor:pointer}
+/* Même trame de colonnes que .heat (11px + 3px) pour que chaque mois tombe sur sa semaine. */
+.heat-months{display:grid; grid-auto-flow:column; grid-auto-columns:11px; gap:3px; font-size:var(--fs-xs); color:var(--faint); margin-bottom:4px; height:13px; line-height:13px}
+.heat-months span{grid-row:1; white-space:nowrap}
+.heat-legend{display:flex; align-items:center; gap:4px; margin-top:8px; font-size:var(--fs-xs); color:var(--faint)}
+.heat-legend i{width:11px; height:11px; border-radius:2px; background:var(--surface2)}
+.heat-legend i.l1{background:var(--heat1)} .heat-legend i.l2{background:var(--heat2)} .heat-legend i.l3{background:var(--heat3)}
 .heat-years{display:flex; gap:6px; margin-bottom:12px}
 .data-actions{display:flex; gap:10px; flex-wrap:wrap}
 
@@ -506,6 +551,12 @@ body.selecting .card .qk{display:none}
 .overlay{
   position:fixed; inset:0; background:var(--overlay-dim); z-index:100;
   display:none; align-items:flex-start; justify-content:center; padding:36px 14px; overflow-y:auto;
+  /* PWA installée sur iPhone : les 36 px passaient SOUS l’encoche, l’en-tête de la modale (et son ✕)
+     se retrouvait derrière la barre d’état. On prend le plus grand des deux retraits. */
+  padding-top:max(36px, calc(env(safe-area-inset-top) + 12px));
+  /* défiler une modale jusqu’au bout ne doit pas entraîner la page en dessous (ni déclencher
+     le pull-to-refresh de Chrome Android) */
+  overscroll-behavior:contain;
 }
 .overlay.open{display:flex}
 .modal{
@@ -525,7 +576,8 @@ body.selecting .card .qk{display:none}
 .modal-body{padding:20px}
 
 /* Modale générique (uiConfirm / uiPrompt / uiChoose) — au-dessus des autres overlays */
-.dialog-ov{position:fixed; inset:0; background:var(--overlay-dim); z-index:300; display:none; align-items:center; justify-content:center; padding:20px; overflow-y:auto}
+.dialog-ov{position:fixed; inset:0; background:var(--overlay-dim); z-index:300; display:none; align-items:center; justify-content:center; padding:20px; overflow-y:auto;
+  padding-top:max(20px, env(safe-area-inset-top)); overscroll-behavior:contain}
 .dialog-ov.open{display:flex}
 .dialog-ov .modal{animation:pop .14s ease}
 #dialog-msg{color:var(--muted); font-size:var(--fs-base); line-height:1.55; white-space:pre-line}
@@ -829,6 +881,9 @@ body.selecting .card .qk{display:none}
 
 /* Empty state */
 .empty{text-align:center; padding:56px 20px; color:var(--muted)}
+/* .today-actions est un flex aligné à gauche : dans un état vide centré, ses boutons doivent
+   se ranger sous le paragraphe, pas se coller au bord gauche de la colonne. */
+.empty .today-actions{justify-content:center}
 .empty .big{width:96px; height:96px; line-height:96px; font-size:var(--fs-6xl); border-radius:50%; background:var(--bg2); border:1px solid var(--border); margin:0 auto 16px; box-shadow:var(--sh-1)}
 .empty h3{font-family:var(--font-display); font-weight:700; font-size:var(--fs-2xl); color:var(--text); margin-bottom:6px; letter-spacing:-.01em}
 /* Onboarding : démarrage rapide */
@@ -854,6 +909,9 @@ body.selecting .card .qk{display:none}
 .card-preview{width:100%; max-width:330px; border-radius:14px; border:1px solid var(--border); box-shadow:0 12px 36px rgba(0,0,0,.35); display:block; margin:0 auto 14px}
 .card-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
 .card-hint{font-size:var(--fs-md); color:var(--faint); margin-top:10px}
+/* Sous la critique : à qui elle est visible. Discret comme une note de marge, mais toujours là. */
+.share-hint{display:block; margin-top:6px; font-size:var(--fs-xs); color:var(--faint)}
+.share-hint .linkish{font-size:var(--fs-xs); padding:2px}
 .empty p{max-width:400px; margin:0 auto 18px; font-size:var(--fs-base)}
 /* Recap annuel */
 .recap-tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin:6px 0 4px}
@@ -937,6 +995,12 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
 .me-bar[role="button"]:hover{border-color:var(--green)}
 .me-bar[role="button"]:focus-visible{outline:2px solid var(--green); outline-offset:2px}
 .me-go{font-size:var(--fs-md); color:var(--muted); white-space:nowrap}
+/* Ligne « qui voit quoi », posée juste sous la barre « moi » (marge négative : elles se lisent
+   ensemble) mais hors d’elle — la barre entière est un role=button, un bouton n’en contient pas
+   un autre. Du texte et un lien, pas une carte de plus dans une vue déjà dense. */
+.me-share{display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  margin:-10px 2px 16px; font-size:var(--fs-md); color:var(--muted)}
+.me-share .linkish{padding:4px 2px}
 .frow{display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg2); border:1px solid transparent; border-radius:var(--r-md); margin-bottom:8px}
 .frow:hover{border-color:var(--border-hover)}
 .frow .avatar{width:38px; height:38px; border-radius:50%; background:var(--accent-soft); color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0}
@@ -957,9 +1021,15 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
 .profile-head .avatar{width:56px; height:56px; border-radius:50%; background:var(--accent-soft); color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:var(--fs-2xl)}
 .common-badge{display:inline-block; background:var(--accent-soft); color:var(--green); font-size:var(--fs-sm); font-weight:700; padding:3px 10px; border-radius:999px}
 .nav-badge{position:absolute; top:2px; right:0; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--red); color:#fff; font-size:var(--fs-xs); font-weight:800; line-height:16px; text-align:center}
+/* Ligne « où en est notre amitié » : un état lisible et l’action qui va avec, filet compris. */
+.prof-rel{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--border)}
+.prof-rel .rel-state{flex:1; min-width:0; font-size:var(--fs-base); color:var(--muted)}
+/* Une couverture de l’étagère d’un ami qu’on n’a pas encore : elle devient une cible. */
+.card.shelf-add{cursor:pointer}
+.card.shelf-add:focus-visible{outline:2px solid var(--green); outline-offset:3px; border-radius:var(--r-sm)}
 .affinity-ring{display:flex; align-items:center; gap:12px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-md); padding:12px 14px; margin-bottom:16px}
 .affinity-ring .pct{font-size:var(--fs-4xl); font-weight:800; color:var(--green); font-variant-numeric:tabular-nums}
-.acct h4{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:20px 0 8px}
+.acct h4, .soc-h4{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:20px 0 8px}
 .acct h4:first-child{margin-top:4px}
 .acct input, .acct textarea{margin-bottom:8px}
 .acct .danger-zone{border:1px solid color-mix(in srgb,var(--red) 35%,var(--border)); border-radius:var(--r-md); padding:12px 14px; margin-top:8px}
@@ -982,12 +1052,17 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
 #toast .toast-action:hover{text-decoration:underline}
 
 @media(max-width:640px){
+  /* Le plus petit palier était calé sur un écran de bureau lu à 60 cm. Sur un téléphone tenu à
+     bout de bras, 11,5 px pour les dates, les compteurs et les mentions, c'était sous le seuil. */
+  :root{--fs-xs:12.5px}
   /* 16px minimum : empêche le rezoom automatique d'iOS au focus d'un champ */
   input,select,textarea{font-size:var(--fs-lg)}
   .header-in{flex-wrap:wrap; gap:8px; padding:10px 12px}
   /* un backdrop-filter fait du header le référent des position:fixed enfants : la barre
      d'onglets se collerait en HAUT. Fond plein sur mobile (visuellement identique). */
-  body > header{backdrop-filter:none; background:var(--bg)}
+  /* Et sur téléphone la navigation est en bas : l'en-tête ne garde que le mot-marque et deux
+     icônes. Collé en haut, il volait 52 px de lecture à chaque écran pour rien — il défile. */
+  body > header{backdrop-filter:none; background:var(--bg); position:static}
   /* ===== Barre d'onglets en bas (ergonomie d'app) =====
      Sur téléphone, la navigation vit sous le pouce, pas en haut de l'écran. Les onglets
      montrent icône + libellé court ; la zone sûre (encoche/geste) est respectée. */
@@ -995,17 +1070,56 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
     display:grid; grid-template-columns:repeat(6,1fr); gap:0;
     background:var(--header-bg); backdrop-filter:blur(12px);
     border-top:1px solid var(--border); padding:4px 4px calc(4px + env(safe-area-inset-bottom))}
+  /* Un seul nom par vue : l'onglet disait « Accueil » et « Biblio » quand le titre de la page,
+     les toasts et l'aide disaient « Aujourd'hui » et « Bibliothèque ». On garde le nom long
+     partout et on rétrécit le libellé de l'onglet (11 px) pour qu'il tienne en une ligne. */
   nav button{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
-    padding:6px 2px; min-height:52px; border-radius:10px; font-size:var(--fs-xs); font-weight:600}
+    padding:6px 1px; min-height:52px; border-radius:10px; font-size:11px; letter-spacing:-.01em; font-weight:600}
   nav button.active{background:transparent; color:var(--green)}
   nav button .nav-ic{display:block}
-  .nav-wide{display:none}.nav-short{display:inline}
+  nav button > span{white-space:nowrap}
   .nav-badge{top:2px; right:calc(50% - 20px)}
   .header-actions .btn .lbl-txt{display:none}
+  /* Un seul « + » à l’écran sur téléphone. Le bouton d’ajout de l’en-tête et le FAB faisaient
+     la même chose à 40 px d’écart, et le premier, réduit à son glyphe (.lbl-txt masqué), n’était
+     plus qu’un carré d’accent énigmatique. C’est le FAB qui porte l’ajout : sous le pouce, toujours
+     visible, déjà masqué quand une modale ou la barre de sélection est ouverte. */
+  #btn-open-search{display:none}
   #btn-pick-next .pick-label{display:none}
   .grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:14px}
   .detail{flex-direction:column}
   .detail .dcover{width:120px; margin:0 auto}
+  /* ===== Journal sur téléphone =====
+     Une entrée tenait sur une seule ligne tronquée à l’ellipse : à 375 px, « Pluto, tome 1 » et
+     « Pluto, tome 2 » se coupaient au même endroit et devenaient indiscernables. Le titre passe
+     sur deux lignes, et la colonne de droite (relecture, critique, ♥, note) s’empile pour lui
+     rendre la largeur qu’elle mangeait. */
+  .entry .einfo .et{white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
+  .entry .emeta{flex-direction:column; align-items:flex-end; gap:4px}
+  /* Le type écrit en toutes lettres (« Manga ») coûtait ~60 px pour une information déjà portée
+     par la couverture. Sur téléphone il devient un liseré sur la vignette, même code couleur. */
+  .entry .tbadge{display:none}
+  .entry[data-type="livre"] .mini{border-color:var(--blue)}
+  .entry[data-type="bd"] .mini{border-color:var(--orange)}
+  .entry[data-type="manga"] .mini{border-color:var(--pink)}
+  /* ===== Modales en feuille (bottom sheet) =====
+     Une modale flottante de 14 px de rayon perdue au milieu de l'écran, c'est le motif du
+     bureau. Sur téléphone elle prend toute la largeur et toute la hauteur : plus de fond gris
+     qui grignote les côtés, et l'en-tête (titre + ✕) reste collé en haut quand on descend une
+     fiche longue — avant, pour fermer, il fallait remonter tout le livre.
+     Ciblé sur .overlay : les dialogues (.dialog-ov) restent des boîtes centrées.
+     Surtout PAS align-items:stretch : la feuille aurait alors une hauteur définie (celle de
+     l'écran) que son contenu déborderait, et l'en-tête collant, prisonnier de cette boîte,
+     se décrocherait au premier écran de défilement. min-height la laisse grandir. */
+  .overlay{padding:0}
+  .overlay .modal{margin-top:max(24px, env(safe-area-inset-top, 0px));
+    min-height:calc(100% - max(24px, env(safe-area-inset-top, 0px)));
+    border-radius:14px 14px 0 0; border-left:0; border-right:0; border-bottom:0}
+  .overlay .modal-head{position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--surface)}
+  /* Pied de fiche : le .spacer poussait « Supprimer » seul contre le bord droit, à côté de
+     « Partager » — un mis-tap coûteux. Il passe sur sa propre ligne, en pointillé. */
+  .detail-footer .spacer{display:none}
+  #d-delete{flex-basis:100%; justify-content:center; margin-top:14px; border-style:dashed}
   main{padding:16px 12px calc(96px + 56px + env(safe-area-inset-bottom))} /* + barre d'onglets */
   .card .qk{opacity:1}
   .fab{
@@ -1057,6 +1171,9 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
   /* actions rapides sur les cartes : plus grosses au doigt, plus espacées (anti mis-tap) */
   .qk{gap:8px}
   .qk button{width:36px; height:36px; font-size:var(--fs-lg)}
+  /* Sans survol, .card:hover .qk ne se déclenche jamais : ♥ et ✓ resteraient invisibles.
+     C’était déjà corrigé sous 640 px ; les tablettes tactiles en avaient besoin aussi. */
+  .card .qk{opacity:1}
 }
 body:has(.overlay.open) .fab{display:none}
 body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions groupées */
@@ -1073,7 +1190,8 @@ body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions g
   padding:0 max(20px,env(safe-area-inset-left)) calc(40px + env(safe-area-inset-bottom)); animation:fadein .4s ease}
 #welcome[hidden]{display:none}
 body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{display:none}
-.lp-nav{max-width:1080px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; padding:20px 0}
+/* La page d’accueil s’ouvre aussi depuis la PWA installée : « Se connecter » tombait sous l’encoche. */
+.lp-nav{max-width:1080px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; padding:calc(20px + env(safe-area-inset-top, 0px)) 0 20px}
 .lp-nav .brand{font-family:var(--font-display); font-weight:700; font-size:var(--fs-3xl); display:flex; align-items:center; gap:9px}
 .lp-nav .brand .logo{width:26px; height:26px}
 .lp-nav .brand em{font-style:normal; color:var(--green)}
@@ -1201,6 +1319,16 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 .heart-btn:active{transform:scale(1.12)}
 .heart-btn .hn{font-variant-numeric:tabular-nums; font-weight:700}
 .heart-btn .hn:empty{display:none}
+/* Le nom de l’auteur d’une lecture mène à son profil : filet discret plutôt que lien coloré,
+   pour que l’affordance existe aussi sans survol (mobile) sans crier dans la page. */
+.who-btn{background:none; border:0; padding:0; font:inherit; color:inherit; cursor:pointer; text-align:left;
+  text-decoration:underline; text-decoration-color:color-mix(in srgb, var(--green) 45%, transparent); text-underline-offset:3px}
+.who-btn:hover{color:var(--green)}
+.feed-review[data-expand]{cursor:pointer}
+.feed-review.open{display:block; -webkit-line-clamp:unset}
+.rv-more{font-size:var(--fs-sm); padding:2px 0}
+/* « … » : même gabarit rond que ♥, mais les trois points doivent tomber au milieu */
+.more-btn{line-height:1; padding-bottom:6px}
 
 /* ---- Réponses 💬 sous les entrées du fil ---- */
 .feed-cell{margin-bottom:8px}
@@ -1295,7 +1423,8 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 @media(max-width:420px){ .qr-stars .st{font-size:var(--fs-5xl)} .qr-cover{width:116px} }
 
 /* ===== Page publique /@pseudo — la vitrine : lisible sans compte ===== */
-#pubprofile{position:fixed; inset:0; z-index:320; overflow-y:auto; background:var(--bg); padding:0 20px 60px}
+/* Plein écran : sans le retrait d’encoche, le mot-marque « Tome. » se logeait derrière la barre d’état. */
+#pubprofile{position:fixed; inset:0; z-index:320; overflow-y:auto; background:var(--bg); padding:0 20px 60px; padding-top:env(safe-area-inset-top, 0px)}
 .pp-wrap{max-width:940px; margin:0 auto}
 .pp-brand{display:inline-flex; align-items:center; gap:9px; font-family:var(--font-display); font-weight:700; font-size:var(--fs-2xl); color:var(--text); text-decoration:none; padding:22px 0 8px}
 .pp-brand .logo{width:26px; height:26px}
@@ -1318,6 +1447,7 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 .pp-cta{margin:40px 0 0; padding:28px; border-radius:var(--r-lg); background:var(--surface); border:1px solid var(--border); box-shadow:var(--sh-1); text-align:center}
 .pp-cta h3{font-family:var(--font-display); font-size:var(--fs-3xl); margin-bottom:8px; text-wrap:balance}
 .pp-cta p{font-size:var(--fs-base); color:var(--muted); max-width:44ch; margin:0 auto 18px}
+.pp-cta-acts{display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
 .pp-empty{padding:44px 0; color:var(--muted); text-align:center}
 .notif-actions{display:flex; gap:8px; margin-top:8px}
 .notif[data-profile-user]{cursor:pointer}
@@ -1361,22 +1491,49 @@ button:disabled:hover, .btn:disabled:hover{background:var(--surface); border-col
 
 /* Petites commandes textuelles sans rembourrage : sous le minimum de 24x24 px (WCAG 2.5.8) */
 .syn-more, .tagbtn, .clear-rate, .today-links button{min-height:24px; padding:3px 6px}
+/* Les ✕ de retrait (tag, citation, commentaire, carte, collection) sont des glyphes nus de
+   10 à 14 px : ils tombaient sous le plancher de 24 px, même à la souris. Le ✕ de .ld-item
+   n'entre pas dans la liste : son display bascule (caché → révélé), on ne le fige pas ici. */
+.pill button, .quote-item .qdel, .reading-row .del, .cmt-del, .study-del, .sc-del{
+  min-width:24px; min-height:24px; display:inline-flex; align-items:center; justify-content:center; padding:0 4px;
+}
+/* Au doigt, ces mêmes commandes passent à 36-40 px. Ce bloc suit volontairement les deux règles
+   ci-dessus : à spécificité égale, la dernière déclaration gagne. */
+@media (hover:none), (pointer:coarse){
+  .mood{min-height:40px; padding:6px 13px}
+  .mood-chips{gap:8px}
+  .clear-rate, .tagbtn, .syn-more, .today-links button{min-height:40px; padding:8px 10px}
+  #btn-pick-next{min-width:44px; justify-content:center}
+  .pill button, .quote-item .qdel, .cmt-del, .study-del, .sc-del,
+  .ld-item .rm, .ld-item .mv button{min-width:36px; min-height:36px}
+  .ld-item .rm{width:36px; height:36px; top:-8px; right:-8px}
+  .ld-item .mv button{width:36px; height:36px}
+  /* redit ici : la règle de base à 24 px ci-dessus est plus tardive que le bloc tactile
+     historique, elle écraserait sinon les 44 px du ✕ d'une lecture */
+  .reading-row .del{min-width:44px; min-height:44px}
+}
 
 /* ===== Empilement des barres flottantes =====
-   Le toast, le bandeau de mise à jour et l'alerte de stockage partageaient la même position
-   en bas de l'écran : la plus haute en z-index masquait les autres. On les décale. */
-#save-warning{bottom:calc(20px + env(safe-area-inset-bottom))}                     /* le plus urgent, en bas */
-#update-bar{bottom:calc(80px + env(safe-area-inset-bottom))}                       /* au-dessus */
-#toast{bottom:calc(140px + env(safe-area-inset-bottom))}                           /* le plus éphémère, au-dessus */
-/* Un toast porteur d'action ne doit jamais recouvrir une modale ouverte */
-body:has(.overlay.open) #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
-/* Le bandeau « données illisibles » n'apparaît qu'au chargement : il prend le cran du bas et
-   pousse les autres d'un cran, mais SEULEMENT quand il est là (sinon on creuserait un trou). */
-#data-warning{bottom:calc(20px + env(safe-area-inset-bottom))}
-body:has(#data-warning:not([hidden])) #save-warning{bottom:calc(80px + env(safe-area-inset-bottom))}
-body:has(#data-warning:not([hidden])) #update-bar{bottom:calc(140px + env(safe-area-inset-bottom))}
-body:has(#data-warning:not([hidden])) #toast{bottom:calc(200px + env(safe-area-inset-bottom))}
-body:has(#data-warning:not([hidden])):has(.overlay.open) #toast{bottom:calc(24px + env(safe-area-inset-bottom))}
+   Les quatre surcouches basses (données illisibles, stockage plein, nouvelle version, toast)
+   partaient d'un décalage FIGÉ : le toast était posé 140 px au-dessus du bas sur ordinateur et
+   264 px sur téléphone — au milieu de l'écran — même quand les trois bandeaux qu'il « évitait »
+   étaient masqués. Elles partent maintenant toutes du même rail bas, et chacune ne remonte que
+   d'un cran par bandeau RÉELLEMENT affiché : rien ne se recouvre, rien ne flotte dans le vide. */
+body{
+  --rail:calc(20px + env(safe-area-inset-bottom));      /* hauteur du cran le plus bas */
+  --rail-ov:calc(24px + env(safe-area-inset-bottom));   /* modale ouverte : le rail redescend */
+  --h-dw:0px; --h-sw:0px; --h-ub:0px;                   /* place prise par chaque bandeau visible */
+}
+body:has(#data-warning:not([hidden])){--h-dw:60px}
+body:has(#save-warning:not([hidden])){--h-sw:60px}
+body:has(#update-bar.show){--h-ub:60px}
+#data-warning{bottom:var(--rail)}                                                   /* au chargement, le plus bas */
+#save-warning{bottom:calc(var(--rail) + var(--h-dw))}                               /* le plus urgent */
+#update-bar{bottom:calc(var(--rail) + var(--h-dw) + var(--h-sw))}
+#toast{bottom:calc(var(--rail) + var(--h-dw) + var(--h-sw) + var(--h-ub))}          /* le plus éphémère, au-dessus */
+/* Un toast porteur d'action ne doit jamais recouvrir une modale ouverte (le FAB est masqué,
+   la barre d'onglets est sous le fond gris : le rail peut redescendre au ras du bord). */
+body:has(.overlay.open) #toast{bottom:var(--rail-ov)}
 
 /* ===== Retour au toucher =====
    Sur écran tactile il n'y a pas de survol : sans :active, rien ne confirme l'appui. */
@@ -1420,17 +1577,10 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 .study-add .field-err{grid-column:1 / -1; margin-top:0}
 
 @media(max-width:640px){
-  /* les surcouches basses remontent au-dessus de la barre d'onglets ; la bannière « stockage
-     plein » passe AU-DESSUS de la bande du FAB (76→132 px) pour ne pas le rendre intouchable */
-  #save-warning{bottom:calc(144px + env(safe-area-inset-bottom))}
-  #update-bar{bottom:calc(204px + env(safe-area-inset-bottom))}
-  #toast{bottom:calc(264px + env(safe-area-inset-bottom))}
-  body:has(.overlay.open) #toast{bottom:calc(80px + env(safe-area-inset-bottom))}
-  #data-warning{bottom:calc(144px + env(safe-area-inset-bottom))}
-  body:has(#data-warning:not([hidden])) #save-warning{bottom:calc(204px + env(safe-area-inset-bottom))}
-  body:has(#data-warning:not([hidden])) #update-bar{bottom:calc(264px + env(safe-area-inset-bottom))}
-  body:has(#data-warning:not([hidden])) #toast{bottom:calc(324px + env(safe-area-inset-bottom))}
-  body:has(#data-warning:not([hidden])):has(.overlay.open) #toast{bottom:calc(80px + env(safe-area-inset-bottom))}
+  /* Un seul réglage au lieu de neuf : le rail passe au-dessus de la barre d'onglets ET de la
+     bande du FAB (76→132 px), sinon un bandeau rendrait le « + » intouchable. Modale ouverte,
+     le FAB disparaît et la barre d'onglets passe sous le fond gris : le rail redescend. */
+  body{--rail:calc(140px + env(safe-area-inset-bottom)); --rail-ov:calc(24px + env(safe-area-inset-bottom))}
   .bulkbar{bottom:calc(52px + env(safe-area-inset-bottom))}
 }
 
@@ -1447,7 +1597,8 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
   #btn-manual{grid-row:1; grid-column:3}
   #ov-search .modal-head .x{grid-row:1; grid-column:4; justify-self:end}
   /* Le segment et le menu Langue se partagent la 2e ligne ; chacun couvre deux colonnes pour
-     que « En cours » et « Langue : auto » ne soient jamais rognés (mesuré à 375 px). */
+     que « En cours » et « Langue détectée » ne soient jamais rognés (mesuré à 375 px — en Plex Mono
+     16 px, « Langue : automatique » faisait 210 px et rognait « Lu »). */
   #search-status{grid-row:2; grid-column:1/3; margin:0}
   #search-lang{grid-row:2; grid-column:3/5; max-width:none; width:100%}
   #ov-search .modal-head .btn.small{justify-content:center}
@@ -1515,3 +1666,13 @@ a.btn{text-decoration:none} /* les liens habillés en bouton ne se soulignent pa
 .today-hero h2{font-size:clamp(42px,6.4vw,66px)}
 .brand{font-weight:600; letter-spacing:-.01em}
 h3,h4{font-weight:600}
+
+/* ===== iOS : pas de rezoom au focus =====
+   Safari agrandit la page dès qu'un champ affiche moins de 16 px, et ne revient jamais en
+   arrière : on se retrouve à défiler latéralement une modale. La règle générale du bloc
+   « max-width:640px » couvre déjà les champs (17 px hérités : #d-page, #d-quote-page, .rdate),
+   mais deux sélecteurs plus spécifiques la contredisaient — le menu Langue de la recherche
+   (13 px) et le champ de réponse du fil (15,5 px). Repris ici, en toute fin de cascade. */
+@media(max-width:640px){
+  .seg-select, .cmt-compose .cmt-input{font-size:16px}
+}
