@@ -57,10 +57,13 @@
 <a class="skip-link" href="#main-content">Aller au contenu</a>
 
 <!-- ======== PAGE D’ACCUEIL PUBLIQUE (visiteurs) ======== -->
-<div id="welcome" hidden role="dialog" aria-modal="true" aria-label="Bienvenue sur Tome">
+<!-- Une page, pas un dialogue : role=dialog + aria-modal faisaient lire la landing comme une
+     fenêtre surgissante sans contenu de page derrière. Ses repères sont natifs (header, section,
+     footer) ; l’isolation du reste de l’app (activeModalRoot) ne tient qu’à `hidden`. -->
+<div id="welcome" hidden>
   <div class="lp-nav">
     <div class="brand">
-      <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="#12161a"/><path d="M256 132c-42-26-108-26-146-9v256c38-17 104-17 146 9 42-26 108-26 146-9V123c-38-17-104-17-146 9z" fill="none" stroke="#00d364" stroke-width="30" stroke-linejoin="round"/><path d="M256 132v256" stroke="#00d364" stroke-width="30"/></svg>
+      <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="none"/><path d="M256 132c-42-26-108-26-146-9v256c38-17 104-17 146 9 42-26 108-26 146-9V123c-38-17-104-17-146 9z" fill="none" stroke="var(--green)" stroke-width="30" stroke-linejoin="round"/><path d="M256 132v256" stroke="var(--green)" stroke-width="30"/></svg>
       Tome<em>.</em>
     </div>
     <div class="lp-nav-actions">
@@ -128,14 +131,14 @@
       <p class="lp-colo-sub">Un compte gratuit, ta première fiche en trente secondes — et ce journal sera à toi pour longtemps.</p>
       <button class="btn primary lp-big" data-lp="signup">Créer mon compte</button>
     </div>
-    <div class="lp-foot"><span>Tome</span> · <a href="/confidentialite">Confidentialité</a> · <a href="/cgu">CGU</a> · fait avec ❤ pour les lecteurs</div>
+    <footer class="lp-foot"><span>Tome</span> · <a href="/confidentialite">Confidentialité</a> · <a href="/cgu">CGU</a> · fait avec ❤ pour les lecteurs</footer>
   </div>
 </div>
 
 <header>
   <div class="header-in">
     <h1 class="brand">
-      <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="#12161a"/><path d="M256 132c-42-26-108-26-146-9v256c38-17 104-17 146 9 42-26 108-26 146-9V123c-38-17-104-17-146 9z" fill="none" stroke="#00d364" stroke-width="30" stroke-linejoin="round"/><path d="M256 132v256" stroke="#00d364" stroke-width="30"/></svg>
+      <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="none"/><path d="M256 132c-42-26-108-26-146-9v256c38-17 104-17 146 9 42-26 108-26 146-9V123c-38-17-104-17-146 9z" fill="none" stroke="var(--green)" stroke-width="30" stroke-linejoin="round"/><path d="M256 132v256" stroke="var(--green)" stroke-width="30"/></svg>
       Tome<em>.</em>
     </h1>
     <nav id="nav" aria-label="Navigation principale">
@@ -155,7 +158,11 @@
       <button type="button" id="lib-status" aria-live="polite" hidden disabled></button>
       <button class="btn icon" id="btn-streak" hidden><span aria-hidden="true">✦</span><span id="streak-n"></span></button>
       <button class="btn icon" id="btn-resume" title="Reprendre ma lecture" aria-label="Reprendre ma lecture" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10.5-6.5z"/></svg></button>
-      <button class="btn icon" id="btn-theme" title="Changer de thème" aria-label="Changer de thème"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg></button>
+      <button class="btn icon" id="btn-theme" title="Thème sombre" aria-label="Thème sombre" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:17px;height:17px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg></button>
+      <!-- Compte et réglages : la vue « Mon compte » n’a pas d’onglet (la barre en compte déjà six),
+           c’est ce bouton qui y mène. Silhouette avant connexion, avatar ensuite (syncMeButton) —
+           même dessin que ic('user',18), inline pour éviter le clignotement avant le boot de app.js. -->
+      <button class="btn icon" id="btn-me" aria-label="Mon compte" title="Mon compte"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:18px;height:18px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></button>
       <!-- Le « ＋ » pleine chasse (U+FF0B) est hors de l’unicode-range d’EB Garamond : le navigateur
            allait le chercher dans une police système, plus grasse et mal alignée. Même dessin que
            ic('plus',16), en SVG inline pour éviter le clignotement avant le boot de app.js. -->
@@ -205,22 +212,28 @@
       <select id="lib-tag" hidden aria-label="Filtrer par tag"></select>
       <select id="lib-sort" aria-label="Trier">
         <option value="added">Ajout récent</option>
+        <option value="read">Lu récemment</option>
         <option value="rating">Mieux notés</option>
         <option value="title">Titre A→Z</option>
         <option value="author">Auteur A→Z</option>
         <option value="year">Année de parution</option>
       </select>
+      <button class="btn small" id="lib-dir" aria-pressed="false" aria-label="Inverser l’ordre" title="Inverser l’ordre">↓</button>
       <button class="btn small" id="btn-pick-next" hidden title="Choisir une prochaine lecture dans ma pile" aria-label="Choisir ma prochaine lecture"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h4v4"/><path d="M4 19 20 4"/><path d="M16 20h4v-4"/><path d="m14.5 14.5 5.5 5.5"/><path d="M4 5l4.5 4.5"/></svg> <span class="pick-label">Prochaine lecture</span></button>
+      <button class="btn small" id="btn-rate-all" hidden title="Ces lectures terminées n’ont pas encore de note" aria-label="Noter mes lectures">★ Noter <span class="rate-label"></span></button>
       <button class="btn small" id="lib-savefilter" hidden title="Garder cette combinaison de filtres sous un nom"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12a1 1 0 0 1 1 1v15l-7-4-7 4V5a1 1 0 0 1 1-1z"/></svg> Mémoriser</button>
-      <button class="btn small" id="lib-layout" aria-pressed="false" title="Passer en liste"></button>
+      <button class="btn small" id="lib-layout" title="Afficher en liste" aria-label="Afficher en liste"></button>
       <button class="btn small" id="lib-select" aria-pressed="false" title="Sélectionner plusieurs titres"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L15.5 10"/></svg> Sélection</button>
-      <button class="btn small" id="lib-more" aria-expanded="false" title="Afficher tous les filtres et options"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/></svg> Filtres</button>
+      <button class="btn small" id="lib-more" aria-expanded="false" aria-controls="filterbar" title="Afficher tous les filtres et options"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/></svg> Filtres</button>
     </div>
     <div class="chips smart-chips" id="smart-chips"></div>
     <div class="loan-alert" id="loan-alert" role="status" hidden></div>
     <div class="study-alert" id="study-alert" role="status" hidden></div>
     <div class="now-strip" id="now-reading" hidden></div>
-    <div class="count-note" id="lib-count"></div>
+    <div class="count-note" id="lib-count" role="status"></div>
+    <!-- Aide clavier lue par les lecteurs d’écran : seule la carte (son bouton-cible) est dans l’ordre
+         de tabulation, les actions rapides passent par ces touches (voir keydown de #lib-grid). -->
+    <p class="sr-only" id="lib-keys-help">Sur une carte : flèches pour se déplacer, Entrée pour ouvrir, L pour marquer comme lu, F pour mettre en favori, Espace pour sélectionner.</p>
     <div class="grid" id="lib-grid"></div>
     <div id="lib-empty"></div>
     <div class="bulkbar" id="bulk-bar" hidden></div>
@@ -282,7 +295,24 @@
       <div class="panel"><h4>Note moyenne par année</h4><div id="yearrate-bars"></div></div>
     </div>
     <div class="panel"><h4>Auteurs les plus lus</h4><div id="author-bars"></div></div>
-    <div class="panel">
+  </section>
+
+  <!-- ======== AMIS ======== -->
+  <section class="view" id="view-friends">
+    <h2 class="section">Amis</h2>
+    <div id="friends-body"></div>
+  </section>
+
+  <!-- ======== MON COMPTE ======== -->
+  <!-- Sans onglet dans la barre (six, c’est déjà le maximum) : on y arrive par le bouton avatar de
+       l’en-tête ou par #account. Tout ce qui touche à la personne plutôt qu’aux livres vit ici :
+       la connexion ou les réglages du compte (#account-cloud, rendus par app.js), puis les panneaux
+       qui valent avec ou sans compte — « Mes données » (déplacé depuis Stats, où personne ne
+       cherchait un import ni une sauvegarde) et l’affichage. -->
+  <section class="view" id="view-account" aria-labelledby="account-title">
+    <h2 class="section" id="account-title">Mon compte</h2>
+    <div id="account-cloud"></div>
+    <div class="panel" id="data-panel">
       <h4>Mes données</h4>
       <p style="font-size:13.5px; color:var(--muted); margin-bottom:12px">
         Sans compte, ta bibliothèque, tes notes et tes fiches d’étude restent uniquement sur cet appareil.
@@ -302,12 +332,17 @@
         <input type="file" id="import-csv-file" accept=".csv,text/csv" hidden aria-label="Fichier CSV">
       </div>
     </div>
-  </section>
-
-  <!-- ======== AMIS ======== -->
-  <section class="view" id="view-friends">
-    <h2 class="section">Amis</h2>
-    <div id="friends-body"></div>
+    <div class="panel" id="display-panel">
+      <h4>Affichage</h4>
+      <p style="font-size:13.5px; color:var(--muted); margin-bottom:12px">Thème de Tome. « Auto » suit le réglage de ton appareil (clair le jour, sombre le soir).</p>
+      <!-- Trois états, pas deux : sans choix enregistré, le thème suit le système (voir applyTheme).
+           Un simple bascule clair/sombre cacherait cet état « Auto » et ne permettrait pas d’y revenir. -->
+      <div class="seg-mini" id="theme-seg" role="group" aria-label="Thème" style="margin-left:0; width:max-content">
+        <button type="button" data-theme-pick="auto" aria-pressed="false">Auto</button>
+        <button type="button" data-theme-pick="light" aria-pressed="false">Clair</button>
+        <button type="button" data-theme-pick="dark" aria-pressed="false">Sombre</button>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -423,7 +458,7 @@
 <div id="pubprofile" hidden>
   <div class="pp-wrap">
     <a class="pp-brand" href="/" aria-label="Accueil de Tome">
-      <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="#12161a"/><path d="M256 132c-42-26-108-26-146-9v256c38-17 104-17 146 9 42-26 108-26 146-9V123c-38-17-104-17-146 9z" fill="none" stroke="#00d364" stroke-width="30" stroke-linejoin="round"/><path d="M256 132v256" stroke="#00d364" stroke-width="30"/></svg>
+      <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="110" fill="none"/><path d="M256 132c-42-26-108-26-146-9v256c38-17 104-17 146 9 42-26 108-26 146-9V123c-38-17-104-17-146 9z" fill="none" stroke="var(--green)" stroke-width="30" stroke-linejoin="round"/><path d="M256 132v256" stroke="var(--green)" stroke-width="30"/></svg>
       Tome<em>.</em>
     </a>
     <div id="pp-body"></div>

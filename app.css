@@ -20,6 +20,7 @@
   /* étoile vide : #3c3222 se noyait dans le fond, un livre non noté n’affichait rien à toucher.
      #7c6a47 tient le 3:1 de la 1.4.11 sur --surface tout en restant nettement en retrait de --star. */
   --red:#e06a5f; --star:#cba351; --star-off:#7c6a47;
+  --on-red:#1a0806; /* encre des pastilles rouges : le blanc ne tenait que 3:1 sur #e06a5f */
   --accent-soft:color-mix(in srgb, var(--green) 15%, transparent);
   --header-bg:rgba(21,18,13,.9); --chip-bg:rgba(10,8,4,.72); --chip-text:#ece3d1;
   --overlay-dim:rgba(8,6,3,.74);
@@ -33,9 +34,7 @@
   --font-display:"EB Garamond",Garamond,"Iowan Old Style",Georgia,"Times New Roman",serif;
   --font-serif:"EB Garamond",Garamond,"Iowan Old Style",Georgia,serif;
   --font-mono:"Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-  --grad-green:linear-gradient(135deg,#dcb562,#bd9036);
   --page:#e8dfc9; --page-edge:#c9bda0;   /* tranche de papier des « livres en volume » */
-  --glow-green:0 8px 24px -8px color-mix(in srgb, var(--green) 55%, transparent);
 }
 :root[data-theme="light"]{
   /* Fiche de bibliothèque : papier blanc, encre noire, bleu de tampon. Le rouge ne sert qu'aux
@@ -43,9 +42,8 @@
   --bg:#f7f6f2; --bg2:#fbfaf7; --surface:#ffffff; --surface2:#ecebe5;
   --border:#d9d7cf; --border-hover:#b9b6ab; --control-border:#7a776e; --text:#141311; --muted:#5b5952; --faint:#5b5952;
   --green:#2b4c8c; --green-strong:#1f3a6e; --on-green:#ffffff; --star:#141311; --star-off:#8a877e;  /* idem en clair : #d6d4cb était invisible sur le blanc de la fiche */
-  --red:#b8322b; --orange:#8a5a12;
+  --red:#b8322b; --on-red:#ffffff; --orange:#8a5a12;
   --blue:#2b4c8c; --pink:#8c2b5a;
-  --grad-green:linear-gradient(135deg,#2f5397,#1f3a6e);
   --page:#f4f2ea; --page-edge:#cfccc0;
   --accent-soft:color-mix(in srgb, var(--green) 9%, transparent);
   --header-bg:rgba(247,246,242,.92); --chip-bg:rgba(255,255,255,.88); --chip-text:#141311;
@@ -85,8 +83,6 @@ select{appearance:none; -webkit-appearance:none; padding-right:34px; cursor:poin
 ::selection{background:color-mix(in srgb, var(--green) 30%, transparent)}
 /* Logo : le CSS surcharge les attributs SVG codés en dur (ancien vert vif). Glyphe de livre
    en couleur d'accent, sans le carré de fond → plus éditorial, s'adapte aux deux thèmes. */
-.logo rect{fill:transparent}
-.logo path{stroke:var(--green)}
 /* Grands titres et mot-marque : en Garamond, l'italique joue le rôle que tenait l'axe WONK
    (la signature qui distingue une page de titre d'un écran) — voir le bloc « Voix Garamond » en fin de feuille. */
 /* Balance/pretty : titres équilibrés, paragraphes sans veuves (améliorations progressives). */
@@ -128,8 +124,10 @@ nav button.active{color:var(--green); background:var(--accent-soft); font-weight
 .btn[hidden]{display:none} /* display:inline-flex écraserait l'attribut hidden (styles auteur > UA) */
 .btn:hover{background:var(--surface2); border-color:var(--control-border)}
 .btn:active{transform:translateY(1px)}
-.btn.primary{background:var(--grad-green); border-color:transparent; color:var(--on-green); box-shadow:var(--glow-green)}
-.btn.primary:hover{filter:brightness(1.05); border-color:transparent; transform:translateY(-1px); box-shadow:0 10px 28px -8px color-mix(in srgb, var(--green) 70%, transparent)}
+/* Aplat mat : dégradé et halo faisaient du bouton primaire le seul objet « brillant » d’une
+   interface de papier et d’encre. Le survol change la teinte d’un cran, sans lévitation. */
+.btn.primary{background:var(--green); color:var(--on-green); border-color:var(--green); box-shadow:none}
+.btn.primary:hover{background:var(--green-strong); border-color:var(--green-strong); transform:none; filter:none; box-shadow:none}
 .btn.danger{color:var(--red); border-color:color-mix(in srgb, var(--red) 35%, var(--border))}
 .btn.small{padding:5px 10px; font-size:var(--fs-md)}
 .btn.icon{padding:8px 10px}
@@ -138,6 +136,9 @@ main{max-width:1060px; margin:0 auto; padding:22px 16px 90px; padding-left:max(1
 .view{display:none}
 .view.active{display:block}
 h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12em; color:var(--muted); border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:16px; font-weight:700}
+/* Titre de vue focalisé par selectView (annonce du changement d’onglet) : pas un contrôle, pas
+   d’anneau — le focus repart de là au Tab suivant. */
+.view h2[tabindex="-1"]:focus{outline:none}
 
 /* ---------- Aujourd'hui ---------- */
 /* Titre courant (date à gauche, repères de l'année à droite) puis grand titre sur filet — une page, pas un tableau de bord */
@@ -151,13 +152,12 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
 .today-grid{display:grid; grid-template-columns:minmax(0,1.55fr) minmax(260px,.75fr); gap:18px; align-items:stretch}
 .today-card{background:none; border:0; border-radius:0; box-shadow:none}
 .today-focus{height:100%; min-height:0; padding:0; overflow:visible; position:relative}
-  radial-gradient(circle at 10% 0%,color-mix(in srgb,var(--green) 12%,transparent),transparent 42%),var(--bg2)}
 .today-focus:after{display:none}
 .today-focus-main{display:flex; gap:24px; align-items:center; min-height:265px; margin-top:12px; position:relative; z-index:1}
-.today-cover{width:142px; aspect-ratio:2/3; flex:0 0 auto; overflow:hidden; border-radius:2px; background:var(--surface2); box-shadow:0 14px 32px rgba(0,0,0,.35); border:1px solid var(--border); text-align:left}
+.today-cover{width:142px; aspect-ratio:2/3; flex:0 0 auto; overflow:hidden; border-radius:2px; background:var(--surface2); box-shadow:var(--sh-2); border:1px solid var(--border); text-align:left}
 /* Sur écran tactile, :hover reste « collé » après le retour d’une modale : la couverture restait
    soulevée et penchée sans que rien ne la survole. Les effets de survol sont réservés à la souris. */
-@media (hover:hover){ .today-cover:hover{transform:translateY(-3px) rotate(-.5deg); box-shadow:0 18px 38px rgba(0,0,0,.42)} }
+@media (hover:hover){ .today-cover:hover{transform:translateY(-3px) rotate(-.5deg); box-shadow:var(--sh-3)} }
 .today-cover img,.today-cover .ph{width:100%; height:100%; object-fit:cover}
 .today-cover .ph{border:0; border-radius:0}
 .today-focus-copy{flex:1; min-width:0}
@@ -187,7 +187,7 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
 .today-arrow{color:var(--faint); transition:transform .15s,color .15s}
 .today-mini:hover .today-arrow{color:var(--green); transform:translateX(3px)}
 .today-empty{min-height:0; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:10px 0 4px}
-.today-empty-icon{width:50px; height:50px; display:grid; place-items:center; border-radius:15px; margin-bottom:18px; background:var(--grad-green); color:var(--on-green); font-family:var(--font-display); font-size:var(--fs-3xl); font-weight:800; box-shadow:var(--glow-green)}
+.today-empty-icon{display:block; margin-bottom:14px} /* fleuron : voir .orn plus bas */
 .today-empty h3{max-width:520px}
 .today-empty p{max-width:560px}
 .today-social{margin-top:26px; padding:18px 0 0; border-top:1.5px solid var(--rule)}
@@ -196,8 +196,7 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
 .today-feed{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px}
 .today-feed-row{display:grid; grid-template-columns:40px minmax(0,1fr); gap:10px; position:relative; min-width:0; text-align:left; padding:10px; border-radius:10px; background:var(--surface); border:1px solid transparent}
 @media (hover:hover){ .today-feed-row:hover{border-color:var(--border-hover); transform:translateY(-2px)} }
-.today-feed-cover{width:40px; height:58px; display:grid; place-items:center; overflow:hidden; border-radius:5px; background:var(--surface2)}
-.today-feed-cover img{width:100%; height:100%; object-fit:cover}
+.today-feed-cover{--mini-w:40px}
 .today-feed-copy{min-width:0; display:flex; flex-direction:column; justify-content:center; font-size:var(--fs-md)}
 .today-feed-copy>b{font-size:var(--fs-md)}
 .today-feed-copy>span{color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
@@ -237,8 +236,7 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
   border:1px solid var(--control-border); border-radius:10px; padding:8px 12px; cursor:pointer; max-width:280px; position:relative;
 }
 @media (hover:hover){ .now-card:hover{border-color:var(--border-hover); box-shadow:var(--sh-1)} }
-.now-card .mini{width:36px; height:54px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
-.now-card .mini img{width:100%; height:100%; object-fit:cover}
+.now-card .mini{--mini-w:36px}
 .now-card .ni{min-width:0}
 /* Pas de max-width : la carte est déjà bornée à 280 px et .ni a min-width:0, la coupure à
    150 px tronquait « Le Comte de Monte-… » alors qu’il restait 60 px de libres à droite. */
@@ -272,18 +270,23 @@ h2.section{font-size:var(--fs-md); text-transform:uppercase; letter-spacing:.12e
 .card.series .cover{box-shadow:3px 3px 0 -1px var(--bg2), 3px 3px 0 0 var(--border-hover), 6px 6px 0 -2px var(--bg2), 6px 6px 0 -1px var(--border-hover)}
 @media (hover:hover){ .card.series:hover .cover{box-shadow:3px 3px 0 -1px var(--bg2), 3px 3px 0 0 var(--border-hover), 6px 6px 0 -2px var(--bg2), 6px 6px 0 -1px var(--border-hover), var(--sh-2)} }
 .cover img{width:100%; height:100%; object-fit:cover; display:block; animation:fadein .35s ease}
-.cover .ph{
+.ph{
   width:100%; height:100%; display:flex; flex-direction:column; justify-content:center;
   padding:14px 12px; text-align:center; gap:7px; color:#efe8d8; position:relative;
 }
-/* filet intérieur d'imprimeur + tranche : le placeholder est une couverture composée, pas un vide */
-.cover .ph::before{content:""; position:absolute; inset:7px; border:1px solid rgba(239,232,216,.4); pointer-events:none}
-.cover .ph::after{content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:rgba(0,0,0,.22); pointer-events:none}
-.cover .ph .ph-t{font-family:var(--font-display); font-weight:600; font-size:var(--fs-base); line-height:1.22; letter-spacing:-.01em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; text-wrap:balance}
-.cover .ph .ph-a{font-size:var(--fs-xs); opacity:.8; letter-spacing:.06em; text-transform:uppercase}
+/* filet intérieur d'imprimeur + tranche : le placeholder est une couverture composée, pas un vide.
+   Non rattaché à .cover : la même fabrique sert l'onboarding, la notation rapide et les pages publiques. */
+.ph::before{content:""; position:absolute; inset:7px; border:1px solid rgba(239,232,216,.4); pointer-events:none}
+.ph::after{content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:rgba(0,0,0,.22); pointer-events:none}
+.ph .ph-t{font-family:var(--font-display); font-weight:600; font-size:var(--fs-base); line-height:1.22; letter-spacing:-.01em; overflow:hidden; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; text-wrap:balance}
+.ph .ph-a{font-size:var(--fs-xs); opacity:.8; letter-spacing:.06em; text-transform:uppercase}
 .ph-mini{display:flex; align-items:center; justify-content:center; height:100%; color:#efe8d8; position:relative}
 .ph-mini::after{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:rgba(0,0,0,.22)}
 .ph-mini span{font-family:var(--font-display); font-weight:600; font-size:var(--fs-2xl); font-style:italic}
+/* Miniatures (lecture en cours, journal, recherche, fil, idées, rappels) : une seule règle, la largeur
+   par contexte via --mini-w — le ratio 2/3 fait le reste, plus de couples largeur/hauteur à tenir. */
+.mini, .today-feed-cover{--mini-w:38px; display:block; width:var(--mini-w); aspect-ratio:2/3; height:auto; flex-shrink:0; border-radius:2px; border:1px solid var(--border); box-shadow:var(--sh-1); overflow:hidden; background:var(--surface2)}
+.mini img, .today-feed-cover img{width:100%; height:100%; object-fit:cover; display:block}
 .card .under{margin-top:7px; display:flex; align-items:center; gap:5px; min-height:18px}
 /* ---- Mode liste de la bibliotheque ---- */
 #lib-grid.list-mode{display:flex; flex-direction:column; gap:8px}
@@ -339,6 +342,9 @@ body.selecting .lrow .selbox{display:flex}
 .filterbar.compact #lib-select:not(.active),
 .filterbar.compact #lib-tag:not(.has-value){ display:none }
 #lib-more[aria-expanded="true"]{ background:color-mix(in srgb, var(--green) 16%, var(--surface)); border-color:var(--green); color:var(--green) }
+/* Sens du tri inversé : même marquage que « Filtres » déplié, la flèche seule ne suffirait pas */
+#lib-dir{min-width:32px; justify-content:center; font-family:var(--font-mono)}
+#lib-dir[aria-pressed="true"]{ background:color-mix(in srgb, var(--green) 16%, var(--surface)); border-color:var(--green); color:var(--green) }
 /* Sélection multiple */
 .selbox{position:absolute; top:6px; left:6px; width:26px; height:26px; border-radius:50%; background:var(--chip-bg); border:2px solid var(--border-hover); display:none; align-items:center; justify-content:center; z-index:4; color:var(--green); font-weight:800; font-size:var(--fs-base)}
 body.selecting .selbox{display:flex}
@@ -357,9 +363,14 @@ body.selecting .card .qk{display:none}
 /* Collections intelligentes */
 .smart-chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px}
 .smart-chips:empty{display:none}
-.smart-chips .chip{display:inline-flex; align-items:center; gap:6px}
-.smart-chips .chip .sc-del{color:var(--faint); font-weight:700}
-.smart-chips .chip .sc-del:hover{color:var(--red)}
+/* Filtre mémorisé = deux boutons frères soudés (le nom, puis ✕ « oublier ») : un ✕ imbriqué dans
+   le bouton du filtre n’était atteignable qu’à la souris. Le plancher de taille de .sc-del vit
+   avec les autres ✕ (plus bas), le rayon 999 px est coupé au milieu pour lire une seule puce. */
+.smart-chips .sc-group{display:inline-flex; align-items:stretch}
+.smart-chips .sc-group .chip{display:inline-flex; align-items:center}
+.smart-chips .sc-group [data-sc]{border-radius:999px 0 0 999px}
+.smart-chips .sc-del{border-radius:0 999px 999px 0; border-left:0; padding:0 8px; color:var(--faint); font-weight:700}
+.smart-chips .sc-del:hover{color:var(--red)}
 /* Bandeau mise à jour PWA */
 #update-bar{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:210; display:none; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--green) 40%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:var(--fs-base); max-width:calc(100vw - 28px)}
 #update-bar.show{display:flex}
@@ -422,13 +433,20 @@ body.selecting .card .qk{display:none}
 .entry .day{width:34px; text-align:center; flex-shrink:0}
 .entry .day b{display:block; font-size:var(--fs-xl); line-height:1.1; font-variant-numeric:tabular-nums}
 .entry .day span{font-size:var(--fs-xs); color:var(--faint); text-transform:uppercase}
-.entry .mini{width:38px; height:57px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2); border:1px solid var(--border)}
-.entry .mini img{width:100%; height:100%; object-fit:cover}
+.entry .mini{--mini-w:38px}
 .entry .einfo{flex:1; min-width:0}
 .entry .einfo .et{font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .entry .einfo .ea{font-size:var(--fs-md); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .entry .emeta{display:flex; align-items:center; gap:10px; flex-shrink:0}
 .entry .reread{color:var(--muted); font-size:var(--fs-md)}
+/* F40 : sessions de lecture du Journal — un filet discret entre les lectures, pas une carte :
+   repliées par défaut derrière la puce « Sessions », elles ne doivent pas rivaliser avec les lectures. */
+.entry.session{background:transparent; border-radius:0; border-bottom:1px dashed var(--border); padding:4px 12px; margin-bottom:4px; gap:10px}
+.entry.session .mini{--mini-w:26px; box-shadow:none}
+.entry.session .einfo .et{font-weight:400; color:var(--muted); font-size:var(--fs-md)}
+.entry.session .einfo .ea{font-family:var(--font-mono); font-size:var(--fs-sm); color:var(--faint)}
+@media (hover:hover){ .entry.session:hover{background:var(--bg2)} }
+.chip-sess{margin-left:6px}
 .tbadge{font-size:var(--fs-xs); font-weight:800; padding:2px 7px; border-radius:5px; background:var(--surface2)}
 .tbadge.livre{color:var(--blue)} .tbadge.bd{color:var(--orange)} .tbadge.manga{color:var(--pink)}
 
@@ -440,12 +458,9 @@ body.selecting .card .qk{display:none}
 }
 @media (hover:hover){ .list-card:hover{border-color:var(--border-hover); transform:translateY(-2px); box-shadow:var(--sh-1)} }
 .list-card .fan{display:flex; margin-bottom:10px; height:78px}
-.list-card .fan .mini{
-  width:52px; height:78px; border-radius:4px; overflow:hidden; background:var(--surface2);
-  border:1px solid var(--border); margin-right:-18px; box-shadow:2px 0 8px rgba(0,0,0,.4);
-}
+/* l'ombre latérale détache chaque tranche de l'éventail : elle reste propre à ce contexte */
+.list-card .fan .mini{--mini-w:52px; margin-right:-18px; box-shadow:2px 0 8px rgba(0,0,0,.4)}
 :root[data-theme="light"] .list-card .fan .mini{box-shadow:2px 0 8px rgba(80,70,40,.2)}
-.list-card .fan .mini img{width:100%; height:100%; object-fit:cover}
 .list-card .fan .empty-fan{display:flex; align-items:center; color:var(--faint); font-size:var(--fs-4xl); padding-left:4px}
 .list-card h4{font-size:var(--fs-lg)}
 .list-card .lc-count{font-size:var(--fs-sm); color:var(--faint); margin-top:4px}
@@ -541,6 +556,16 @@ body.selecting .card .qk{display:none}
 }
 .ld-item .mv button:hover{color:var(--green)}
 .list-desc{font-size:var(--fs-md); color:var(--muted); margin:8px 0 4px; white-space:pre-line}
+
+/* ---------- Sélecteur d'ajout du panneau liste ----------
+   Remplir une liste sans ouvrir chaque fiche : un filet, un champ, et les titres de la bibliothèque
+   qui n'y sont pas encore (lignes .sr de la recherche, 20 au plus). C'est aussi l'état vide de la
+   liste, d'où le fleuron. */
+.l-picker{margin:12px 0 4px; padding:12px 0 4px; border-top:1px solid var(--rule)}
+.l-pick-empty{margin:0 0 10px; color:var(--muted); font-size:var(--fs-md)}
+.l-pick-empty .orn{font-family:var(--font-display); color:var(--green); font-variant-settings:"WONK" 1}
+#l-pick-res{display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height:40vh; overflow-y:auto}
+.l-pick-hint{color:var(--faint); font-size:var(--fs-md); text-align:center; padding:10px 0; margin:0}
 .ribbon.done{color:var(--green)}
 
 /* ---------- Tags cliquables ---------- */
@@ -600,8 +625,7 @@ body.selecting .card .qk{display:none}
   border:1px solid transparent; align-items:center;
 }
 .sr:hover{border-color:var(--border-hover)}
-.sr .mini{width:44px; height:66px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
-.sr .mini img{width:100%; height:100%; object-fit:cover}
+.sr .mini{--mini-w:44px}
 .sr .sri{flex:1; min-width:0}
 .sr .sri b{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:var(--fs-base)}
 .sr .sri span{font-size:var(--fs-md); color:var(--muted); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -675,7 +699,9 @@ body.selecting .card .qk{display:none}
 }
 .detail .dcover:hover .cover, .pp-fav-cov:hover{transform:rotateY(0deg)}
 .pp-fav{perspective:900px}
-.detail .dcover .cover{cursor:default}
+/* width:100% : le <button class="cover"> se réduisait à son contenu tant que l'image n'était pas
+   chargée (hors ligne : rien) — le cadre 150/120 px et son placeholder titré sont là d'emblée. */
+.detail .dcover .cover{cursor:default; width:100%; display:block}
 .detail .dmain{flex:1; min-width:0}
 .detail h3.dt{font-family:var(--font-display); font-weight:700; font-size:var(--fs-3xl); line-height:1.2; letter-spacing:-.01em}
 .detail .da{color:var(--muted); margin-bottom:2px}
@@ -724,7 +750,9 @@ body.selecting .card .qk{display:none}
 .rate-row{display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; border-radius:10px; padding:2px 4px}
 .rate-row.pulse{animation:pulseb 1s ease 2}
 @keyframes pulseb{0%,100%{box-shadow:none} 50%{box-shadow:0 0 0 3px var(--green)}}
-.star-input{display:flex; font-size:var(--fs-5xl); color:var(--star-off); cursor:pointer; user-select:none}
+/* touch-action:pan-y : un glissé horizontal sur les étoiles reste un geste de notation (bindStarSlider),
+   le défilement vertical de la fiche, lui, reste au navigateur */
+.star-input{display:flex; font-size:var(--fs-5xl); color:var(--star-off); cursor:pointer; user-select:none; touch-action:pan-y}
 .star-input .st{padding:0 1px}
 .star-input .st.full{color:var(--star)}
 .star-input .st.half{background:linear-gradient(90deg, var(--star) 50%, var(--star-off) 50%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent}
@@ -734,7 +762,9 @@ body.selecting .card .qk{display:none}
 .clear-rate{color:var(--faint); font-size:var(--fs-sm)}
 .clear-rate:hover{color:var(--text)}
 .dblock{margin-bottom:14px}
-.dblock label{display:block; font-size:var(--fs-sm); font-weight:700; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.06em}
+/* .lbl : intitulé d’un bloc sans champ unique (Ambiances, Passages, Prêt…) — un <label> sans
+   contrôle ne libelle rien ; le bloc est un role=group nommé par ce span. Même dessin. */
+.dblock label, .dblock .lbl{display:block; font-size:var(--fs-sm); font-weight:700; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.06em}
 /* les raccourcis ＋10/＋25 passent à la ligne sur mobile plutôt que d’écraser la barre */
 .prog-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 .prog-row input{width:84px}
@@ -743,6 +773,7 @@ body.selecting .card .qk{display:none}
 .prog-row .track{flex:1 1 80px; height:8px; background:var(--surface2); border-radius:4px; overflow:hidden}
 .prog-row .fill{height:100%; background:var(--green)}
 .prog-row b{font-size:var(--fs-md)}
+.prog-row .prog-rest:empty{display:none}
 .readings{display:flex; flex-direction:column; gap:6px; margin-bottom:8px}
 .reading-row{display:flex; align-items:center; gap:10px; font-size:var(--fs-base); color:var(--muted); flex-wrap:wrap}
 .reading-row .del{color:var(--faint); padding:0 6px}
@@ -751,15 +782,29 @@ body.selecting .card .qk{display:none}
    (charte : des filets, pas des cartes) tout en disant « ça se corrige ». Pas de font-size ici :
    le champ hérite des 17 px du mobile, qui évitent le rezoom automatique d’iOS. */
 .rdate-wrap{display:inline-flex; align-items:center; gap:6px; cursor:pointer}
-.rdate{font-family:var(--font-mono); color:var(--text); background:none; border:0; border-bottom:1px dashed var(--control-border); border-radius:0; width:auto; padding:3px 2px; min-height:32px}
-.rdate:hover{border-bottom-color:var(--text)}
-.rdate:focus{border-bottom-color:var(--green)}
+.rdate, .rstart{font-family:var(--font-mono); color:var(--text); background:none; border:0; border-bottom:1px dashed var(--control-border); border-radius:0; width:auto; padding:3px 2px; min-height:32px}
+.rdate:hover, .rstart:hover{border-bottom-color:var(--text)}
+.rdate:focus, .rstart:focus{border-bottom-color:var(--green)}
 /* un seul calendrier par ligne : le nôtre, qui suit le thème (l’indicateur natif reste noir en sombre) */
-.rdate::-webkit-calendar-picker-indicator{display:none}
-.rstars{display:inline-flex; cursor:pointer; font-size:var(--fs-lg); user-select:none}
+.rdate::-webkit-calendar-picker-indicator, .rstart::-webkit-calendar-picker-indicator{display:none}
+/* F40 : « du … au … · N jours » — libellés en retrait, durée en chiffres Plex Mono */
+.reading-row .rlbl{color:var(--faint); margin:0 2px}
+.reading-row .rdays{font-family:var(--font-mono); font-size:var(--fs-md); color:var(--faint); white-space:nowrap}
+.rstars{display:inline-flex; cursor:pointer; font-size:var(--fs-lg); user-select:none; touch-action:pan-y}
 .rstars .rst{color:var(--star-off); padding:0 .5px}
 .rstars .rst.full{color:var(--star)}
 .rstars .rst.half{background:linear-gradient(90deg,var(--star) 50%, var(--star-off) 50%); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent}
+/* Étoiles d’une rangée (mode liste) : au-dessus du bouton-cible de la carte (.card-hit, z-index 1)
+   pour noter sans ouvrir la fiche ; discrètes tant que le livre n’est pas noté, pleines au survol
+   ou au focus. En sélection multiple, elles s’effacent derrière la cible : on sélectionne, on ne note pas. */
+.row-stars{position:relative; z-index:3; font-size:var(--fs-lg); border-radius:var(--r-sm)}
+.row-stars.unrated{opacity:.5}
+.row-stars.unrated:hover, .row-stars.unrated:focus-visible, .row-stars[data-drag]{opacity:1}
+.row-stars:focus-visible{outline:2px solid var(--green); outline-offset:2px}
+body.selecting .row-stars, body.selecting .lrow .rmenu{pointer-events:none; opacity:.35}
+/* ⋯ d’une rangée : mêmes cotes que les actions rapides des affiches (.qk button) */
+.lrow .rmenu{position:relative; z-index:3; width:26px; height:26px; border-radius:50%; background:var(--chip-bg); color:var(--chip-text); font-size:var(--fs-md); display:flex; align-items:center; justify-content:center}
+.lrow .rmenu:hover{color:var(--green)}
 .add-reading{display:flex; gap:8px}
 .add-reading input{width:auto}
 .chips-line{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
@@ -771,7 +816,13 @@ body.selecting .card .qk{display:none}
 .buy-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:14px 0 2px}
 .btn.buy{font-size:var(--fs-md); text-decoration:none; background:var(--surface); border:1px solid var(--border)}
 .btn.buy:hover{background:var(--surface2); border-color:var(--border-hover)}
-.buy-note{font-size:var(--fs-xs); color:var(--faint); cursor:help; border-bottom:1px dotted var(--faint)}
+/* Mention Partenaire Amazon : un <details> plutôt qu’un title (invisible au doigt et au lecteur
+   d’écran) — le texte se déplie sous la rangée. */
+.buy-note{font-size:var(--fs-xs); color:var(--faint)}
+.buy-note[open]{flex-basis:100%}
+.buy-note summary{display:inline; cursor:pointer; list-style:none; border-bottom:1px dotted var(--faint)}
+.buy-note summary::-webkit-details-marker{display:none}
+.buy-note p{margin:4px 0 0; max-width:52ch}
 /* Livre pas encore lu : une ligne au filet à la place des quatre blocs « après lecture » */
 .wish-cta{border-top:1px solid var(--border); padding-top:12px}
 .wish-cta .btn{width:100%; justify-content:center}
@@ -828,6 +879,8 @@ body.selecting .card .qk{display:none}
 .study-review-top .track{height:7px; flex:1; background:var(--surface2); border-radius:999px; overflow:hidden}
 .study-review-top .fill{height:100%; background:var(--green)}
 .study-flash{min-height:250px; display:flex; flex-direction:column; justify-content:center; padding:30px 24px; background:var(--bg2); border:1px solid var(--border); border-radius:18px; box-shadow:var(--sh-1)}
+/* Tant que la réponse est cachée, la carte se retourne d’un tap (le seul geste en tactile). */
+.study-flash[data-study-reveal]{cursor:pointer}
 .study-flash .book{font-size:var(--fs-sm); color:var(--green); font-weight:700; text-transform:uppercase; letter-spacing:.07em; margin-bottom:20px}
 .study-flash .front{font-family:var(--font-display); font-size:clamp(22px,4vw,30px); line-height:1.3; white-space:pre-wrap}
 .study-answer{border-top:1px solid var(--border); margin-top:24px; padding-top:24px; font-size:var(--fs-xl); line-height:1.55; white-space:pre-wrap}
@@ -872,8 +925,7 @@ body.selecting .card .qk{display:none}
   background:var(--bg2); border:1px solid transparent; margin-bottom:6px; cursor:pointer;
 }
 .tome-row:hover{border-color:var(--border-hover); background:var(--surface)}
-.tome-row .mini{width:34px; height:51px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
-.tome-row .mini img{width:100%; height:100%; object-fit:cover}
+.tome-row .mini{--mini-w:34px}
 .tome-row .ti{flex:1; min-width:0; font-size:var(--fs-base); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .tome-row .ti b{font-weight:800}
 .tome-row .st-tag{font-size:var(--fs-xs); font-weight:700; flex-shrink:0}
@@ -897,7 +949,6 @@ body.selecting .card .qk{display:none}
 .ob-cov{position:relative; aspect-ratio:2/3; border-radius:var(--r-sm); overflow:hidden; border:1px solid var(--border); box-shadow:var(--sh-1); transition:transform .18s ease, box-shadow .2s ease}
 .ob-pick:hover .ob-cov{transform:translateY(-3px); box-shadow:var(--sh-2); border-color:color-mix(in srgb, var(--green) 45%, var(--border))}
 .ob-cov img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1}
-.ob-ph{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:8px; font-size:var(--fs-sm); font-weight:700; line-height:1.25; color:#e8eef4; background:linear-gradient(160deg,#2f5b4a,#16242c)}
 .ob-t{font-size:var(--fs-sm); color:var(--muted); line-height:1.25; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
 .ob-check{position:absolute; inset:0; z-index:2; display:none; align-items:center; justify-content:center; background:color-mix(in srgb, var(--green) 82%, transparent); color:var(--on-green); font-weight:800; font-size:var(--fs-base); border-radius:var(--r-sm)}
 .ob-pick.done .ob-cov{border-color:var(--green)} .ob-pick.done .ob-check{display:flex}
@@ -906,7 +957,7 @@ body.selecting .card .qk{display:none}
 #ov-card{z-index:150}
 .card-modal{max-width:430px}
 #card-body{text-align:center}
-.card-preview{width:100%; max-width:330px; border-radius:14px; border:1px solid var(--border); box-shadow:0 12px 36px rgba(0,0,0,.35); display:block; margin:0 auto 14px}
+.card-preview{width:100%; max-width:330px; border-radius:14px; border:1px solid var(--border); box-shadow:var(--sh-2); display:block; margin:0 auto 14px}
 .card-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
 .card-hint{font-size:var(--fs-md); color:var(--faint); margin-top:10px}
 /* Sous la critique : à qui elle est visible. Discret comme une note de marge, mais toujours là. */
@@ -1009,10 +1060,13 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
 .frow .fi span{font-size:var(--fs-md); color:var(--muted)}
 .frow .fa{display:flex; gap:6px; flex-shrink:0}
 .frow.clickable{cursor:pointer}
+/* Le nom d’un ami est un <button> (atteignable au Tab, Entrée ouvre le profil) : on lui retire
+   l’habit de bouton pour garder la ligne telle quelle, focus visible compris. */
+.frow .fi.clickable{background:none; border:0; padding:0; text-align:left; font:inherit; color:inherit; display:block; cursor:pointer; border-radius:var(--r-sm)}
+.frow .fi.clickable:focus-visible{outline:2px solid var(--green); outline-offset:3px}
 .add-friend{display:flex; gap:8px; margin-bottom:18px}
 .feed-item{display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg2); border:1px solid transparent; border-radius:var(--r-md); margin-bottom:8px}
-.feed-item .mini{width:34px; height:51px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
-.feed-item .mini img{width:100%; height:100%; object-fit:cover}
+.feed-item .mini{--mini-w:34px}
 .feed-item .fx{flex:1; min-width:0}
 .feed-item .fx .who{font-weight:700; font-size:var(--fs-base)}
 .feed-item .fx .what{font-size:var(--fs-md); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -1020,7 +1074,7 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
 .profile-head{display:flex; align-items:center; gap:14px; margin-bottom:18px}
 .profile-head .avatar{width:56px; height:56px; border-radius:50%; background:var(--accent-soft); color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:var(--fs-2xl)}
 .common-badge{display:inline-block; background:var(--accent-soft); color:var(--green); font-size:var(--fs-sm); font-weight:700; padding:3px 10px; border-radius:999px}
-.nav-badge{position:absolute; top:2px; right:0; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--red); color:#fff; font-size:var(--fs-xs); font-weight:800; line-height:16px; text-align:center}
+.nav-badge{position:absolute; top:2px; right:0; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--red); color:var(--on-red); font-size:var(--fs-xs); font-weight:800; line-height:16px; text-align:center}
 /* Ligne « où en est notre amitié » : un état lisible et l’action qui va avec, filet compris. */
 .prof-rel{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--border)}
 .prof-rel .rel-state{flex:1; min-width:0; font-size:var(--fs-base); color:var(--muted)}
@@ -1085,7 +1139,27 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
      plus qu’un carré d’accent énigmatique. C’est le FAB qui porte l’ajout : sous le pouce, toujours
      visible, déjà masqué quand une modale ou la barre de sélection est ouverte. */
   #btn-open-search{display:none}
-  #btn-pick-next .pick-label{display:none}
+  #btn-pick-next .pick-label, #btn-rate-all .rate-label{display:none}
+  /* ===== Barre de filtres sur téléphone =====
+     Mesuré à 375×812 : les puces de statut passaient sur deux lignes, les puces de type sur une
+     troisième, puis recherche, tri, disposition, sélection et « Filtres » sur deux de plus — la
+     première rangée de couvertures n'apparaissait qu'après avoir défilé. Chaque rangée de puces
+     devient un ruban horizontal (même geste que les étagères de l'accueil, débord jusqu'au bord
+     de l'écran, sans barre de défilement), et en mode replié la ligne d'outils ne garde que la
+     recherche et « Filtres » : tri, sens, disposition, sélection, prochaine lecture, notation et
+     « Mémoriser » se déplient avec le reste. */
+  #status-chips,#type-chips{flex:0 0 calc(100% + 24px); flex-wrap:nowrap; overflow-x:auto; scroll-snap-type:x proximity;
+    -webkit-overflow-scrolling:touch; margin:0 -12px; padding:0 12px; scrollbar-width:none;
+    scroll-padding:0 12px}   /* sinon l'accroche aligne la première puce sur le bord et avale le padding de départ */
+  #status-chips::-webkit-scrollbar,#type-chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto; scroll-snap-align:start; white-space:nowrap}
+  /* replié sans type actif, la rangée de types n'a plus rien à montrer : elle ne coûte pas un
+     interligne vide (:has non pris en charge = simple rangée de 0 px, rien de cassé) */
+  .filterbar.compact #type-chips:not(:has(.chip[data-type].active)){display:none}
+  .filterbar .spacer{display:none}
+  #lib-q{flex:1 1 0; width:auto; min-width:0}
+  .filterbar.compact #lib-sort, .filterbar.compact #lib-dir, .filterbar.compact #lib-layout,
+  .filterbar.compact #btn-pick-next, .filterbar.compact #btn-rate-all, .filterbar.compact #lib-savefilter, .filterbar.compact #lib-select{display:none}
   .grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:14px}
   .detail{flex-direction:column}
   .detail .dcover{width:120px; margin:0 auto}
@@ -1126,7 +1200,7 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
     display:flex; align-items:center; justify-content:center; position:fixed; z-index:60;
     right:18px; bottom:calc(76px + env(safe-area-inset-bottom)); width:56px; height:56px; /* au-dessus de la barre */
     border-radius:50%; background:var(--green); color:var(--on-green); font-size:var(--fs-4xl);
-    box-shadow:var(--sh-3); border:none;
+    box-shadow:var(--sh-2); border:none;
   }
   .fab:active{transform:scale(.94)}
 }
@@ -1174,6 +1248,9 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
   /* Sans survol, .card:hover .qk ne se déclenche jamais : ♥ et ✓ resteraient invisibles.
      C’était déjà corrigé sous 640 px ; les tablettes tactiles en avaient besoin aussi. */
   .card .qk{opacity:1}
+  /* Le ⋯ est la voie de la souris vers le menu d’actions : au doigt, c’est l’appui long —
+     un troisième bouton toujours visible sur chaque couverture n’apporterait que du bruit. */
+  .qk [data-quick="menu"], .lrow .rmenu{display:none}
 }
 body:has(.overlay.open) .fab{display:none}
 body.selecting .fab{display:none} /* le FAB ne recouvre pas la barre d'actions groupées */
@@ -1211,18 +1288,18 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 /* Étagère « en éventail » */
 .lp-hero-visual{display:flex; justify-content:center} /* perspective retirée : rotations 2D seulement, et un contexte 3D dans le conteneur qui défile provoquait des artefacts de peinture */
 .lp-shelf{position:relative; width:min(360px,80vw); height:clamp(300px,42vh,440px)}
-.lp-book{position:absolute; width:44%; aspect-ratio:2/3; border-radius:10px; padding:16px 15px;
+.lp-book{position:absolute; width:44%; aspect-ratio:2/3; border-radius:var(--r-sm); padding:16px 15px;
   display:flex; flex-direction:column; justify-content:flex-start; gap:4px; color:#fff; transform-origin:bottom center;
   box-shadow:var(--sh-3), inset 0 1px 0 rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.08);
   transition:transform .4s cubic-bezier(.2,.7,.3,1)}
 .lp-cover{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:inherit; z-index:1; animation:fadein .5s ease}
 .lp-bk-t{font-family:var(--font-display); font-weight:700; font-size:var(--fs-xl); line-height:1.12}
 .lp-bk-a{font-size:var(--fs-xs); opacity:.82}
-.lp-bk-s{font-size:var(--fs-sm); color:#ffd66b; letter-spacing:1px; margin-top:2px}
+.lp-bk-s{font-size:var(--fs-sm); letter-spacing:1px; margin-top:2px} /* hérite l'encre du livre : --star serait noir sur les fonds sombres en thème clair */
 .lp-book.b1{left:-1%; bottom:3%; transform:rotate(-15deg); z-index:1; background:linear-gradient(150deg,#e8952f,#8a3d12)}
 .lp-book.b2{left:16%; bottom:9%; transform:rotate(-6deg); z-index:2; background:linear-gradient(150deg,#c2334a,#2a0d14)}
 .lp-book.b3{right:17%; bottom:9%; transform:rotate(6deg); z-index:3; background:linear-gradient(150deg,#f2c744,#7a5b00); color:#241d00}
-.lp-book.b3 .lp-bk-a{opacity:.7} .lp-book.b3 .lp-bk-s{color:#8a1f1f}
+.lp-book.b3 .lp-bk-a{opacity:.7}
 .lp-book.b4{right:-2%; bottom:3%; transform:rotate(15deg); z-index:2; background:linear-gradient(150deg,#2f9bc7,#123a52)}
 .lp-hero-visual:hover .lp-book.b1{transform:rotate(-19deg) translateY(-6px)}
 .lp-hero-visual:hover .lp-book.b4{transform:rotate(19deg) translateY(-6px)}
@@ -1354,7 +1431,7 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 
 /* ---- Recherche d'amis + notifications ---- */
 .sub-badge{position:absolute; top:-4px; right:-4px; min-width:16px; height:16px; padding:0 4px; border-radius:8px;
-  background:var(--red); color:#fff; font-size:var(--fs-xs); font-weight:800; line-height:16px; text-align:center}
+  background:var(--red); color:var(--on-red); font-size:var(--fs-xs); font-weight:800; line-height:16px; text-align:center}
 .search-res-h{font-size:var(--fs-sm); text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700; margin:6px 2px 4px}
 #search-res:empty{display:none}
 #search-res .frow{background:var(--bg2); border-radius:var(--r-md); margin-bottom:6px}
@@ -1368,6 +1445,13 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 
 /* ---- Streak 🔥 dans le header ---- */
 #btn-streak{width:auto; padding:0 10px; gap:3px; font-weight:700; font-variant-numeric:tabular-nums}
+/* ---- Bouton « Mon compte » (avatar) dans le header ----
+   Le padding réduit garde le bouton à la hauteur de ses voisins (icône 18 px + 8 px de padding)
+   malgré l’avatar de 24 px ; .avatar n’a pas de style de base (chaque contexte le dessine), d’où
+   le rappel du cercle ici. .on : la vue Mon compte n’a pas d’onglet, c’est lui qui dit qu’on y est. */
+#btn-me{padding:5px 8px}
+#btn-me .avatar{width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; letter-spacing:0}
+#btn-me.on{border-color:var(--green); color:var(--green)}
 
 /* ---- Journal : « à la même période l'an dernier » ---- */
 .ago-month h3{display:flex; align-items:center; gap:8px}
@@ -1381,8 +1465,7 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 .idea-group:first-of-type .ig-label{margin-top:0}
 .ig-items{display:flex; flex-direction:column; gap:6px}
 .idea-card{display:flex; align-items:center; gap:10px; padding:6px 8px; background:var(--surface); border-radius:var(--r-md)}
-.idea-card .mini{width:32px; height:48px; border-radius:4px; overflow:hidden; flex-shrink:0; background:var(--surface2)}
-.idea-card .mini img{width:100%; height:100%; object-fit:cover}
+.idea-card .mini{--mini-w:32px}
 .idea-card .ii{flex:1; min-width:0}
 .idea-card .ii b{display:block; font-size:var(--fs-md); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .idea-card .ii span{font-size:var(--fs-sm); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block}
@@ -1407,8 +1490,7 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 .qr-count{font-size:var(--fs-sm); color:var(--faint); font-variant-numeric:tabular-nums; white-space:nowrap}
 .qr-card{display:flex; flex-direction:column; align-items:center; gap:4px}
 .qr-cover{width:132px; aspect-ratio:2/3; border-radius:var(--r-sm); overflow:hidden; border:1px solid var(--border); box-shadow:var(--sh-2); position:relative; background:var(--surface2)}
-.qr-cover img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
-.qr-ph{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:10px; font-size:var(--fs-sm); font-weight:700; line-height:1.25; color:#e8eef4; background:linear-gradient(160deg,#2f5b4a,#16242c)}
+.qr-cover img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1} /* au-dessus du placeholder titré */
 .qr-title{font-family:var(--font-display); font-size:var(--fs-xl); font-weight:700; line-height:1.25; margin-top:14px; text-wrap:balance}
 .qr-author{font-size:var(--fs-base); color:var(--muted)}
 .qr-when{font-size:var(--fs-sm); color:var(--faint); margin-top:2px}
@@ -1440,8 +1522,7 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 .pp-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); gap:18px}
 .pp-item{display:flex; flex-direction:column; gap:6px}
 .pp-cov{position:relative; aspect-ratio:2/3; border-radius:var(--r-sm); overflow:hidden; border:1px solid var(--border); box-shadow:var(--sh-1); background:var(--surface2)}
-.pp-cov img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
-.pp-ph{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:8px; font-family:var(--font-display); font-size:var(--fs-sm); font-weight:600; line-height:1.22; color:#efe8d8; background:#2b2620; text-align:center; text-wrap:balance}
+.pp-cov img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1} /* au-dessus du placeholder titré */
 .pp-t{font-size:var(--fs-md); line-height:1.3; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical}
 .pp-r{font-size:var(--fs-sm); color:var(--star)}
 .pp-cta{margin:40px 0 0; padding:28px; border-radius:var(--r-lg); background:var(--surface); border:1px solid var(--border); box-shadow:var(--sh-1); text-align:center}
@@ -1450,7 +1531,11 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
 .pp-cta-acts{display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
 .pp-empty{padding:44px 0; color:var(--muted); text-align:center}
 .notif-actions{display:flex; gap:8px; margin-top:8px}
-.notif[data-profile-user]{cursor:pointer}
+/* Le nom dans une notification est un bouton vers le profil : couleur du texte, soulignement
+   discret — le vert plein de .linkish transformait chaque ligne en enseigne. */
+.notif-body .notif-who{padding:0; color:var(--text); text-decoration-color:var(--faint)}
+.notif-body .notif-who:hover{color:var(--green)}
+.notif[data-notif-type="comment"], .notif[data-notif-type="reaction"]{cursor:pointer}
 .pp-avatar .avatar{width:76px; height:76px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:var(--fs-4xl); margin-bottom:14px; box-shadow:var(--sh-1)}
 
 /* ===== Cibles tactiles (WCAG 2.5.5 / 2.5.8) =====
@@ -1471,6 +1556,11 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
      de la ligne de date (l’ordre de tabulation, lui, ne change pas : le ✕ reste après la date). */
   .rstars{ font-size:var(--fs-4xl); order:2; flex:0 0 100% }
   .rstars .rst{ padding:6px 4px }
+  /* Étoiles d’une rangée du mode liste : elles gardent leur place dans la ligne (la règle
+     ci-dessus leur donnerait une ligne entière), un peu plus grandes et espacées pour le doigt. */
+  .lrow .row-stars{ font-size:var(--fs-xl); order:0; flex:0 0 auto }
+  .lrow .row-stars .rst{ padding:6px 1px }
+  .lrow .rmeta{ gap:6px }   /* sur 375 px, chaque pixel rendu au titre lui évite la coupe */
   .reading-row{ gap:6px }
   .reading-row .del{ order:1; min-width:44px; min-height:44px; margin-left:auto; display:inline-flex; align-items:center; justify-content:center }
 }
@@ -1487,7 +1577,11 @@ body.welcome-open > header, body.welcome-open > main, body.welcome-open > .fab{d
    Six boutons passent en disabled pendant un appel réseau ; rien ne le montrait. */
 button:disabled, .btn:disabled, button[disabled]{opacity:.55; cursor:not-allowed; box-shadow:none}
 button:disabled:hover, .btn:disabled:hover{background:var(--surface); border-color:var(--border)}
-.btn.primary:disabled:hover{background:var(--grad-green)}
+.btn.primary:disabled:hover{background:var(--green)}
+/* Grisé parce qu’une requête est en cours (synopsis, carte) : curseur d’attente plutôt qu’interdit,
+   et la commande textuelle « Recherche… » ne se souligne ni ne se colore au survol. */
+button[aria-busy="true"]:disabled{cursor:progress}
+.syn-more:disabled:hover{text-decoration:none; background:none}
 
 /* Petites commandes textuelles sans rembourrage : sous le minimum de 24x24 px (WCAG 2.5.8) */
 .syn-more, .tagbtn, .clear-rate, .today-links button{min-height:24px; padding:3px 6px}
@@ -1503,11 +1597,14 @@ button:disabled:hover, .btn:disabled:hover{background:var(--surface); border-col
   .mood{min-height:40px; padding:6px 13px}
   .mood-chips{gap:8px}
   .clear-rate, .tagbtn, .syn-more, .today-links button{min-height:40px; padding:8px 10px}
-  #btn-pick-next{min-width:44px; justify-content:center}
+  #btn-pick-next, #btn-rate-all{min-width:44px; justify-content:center}
   .pill button, .quote-item .qdel, .cmt-del, .study-del, .sc-del,
   .ld-item .rm, .ld-item .mv button{min-width:36px; min-height:36px}
   .ld-item .rm{width:36px; height:36px; top:-8px; right:-8px}
   .ld-item .mv button{width:36px; height:36px}
+  /* trois commandes (◂ ▸ ⇱) à 36 px ne tiennent pas sur une colonne de 86 px : ⇱ passe à la
+     ligne au lieu de mordre sur les couvertures voisines */
+  .ld-item .mv{left:0; right:0; transform:none; flex-wrap:wrap; justify-content:center}
   /* redit ici : la règle de base à 24 px ci-dessus est plus tardive que le bloc tactile
      historique, elle écraserait sinon les 44 px du ✕ d'une lecture */
   .reading-row .del{min-width:44px; min-height:44px}
@@ -1615,7 +1712,7 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 .tile{background:none; border:0; border-top:1.5px solid var(--rule); border-radius:0; padding:12px 0 6px}
 .tile span{font-family:var(--font-mono); font-size:var(--fs-xs); letter-spacing:.08em; text-transform:uppercase}
 /* Fleuron d'imprimeur à la place des emoji dans les états vides */
-.empty .big.orn,.qr-done .big.orn,.study-done .big.orn{font-family:var(--font-display); font-size:44px; line-height:1; color:var(--green); font-variant-settings:"WONK" 1}
+.empty .big.orn,.qr-done .big.orn,.study-done .big.orn,.today-empty-icon.orn{font-family:var(--font-display); font-size:44px; line-height:1; color:var(--green); font-variant-settings:"WONK" 1}
 
 /* ---------- Recommandations reçues (onglet Notifications) ---------- */
 .reco-list{display:grid; margin-bottom:14px; border-top:1.5px solid var(--rule)}
@@ -1637,6 +1734,7 @@ input.invalid, textarea.invalid{border-color:var(--red); box-shadow:0 0 0 3px co
 .qr-card .data-actions{justify-content:center}
 .qr-card .btn{background:#f7f6f2; color:#141311; border-color:#b9b6ab}
 .qr-card .btn.primary{background:#2b4c8c; color:#fff; border-color:#2b4c8c}
+.qr-card :focus-visible{outline-color:#2b4c8c} /* la carte reste blanche en thème sombre : l'or s'y perdait */
 #qr-scan-box{text-align:center}
 #qr-video{width:100%; max-height:280px; border-radius:var(--r-sm); background:#000; object-fit:cover}
 #qr-live .frow{margin-bottom:8px}

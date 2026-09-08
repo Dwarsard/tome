@@ -9,6 +9,9 @@ const STATUS_LABEL = {wishlist:'À lire', reading:'En cours', read:'Lu', abandon
 const MOODS = ['entraînant','sombre','drôle','émouvant','réconfortant','tendu','réflexif','mélancolique','angoissant','inspirant','poétique','haletant'];
 const PACE_LABEL = {lent:'Lent', moyen:'Moyen', rapide:'Rapide'};
 const COLL = new Intl.Collator('fr', {numeric:true, sensitivity:'base'});
+// Repli pour la recherche : sans accents, apostrophes typographiques ramenées à la droite, en
+// minuscules — « etranger » doit trouver « L’Étranger », ce qu’un simple toLowerCase ne faisait pas.
+const fold = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[’‘]/g,"'").toLowerCase();
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -55,6 +58,7 @@ const ICONS = {
   filters:'<path d="M4 6h8M16 6h4M4 12h2M10 12h10M4 18h6M14 18h6"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>',
   calendar:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 11h16"/>',
   print:'<path d="M7 8V4h10v4"/><rect x="4" y="8" width="16" height="8" rx="1.5"/><path d="M7 13h10v7H7z"/>',
+  user:'<circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/>',
 };
 /* size en px ; le trait s’affine sur les grandes tailles pour rester léger */
 function ic(nom, size=18, extra=''){
@@ -196,6 +200,8 @@ function openDialog(cfg){
       inp.hidden=false;
       if(inp===input){ inp.type=cfg.input.type||'text'; inp.removeAttribute('maxlength'); if(inp.type==='password') inp.maxLength=256; }
       inp.value=cfg.input.value!=null?cfg.input.value:''; inp.placeholder=cfg.input.placeholder||'';
+      // le message du dialogue décrit le champ : lu avec lui au focus, pas seulement au titre
+      if(cfg.message) inp.setAttribute('aria-describedby','dialog-msg'); else inp.removeAttribute('aria-describedby');
     }
     const acts = $('#dialog-actions'); acts.innerHTML='';
     const cancelAct = cfg.actions.find(a=>a.cancel);
@@ -320,8 +326,12 @@ const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_BOOKS = 20000, MAX_LISTS = 500, MAX_READINGS = 2000, MAX_BOOKIDS = 20000, MAX_SMART = 100;
 const MAX_STUDY_ITEMS = 300, MAX_STUDY_CARDS = 1000;
 const SMART_STATUS = ['all','read','reading','wishlist','abandoned','fav','loan'];
-const SORT_KEYS = ['added','rating','title','author','year'];
+const SORT_KEYS = ['added','read','rating','title','author','year'];
 function isValidDate(d){ return typeof d==='string' && DATE_RE.test(d) && !Number.isNaN(new Date(d+'T12:00:00').getTime()); }
+// Jour ISO (AAAA-MM-JJ) nettoyé, ou null : pour les dates optionnelles d’un enregistrement (F40)
+function cleanDay(v){ const s = String(v||'').slice(0,10); return isValidDate(s) ? s : null; }
+// Jours entre deux jours ISO (b − a), comptés à midi pour ignorer les changements d’heure
+function daysBetween(a, b){ return Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00'))/864e5); }
 function cleanCover(v){
   if(typeof v!=='string') return '';
   if(/^https?:\/\//.test(v)) return v.replace(/^http:\/\//,'https://').slice(0,600);
@@ -444,9 +454,17 @@ function normalizeBook(b){
     tags: Array.isArray(b.tags) ? [...new Set(b.tags.map(t=>String(t).trim().slice(0,60)).filter(Boolean))].slice(0,20) : [],
     readings: (Array.isArray(b.readings) ? b.readings : [])
       .filter(r => r && typeof r.date==='string' && isValidDate(r.date.slice(0,10)))
-      .map(r => ({ id: ID_RE.test(String(r.id||'')) ? String(r.id) : uid(), date: r.date.slice(0,10), rating: cleanRating(r.rating) }))
+      .map(r => {
+        // F40 : début de cette lecture (posé par markRead, corrigeable sur la fiche), jamais après la fin
+        const date = r.date.slice(0,10), start = cleanDay(r.start);
+        return { id: ID_RE.test(String(r.id||'')) ? String(r.id) : uid(), date, rating: cleanRating(r.rating), start: (start && start<=date) ? start : null };
+      })
       .slice(-MAX_READINGS),
     currentPage: numIn(b.currentPage, 0, 1000000),
+    // F40 : progression en % quand la pagination est inconnue (BD sans nombre de pages), et date de
+    // début de la lecture en cours — consommée par markRead, qui la reporte dans readings[].start.
+    currentPct: numIn(b.currentPct, 0, 100),
+    startedAt: cleanDay(b.startedAt),
     progressLog: (Array.isArray(b.progressLog) ? b.progressLog : [])
       .filter(p => p && typeof p.date==='string' && isValidDate(p.date.slice(0,10)) && Number.isFinite(+p.page))
       .map(p => ({date: p.date.slice(0,10), page:+p.page})).slice(-500),
@@ -563,7 +581,7 @@ function load(){
       // ne pas écraser une copie corrompue déjà conservée (garde la 1re, la plus ancienne)
       try{ if(!localStorage.getItem(key+'-corrupt')) localStorage.setItem(key+'-corrupt', raw); }catch(_){}
       corrupted = true;
-      notice = 'Données illisibles — copie de secours conservée. Va dans Stats › Mes données pour la récupérer.';
+      notice = 'Données illisibles — copie de secours conservée. Va dans Mon compte › Mes données pour la récupérer.';
     }
   }
   return {data:{books:[], lists:[], goals:{}, meta:{changes:0, lastExport:null}, series:{}, smartCollections:[]}, migrated:false, notice, corrupted};
@@ -626,6 +644,8 @@ $('#save-warning-export').addEventListener('click', ()=>$('#btn-export').click()
 
 const ui = {
   view:'today', status:'all', types:new Set(), q:'', tag:'', sort:'added', groupSeries:true, libLayout:'grid',
+  sortDesc:false,                          // sens du tri inversé par rapport au sens naturel de la clé (persisté)
+  _shelfJump:false,                        // transitoire : filtre posé par un raccourci d’Aujourd’hui, à ne pas persister
   defaultStatus:'wishlist', typeMetric:'count',
   ideas:'ask',                             // idées du jour : 'ask' (proposer) | 'on' (activées) — jamais d’appel API sans opt-in
   selectMode:false, selection:new Set(),   // transitoires : jamais persistés ni sérialisés
@@ -637,22 +657,49 @@ const ui = {
   // livres ont été ajoutés d’un geste, et lesquels sont des « Lu » encore sans date de lecture.
   addedInSession:0, addedRead:[],
   editId:null, detailId:null, listId:null, listMode:'list', seriesName:'', recapYear:new Date().getFullYear(),
+  listPickQ:null,                          // transitoire : saisie du sélecteur « Ajouter des titres » du panneau liste (null = fermé)
   searchFromResult:null, heatYear:new Date().getFullYear(), lastFocus:null,
   journalYear:'all',                       // filtre d’année du Journal : 'all' ou '2025' (chaîne, comme les dates)
+  journalSessions:false,                   // Journal : montrer les sessions de lecture (pages du jour) entre les lectures (F40)
 };
 function clearSelection(){ ui.selection.clear(); ui.selectMode = false; document.body.classList.remove('selecting'); }
 // Persistance des préférences d’affichage (filtres, tri, onglet)
 function persistUI(){
   try{
+    // Raccourci d’Aujourd’hui (« Voir les autres lectures », prêts…) : le filtre posé est un saut
+    // pour voir, pas un choix. Tant que _shelfJump est levé, on réécrit celui que la personne
+    // avait vraiment choisi (celui déjà en réserve) au lieu de l’écraser par celui du saut.
+    const keep = ui._shelfJump ? (readSavedUI() || {}) : null;
     localStorage.setItem(UI_KEY, JSON.stringify({
       // defaultStatus n’est PAS persisté : un « Lu » choisi une fois pour saisir de vieilles
       // lectures se retrouvait encore actif des semaines plus tard, et tout ce qu’on ajoutait
       // était daté « lu aujourd’hui » à notre insu. Chaque ouverture repart de « À lire ».
-      status:ui.status, types:[...ui.types], tag:ui.tag, sort:ui.sort,
+      status: keep ? (keep.status ?? 'all') : ui.status,
+      types: keep ? (keep.types ?? []) : [...ui.types],
+      tag: keep ? (keep.tag ?? '') : ui.tag,
+      sort:ui.sort, sortDesc:ui.sortDesc,
       groupSeries:ui.groupSeries, view:ui.view, typeMetric:ui.typeMetric, libLayout:ui.libLayout,
-      ideas:ui.ideas, searchLang:ui.searchLang, journalYear:ui.journalYear,
+      ideas:ui.ideas, searchLang:ui.searchLang, journalYear:ui.journalYear, journalSessions:ui.journalSessions,
     }));
   }catch(_){}
+}
+// Préférences sauvegardées telles quelles (null si absentes ou illisibles)
+function readSavedUI(){
+  try{ const s = JSON.parse(localStorage.getItem(UI_KEY)||'null'); return (s && typeof s==='object') ? s : null; }catch(_){ return null; }
+}
+// Filtres de bibliothèque (statut, types, tag) repris d’un objet sauvegardé, valeurs par défaut sinon.
+// Partagé entre le démarrage (restoreUI) et le retour dans l’onglet après un saut depuis Aujourd’hui.
+function restoreLibFilters(saved){
+  const s = (saved && typeof saved==='object') ? saved : {};
+  ui.status = SMART_STATUS.includes(s.status) ? s.status : 'all';
+  ui.types = new Set(Array.isArray(s.types) ? s.types.filter(t=>['livre','bd','manga'].includes(t)) : []);
+  ui.tag = typeof s.tag==='string' ? s.tag : '';
+  syncFilterChips();
+}
+// Reflète ui.status / ui.types dans les puces (le tag, lui, est reconstruit par renderLibrary)
+function syncFilterChips(){
+  $$('#status-chips .chip').forEach(x=>{ const on=x.dataset.status===ui.status; x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
+  $$('#type-chips .chip[data-type]').forEach(x=>{ const on=ui.types.has(x.dataset.type); x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
 }
 
 /* =============== Helpers métier =============== */
@@ -708,6 +755,14 @@ function starsTxt(r){
   const n = Math.min(5, Math.max(0, Math.floor(r))); // borné (une note d’ami hors [0,5] ne casse pas le rendu)
   return '★'.repeat(n) + (r%1 ? '½' : '');
 }
+// Étoiles en lecture seule (cartes, journal, fil, profils) : le glyphe ★★★½ est muet ou lu
+// « étoile noire, étoile noire… » par un lecteur d’écran ; role=img + libellé donnent « 3,5 sur 5 ».
+// Vide quand il n’y a pas de note, comme les appels qu’elle remplace.
+function starsHTML(r, style){
+  r = Number(r);
+  if(!r || Number.isNaN(r)) return '';
+  return `<span class="stars" role="img" aria-label="${fmtDec(r)} sur 5"${style?` style="${style}"`:''}>${starsTxt(r)}</span>`;
+}
 function starInputHTML(rating, cls='st'){
   return [1,2,3,4,5].map(n=>{
     let c = '';
@@ -729,6 +784,82 @@ function syncReadingRatings(b, prev){
   if(!rs.length) return;
   const suivent = rs.length===1 || rs.every(r => r.rating==null || r.rating===prev || r.rating===b.rating);
   if(suivent) rs.forEach(r => { r.rating = b.rating; });
+}
+// Valeur d’un toucher sur une étoile (règle F16, partagée par la fiche et le mode liste) : c’est
+// la moitié touchée qui décide, toujours — re-toucher la même étoile du même côté ne change rien
+// (avant, TOUT re-tap basculait plein ↔ demi, on n’osait plus confirmer une note de peur de la
+// perdre). Seule exception : toucher la moitié déjà dorée d’une demi-étoile la complète, le geste
+// naturel pour « finir » l’étoile sans viser ses 16 px de droite.
+function tapRating(cur, el, clientX){
+  const n = +el.dataset.n, half = halfFromClick(el, clientX);
+  return (half && cur!==n-0.5) ? n-0.5 : n;
+}
+// Clavier d’un curseur d’étoiles (fiche, lecture, série, notation rapide, mode liste) : ← → et
+// ↑ ↓ par demi-étoile, Home efface, End met 5 — le vocabulaire attendu d’un role=slider, le même
+// partout. Retourne undefined si la touche n’est pas du curseur (l’appelant laisse passer
+// l’événement) et null quand la note est effacée.
+function sliderKeyValue(key, cur){
+  cur = cur || 0;
+  if(key==='ArrowRight' || key==='ArrowUp') return Math.min(5, cur+0.5);
+  if(key==='ArrowLeft' || key==='ArrowDown'){ const v = cur-0.5; return v<0.5 ? null : v; }
+  if(key==='Home') return null;
+  if(key==='End') return 5;
+  return undefined;
+}
+// Pose la note d’un livre d’où qu’elle vienne (fiche, clavier, glissé, mode liste) : les lectures
+// qui la suivaient suivent, et le cache des lectures — qui photographie leurs notes — est purgé,
+// sinon le Journal et les stats gardaient l’ancienne note jusqu’au prochain changement de statut.
+function setBookRating(b, v){
+  const prev = b.rating; b.rating = v;
+  syncReadingRatings(b, prev);
+  invalidateCache();
+}
+// Glissé continu sur une rangée d’étoiles (fiche, série, notation rapide, lectures, mode liste) :
+// au doigt, viser la moitié gauche d’une étoile relevait du tir de précision. On glisse, la note
+// se prévisualise en continu par demi-étoile, et se pose au relâchement. Délégué au conteneur
+// (les hôtes sont réécrits en innerHTML à chaque rendu). Un toucher sans déplacement (< 8 px)
+// ne capture rien et laisse les handlers click faire leur travail (règle du toucher, F16) ;
+// après un glissé, le click qui suit est neutralisé (data-dragged) pour ne pas re-noter au
+// relâchement. Le verrou saute au geste suivant si aucun click n’est venu (glissé annulé).
+function bindStarSlider(root, selector, onCommit){
+  let host = null, x0 = 0, v = null, orig = '', origNow = null;
+  const valueAt = x => { const r = host.getBoundingClientRect(); return Math.max(0.5, Math.min(5, Math.ceil(((x - r.left) / r.width) * 10) / 2)); };
+  const setAria = val => { if(host.hasAttribute('aria-valuenow')){ host.setAttribute('aria-valuenow', val); host.setAttribute('aria-valuetext', ratingText(val)); } };
+  const preview = x => {
+    v = valueAt(x);
+    host.innerHTML = starInputHTML(v, host.classList.contains('rstars') ? 'rst' : 'st');
+    setAria(v);
+  };
+  const end = () => { if(host) delete host.dataset.drag; host = null; v = null; };
+  root.addEventListener('pointerdown', e => {
+    const h = e.target.closest && e.target.closest(selector); if(!h) return;
+    if(e.pointerType==='mouse' && e.button!==0) return;
+    delete h.dataset.dragged;
+    host = h; x0 = e.clientX; v = null; orig = h.innerHTML; origNow = +h.getAttribute('aria-valuenow') || 0;
+  });
+  root.addEventListener('pointermove', e => {
+    if(!host) return;
+    if(!host.dataset.drag){
+      if(Math.abs(e.clientX - x0) < 8) return;
+      host.dataset.drag = '1';
+      try{ host.setPointerCapture(e.pointerId); }catch(_){}
+    }
+    preview(e.clientX);
+  });
+  root.addEventListener('pointerup', () => {
+    if(!host) return;
+    const h = host, val = v, dragged = !!h.dataset.drag;
+    end();
+    if(!dragged || !val) return;
+    h.dataset.dragged = '1';
+    onCommit(h, val);
+  });
+  // glissé interrompu (le navigateur a pris le geste pour un défilement) : on rend l’état d’avant
+  root.addEventListener('pointercancel', () => { if(host && host.dataset.drag){ host.innerHTML = orig; setAria(origNow); } end(); });
+  root.addEventListener('click', e => {
+    const h = e.target.closest && e.target.closest(selector);
+    if(h && h.dataset.dragged){ delete h.dataset.dragged; e.stopPropagation(); e.preventDefault(); }
+  }, true);
 }
 // Couvertures du catalogue (Google Books / Open Library) chargées en anonyme : coupe l’envoi des
 // cookies tiers (join du compte Google ↔ liste de lecture). Réservé au catalogue, qui supporte CORS ;
@@ -752,6 +883,8 @@ function phInk(b){
   const inks = PH_INKS[b.type] || PH_INKS.livre;
   return inks[hashStr(String(b.title||'') + '|' + String((b.authors||[])[0]||'')) % inks.length];
 }
+// Livres venus du Worker (profil, page publique) : auteurs en chaîne, type parfois absent.
+function phPubHTML(b){ return phHTML({title:b.title, type:b.type||'livre', authors:[b.authors||''].flat().filter(Boolean)}); }
 function phHTML(b, mini=false){
   const ink = phInk(b);
   if(mini) return `<div class="ph-mini" style="background:${ink}"><span>${esc((fullTitle(b)||'?').trim().charAt(0).toUpperCase())}</span></div>`;
@@ -806,30 +939,66 @@ async function setGoal(year){
 /* =============== Thème =============== */
 function applyTheme(t){
   document.documentElement.dataset.theme = t;
-  $('#meta-theme').setAttribute('content', t==='light' ? '#e9e4d8' : '#15120d');
-  $('#btn-theme').innerHTML = ic('contrast',18);
+  $('#meta-theme').setAttribute('content', t==='light' ? '#f7f6f2' : '#15120d');
+  // Un interrupteur nommé par son état (« Thème sombre », enfoncé ou non) plutôt qu’un « Changer
+  // de thème » qui ne dit pas où l’on est.
+  const bt = $('#btn-theme');
+  bt.innerHTML = ic('contrast',18);
+  bt.setAttribute('aria-pressed', String(t==='dark'));
+  bt.setAttribute('aria-label', 'Thème sombre'); bt.title = 'Thème sombre';
+  syncThemeSeg();
 }
-applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+function systemTheme(){ return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+// Le choix ENREGISTRÉ (pas le thème affiché) : 'auto' tant que l’utilisateur n’a rien figé.
+function themeChoice(){ let t = ''; try{ t = localStorage.getItem(THEME_KEY) || ''; }catch(_){} return t==='light' || t==='dark' ? t : 'auto'; }
+// Le segment Auto / Clair / Sombre de Mon compte › Affichage reflète le choix enregistré ; le
+// bouton de l’en-tête (bascule rapide) et lui pilotent la même clé, d’où la synchro ici.
+function syncThemeSeg(){
+  const choice = themeChoice();
+  $$('#theme-seg [data-theme-pick]').forEach(b=>{ const on = b.dataset.themePick===choice; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+}
+applyTheme(themeChoice()==='auto' ? systemTheme() : themeChoice());
 // tant que l’utilisateur n’a pas choisi lui-même, le thème suit le réglage du système en direct
 // (passage auto clair/sombre au coucher du soleil sur mobile) ; son premier clic fige son choix
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', e=>{
-  if(!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? 'light' : 'dark');
+  if(themeChoice()==='auto') applyTheme(e.matches ? 'light' : 'dark');
 });
 $('#btn-theme').addEventListener('click', ()=>{
   const t = document.documentElement.dataset.theme==='light' ? 'dark' : 'light';
   try{ localStorage.setItem(THEME_KEY, t); }catch(_){}
   applyTheme(t);
 });
+// « Auto » efface le choix : c’est le seul moyen de revenir au suivi du système une fois qu’on a
+// touché au bouton de l’en-tête (qui, lui, fige toujours un thème).
+$('#theme-seg').addEventListener('click', e=>{
+  const b = e.target.closest('[data-theme-pick]'); if(!b) return;
+  const v = b.dataset.themePick;
+  try{ if(v==='auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, v); }catch(_){}
+  applyTheme(v==='auto' ? systemTheme() : v);
+});
 
 /* =============== Navigation =============== */
 // Passe à true une fois la vue initiale posée : la vue restaurée au démarrage ne doit pas
 // pousser d’entrée d’historique (le premier Retour quitterait l’app sans rien changer à l’écran).
 let _navReady = false;
+// Position de défilement par onglet : quitter Bibliothèque à 2 000 px puis y revenir doit retrouver
+// la même étagère, pas la remettre en haut. Un filtre ou un tri changé remet la sienne à zéro (la
+// liste n’est plus la même), et retaper l’onglet courant ramène en haut (le geste attendu).
+const _scrollByView = {};
 $('#nav').addEventListener('click', e => {
   const btn = e.target.closest('button[data-view]'); if(!btn) return;
-  selectView(btn.dataset.view);
+  // Retour volontaire dans Bibliothèque après un saut depuis Aujourd’hui : on rend le filtre que
+  // la personne avait choisi elle-même (celui resté en réserve), pas celui du saut.
+  if(btn.dataset.view==='library' && ui._shelfJump){ ui._shelfJump=false; restoreLibFilters(readSavedUI()); _scrollByView.library=0; }
+  selectView(btn.dataset.view, {focus:true});
 });
-function selectView(view){
+const VIEW_LABEL = {today:'Aujourd’hui', library:'Bibliothèque', journal:'Journal', lists:'Listes', stats:'Stats', friends:'Amis', account:'Mon compte'};
+// opts.focus : l’appel vient d’un geste de navigation (onglet, bouton Mon compte, Alt+chiffre).
+// Le titre du document suit la vue et le focus se pose sur son titre : sans ça un lecteur d’écran
+// n’entend rien au changement d’onglet et repart de la barre de navigation. Les appels internes
+// (routage au démarrage, retour d’une modale, sauts « voir ma bibliothèque ») ne bougent pas le focus.
+function selectView(view, opts={}){
+  if(view!==ui.view) _scrollByView[ui.view] = window.scrollY; else _scrollByView[view] = 0;
   ui.view = view;
   $$('#nav button').forEach(b=>{
     const on = b.dataset.view===view;
@@ -837,11 +1006,14 @@ function selectView(view){
     if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   });
   $$('.view').forEach(v=>v.classList.toggle('active', v.id === 'view-'+view));
+  // « Mon compte » n’a pas d’onglet : c’est le bouton avatar de l’en-tête qui dit qu’on y est.
+  const me = $('#btn-me');
+  if(me){ me.classList.toggle('on', view==='account'); if(view==='account') me.setAttribute('aria-current','page'); else me.removeAttribute('aria-current'); }
   // Sur l’écran de connexion/inscription, un « + » flottant n’a aucun sens (et recouvre le
   // bouton de validation sur mobile) ; il revient dès qu’on change de vue ou qu’on est connecté.
   const fab = $('#fab');
   if(fab){
-    fab.hidden = (view==='friends' && !social.me);
+    fab.hidden = ((view==='friends' || view==='account') && !social.me);
     // Sur téléphone le FAB est le seul « + » de l’écran, et il ne fait pas la même chose partout :
     // un livre dans toutes les vues, une liste dans Listes. Un lecteur d’écran qui annonce
     // « Ajouter » ne dit donc rien d’utile — le nom suit l’onglet, l’infobulle aussi.
@@ -863,16 +1035,27 @@ function selectView(view){
   persistUI();
   render();
   // sans cela on arrive au milieu de la nouvelle vue, à la hauteur où on avait laissé l’ancienne
-  if(!ui._noScrollReset) window.scrollTo({top:0, behavior:'instant'});
+  // (ou en haut si on n’y était jamais venu) — et jamais à celle de la vue qu’on quitte
+  if(!ui._noScrollReset) window.scrollTo({top:_scrollByView[view]||0, behavior:'instant'});
+  // Le titre suit la vue dès que l’app est posée (Retour du navigateur, sauts internes compris),
+  // pas seulement sur un geste de navigation — sinon l’onglet gardait le nom de la vue quittée.
+  // Avant _navReady, le titre d’origine reste : c’est celui que voient les visiteurs de l’accueil.
+  if(_navReady) document.title = `${VIEW_LABEL[view]||'Tome'} · Tome`;
+  if(opts.focus){
+    const h = $('#view-'+view+' h2');
+    if(h){ h.tabIndex = -1; h.focus({preventScroll:true}); }
+  }
 }
 function render(){
   renderDemoBanner();   // bandeau global : la démo se signale dans toutes les vues, pas seulement Bibliothèque
+  syncMeButton();       // idem pour l’avatar de l’en-tête : il suit la session quel que soit le chemin
   if(ui.view==='today') renderToday();
   else if(ui.view==='library') renderLibrary();
   else if(ui.view==='journal') renderJournal();
   else if(ui.view==='lists') renderLists();
   else if(ui.view==='stats') renderStats();
   else if(ui.view==='friends') renderFriends();
+  else if(ui.view==='account') renderAccountView();
 }
 // Rendu du fond différé quand une modale est ouverte (inutile de repeindre une vue cachée)
 let _rafRender = 0;
@@ -907,6 +1090,7 @@ function updateBookProgress(b, page, day=today()){
   if(!Number.isFinite(n)) n = 0;
   n = Math.max(0, Math.trunc(n));
   b.currentPage = b.pages ? Math.min(n, b.pages) : n;
+  b.currentPct = null;   // une page connue remplace l’estimation en % (F40)
   b.progressLog = Array.isArray(b.progressLog) ? b.progressLog : [];
   const sameDay = [...b.progressLog].reverse().find(x=>x.date===day);
   if(sameDay) sameDay.page = b.currentPage;
@@ -971,8 +1155,8 @@ function todayFocusHTML(reading){
         <div class="today-focus-copy">
           <h3 id="today-focus-title">${esc(fullTitle(reading))}</h3>
           <p>${esc(authorsStr(reading)||TYPE_LABEL[reading.type])}</p>
-          <div class="today-progress-meta"><span>${reading.currentPage?`Page ${reading.currentPage}${reading.pages?` sur ${reading.pages}`:''}`:'Progression non renseignée'}</span>${pct!==null?`<strong>${fmtPct(pct)}</strong>`:''}</div>
-          ${reading.pages?`<div class="today-track" role="progressbar" aria-label="Progression de lecture" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct||0}"><span style="width:${pct||0}%"></span></div>`:''}
+          <div class="today-progress-meta"><span>${esc(progressLine(reading))}</span>${pct!==null?`<strong>${fmtPct(pct)}</strong>`:''}</div>
+          ${(reading.pages || pct!==null)?`<div class="today-track" role="progressbar" aria-label="Progression de lecture" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct||0}"><span style="width:${pct||0}%"></span></div>`:''}
           <div class="today-actions" aria-label="Mettre à jour la progression">
             <button class="btn primary" data-today-step="10" data-book="${esc(reading.id)}">＋10 pages</button>
             <button class="btn" data-today-step="25" data-book="${esc(reading.id)}">＋25</button>
@@ -1002,11 +1186,11 @@ function todayFocusHTML(reading){
     </section>`;
   }
   if(state.books.length) return `<section class="today-card today-empty">
-    <span class="today-empty-icon" aria-hidden="true">＋</span><div><div class="today-kicker">Prochaine page</div><h3>Que vas-tu lire maintenant ?</h3><p>Ajoute un titre à ta pile ou commence un livre de ta bibliothèque.</p></div>
+    <span class="today-empty-icon orn" aria-hidden="true">❦</span><div><div class="today-kicker">Prochaine page</div><h3>Que vas-tu lire maintenant ?</h3><p>Ajoute un titre à ta pile ou commence un livre de ta bibliothèque.</p></div>
     <div class="today-actions"><button class="btn primary" data-today-add>Ajouter un livre</button><button class="btn" data-today-library>Explorer ma bibliothèque</button></div>
   </section>`;
   return `<section class="today-card today-empty today-first">
-    <span class="today-empty-icon" aria-hidden="true">T</span><div><div class="today-kicker">Bienvenue dans Tome</div><h3>Construis le journal de ta vie de lecteur.</h3><p>Ajoute ton premier livre ou importe ta bibliothèque existante. Tout restera disponible hors ligne.</p></div>
+    <span class="today-empty-icon orn" aria-hidden="true">❦</span><div><div class="today-kicker">Bienvenue dans Tome</div><h3>Construis le journal de ta vie de lecteur.</h3><p>Ajoute ton premier livre ou importe ta bibliothèque existante. Tout restera disponible hors ligne.</p></div>
     <div class="today-actions"><button class="btn primary" data-today-add="read">Ajouter mon premier livre</button><button class="btn" data-today-import>Importer depuis Goodreads ou Babelio</button></div>
   </section>`;
 }
@@ -1060,7 +1244,7 @@ function renderTodaySocial(){
   if(!feed.length){ el.innerHTML=`<div class="today-social-empty"><p>Ton fil est encore calme. Invite un ami pour commencer à partager vos lectures.</p><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn primary" data-today-invite>${ic('link',16)} Inviter un ami</button><button class="btn" data-today-friends>Voir mes amis</button></div></div>`; return; }
   el.innerHTML=`<div class="today-feed">${feed.map(x=>`<button class="today-feed-row" data-today-friends>
     <span class="today-feed-cover">${x.cover?`<img src="${esc(x.cover)}" alt="" loading="lazy"${xorigin(x.cover)} referrerpolicy="no-referrer">`:phHTML({title:x.title, authors:[], type:x.type}, true)}</span>
-    <span class="today-feed-copy"><b>${social.me&&x.uid===social.me.id?'Tu':esc(x.display_name)}</b><span>${social.me&&x.uid===social.me.id?'as lu':'a lu'} <strong>${esc(x.title)}</strong>${x.rating?` · <span class="stars">${starsTxt(x.rating)}</span>`:''}</span></span>
+    <span class="today-feed-copy"><b>${social.me&&x.uid===social.me.id?'Tu':esc(x.display_name)}</b><span>${social.me&&x.uid===social.me.id?'as lu':'a lu'} <strong>${esc(x.title)}</strong>${x.rating?` · ${starsHTML(x.rating)}`:''}</span></span>
     <time>${x.read_date?esc(new Date(x.read_date+'T12:00:00').toLocaleDateString('fr-FR',{day:'numeric',month:'short'})):''}</time>
   </button>`).join('')}</div>`;
   loadTodayFeed();
@@ -1076,9 +1260,9 @@ $('#today-body').addEventListener('click', async e=>{
   const finish=e.target.closest('[data-today-finish]'); if(finish){ const b=state.books.find(x=>x.id===finish.dataset.todayFinish); if(b){ markRead(b); save(); render(); } return; }
   // Reprendre un livre déjà terminé : la progression repart de zéro, sinon la fiche s’ouvre
   // « en cours » bloquée à 100 % et le ＋10 n’a plus aucun effet.
-  const start=e.target.closest('[data-today-start]'); if(start){ const b=state.books.find(x=>x.id===start.dataset.todayStart); if(b){ if(b.pages && (b.currentPage||0)>=b.pages) updateBookProgress(b,0); b.status='reading'; if(b.currentPage==null)b.currentPage=0; save(); render(); toast('Bonne lecture'); } return; }
+  const start=e.target.closest('[data-today-start]'); if(start){ const b=state.books.find(x=>x.id===start.dataset.todayStart); if(b){ if(b.pages && (b.currentPage||0)>=b.pages) updateBookProgress(b,0); b.status='reading'; syncStartedAt(b); if(b.currentPage==null)b.currentPage=0; save(); render(); toast('Bonne lecture'); } return; }
   if(e.target.closest('[data-today-recovery]')){
-    social.tab='account'; social.view=null; selectView('friends');
+    social.view=null; selectView('account');
     setTimeout(()=>{ const el=$('#acc-rec'); if(el){ el.scrollIntoView({block:'center'}); el.focus(); } }, 220);
     try{ localStorage.setItem('tome-rec-snooze', String(Date.now())); }catch(_){ }
     return;
@@ -1101,21 +1285,28 @@ $('#today-body').addEventListener('click', async e=>{
   // Le statut pré-sélectionné suit la porte d’entrée : « Ajouter mon premier livre » ouvre le
   // journal d’une vie de lecteur (donc « Lu »), « Ajouter un livre » alimente la pile (« À lire »).
   { const ta = e.target.closest('[data-today-add]'); if(ta){ openSearch({status: ta.dataset.todayAdd || 'wishlist'}); return; } }
-  if(e.target.closest('[data-today-import]')){ selectView('stats'); $('#btn-import-csv').click(); return; }
+  if(e.target.closest('[data-today-import]')){ selectView('account'); $('#btn-import-csv').click(); return; }
   if(e.target.closest('[data-today-friends]')){ social.tab='feed'; social.view=null; selectView('friends'); return; }
 });
 function openTodayShelf(status){
   ui.status=status; ui.types.clear(); ui.q=''; ui.tag='';
   $('#lib-q').value=''; $('#lib-tag').value='';
-  $$('#status-chips .chip').forEach(x=>{const on=x.dataset.status===status;x.classList.toggle('active',on);x.setAttribute('aria-pressed',on);});
-  $$('#type-chips .chip[data-type]').forEach(x=>{x.classList.remove('active');x.setAttribute('aria-pressed','false');});
+  syncFilterChips();
+  // Un raccourci d’Aujourd’hui pose un filtre pour voir, pas pour rester : on ne l’écrit pas
+  // par-dessus celui que la personne avait choisi (persistUI garde ce dernier en réserve tant que
+  // _shelfJump est levé) et l’onglet Bibliothèque le lui rendra au prochain appui. « Tout » n’est
+  // pas un saut mais une remise à plat (import, « Ma bibliothèque ») : il se persiste.
+  ui._shelfJump = status!=='all';
+  _scrollByView.library = 0;
   selectView('library');
 }
-// Remplace une seule carte au lieu de reconstruire toute la grille (garde scroll/décodage des autres)
+// Remplace une seule carte au lieu de reconstruire toute la grille (garde scroll/décodage des autres).
+// En mode liste, c’est une rangée qui est remplacée — sinon une note posée depuis la liste
+// transformait la rangée en affiche de grille au milieu des autres.
 function patchCard(id){
   const el = document.querySelector('#lib-grid .card[data-id="'+CSS.escape(id)+'"]');
   const b = state.books.find(x=>x.id===id);
-  if(el && b){ el.outerHTML = bookCardHTML(b); return true; }
+  if(el && b){ el.outerHTML = ui.libLayout==='list' ? bookRowHTML(b) : bookCardHTML(b); return true; }
   return false;
 }
 // Activation clavier des éléments role=button non natifs
@@ -1134,8 +1325,13 @@ $('#status-chips').addEventListener('click', e => {
     x.classList.toggle('active', on);
     x.setAttribute('aria-pressed', on);
   });
-  persistUI(); renderLibrary();
+  libFilterChanged(); renderLibrary();
 });
+// Un filtre ou un tri choisi à la main est un vrai choix : il lève un éventuel saut depuis
+// Aujourd’hui (donc se persiste), et la liste change, donc on repartira du haut au retour.
+function libFilterChanged(){ ui._shelfJump=false; _scrollByView.library=0; persistUI(); }
+// « Filtre : En cours · Tout afficher » dans le décompte : le lien remet la bibliothèque à plat
+$('#lib-count').addEventListener('click', e => { if(e.target.closest('#lib-showall')) resetFilters(); });
 $('#type-chips').addEventListener('click', e => {
   const c = e.target.closest('.chip'); if(!c) return;
   if(c.id==='chip-series'){
@@ -1148,16 +1344,25 @@ $('#type-chips').addEventListener('click', e => {
     c.classList.toggle('active');
     c.setAttribute('aria-pressed', ui.types.has(t));
   }
-  persistUI(); renderLibrary();
+  libFilterChanged(); renderLibrary();
 });
 const _rerunLib = debounce(renderLibrary, 160);
 $('#lib-more').addEventListener('click', ()=>{
   const expanded = !$('#filterbar').classList.toggle('compact'); // classe présente = replié
   $('#lib-more').setAttribute('aria-expanded', expanded);
 });
-$('#lib-q').addEventListener('input', e => { ui.q = e.target.value.toLowerCase().trim(); _rerunLib(); });
-$('#lib-sort').addEventListener('change', e => { ui.sort = e.target.value; persistUI(); renderLibrary(); });
-$('#lib-tag').addEventListener('change', e => { ui.tag = e.target.value; persistUI(); renderLibrary(); });
+$('#lib-q').addEventListener('input', e => { ui.q = fold(e.target.value).trim(); _scrollByView.library=0; _rerunLib(); });
+$('#lib-sort').addEventListener('change', e => { ui.sort = e.target.value; libFilterChanged(); renderLibrary(); });
+$('#lib-tag').addEventListener('change', e => { ui.tag = e.target.value; libFilterChanged(); renderLibrary(); });
+// Sens du tri : « Ajout récent » à l’envers donne les plus anciens, « Titre A→Z » devient Z→A…
+$('#lib-dir').addEventListener('click', ()=>{ ui.sortDesc = !ui.sortDesc; syncSortDirBtn(); libFilterChanged(); renderLibrary(); });
+function syncSortDirBtn(){
+  const btn = $('#lib-dir'); if(!btn) return;
+  btn.setAttribute('aria-pressed', String(ui.sortDesc));
+  btn.textContent = ui.sortDesc ? '↑' : '↓';
+}
+// Retour au tri par défaut (après un import ou une session d’ajout : les nouveaux venus en tête)
+function resetSort(){ ui.sort = 'added'; ui.sortDesc = false; $('#lib-sort').value = 'added'; syncSortDirBtn(); }
 
 function filteredBooks(){
   let arr = state.books.slice();
@@ -1171,21 +1376,53 @@ function filteredBooks(){
   const dec = arr.map(b => ({ b, t:fullTitle(b), a:authorsStr(b) }));
   const cmp = {
     added:(x,y)=> (y.b.addedAt||'').localeCompare(x.b.addedAt||''),
+    // dernière lecture datée la plus récente en tête ; sans date (« Lu » sans jour connu, pile), en fin
+    read:(x,y)=> lastReadDate(y.b).localeCompare(lastReadDate(x.b)) || COLL.compare(x.t, y.t),
     rating:(x,y)=> (y.b.rating||0)-(x.b.rating||0) || COLL.compare(x.t, y.t),
     title:(x,y)=> COLL.compare(x.t, y.t),
     author:(x,y)=> COLL.compare(x.a, y.a) || (x.b.volume??0)-(y.b.volume??0) || COLL.compare(x.t, y.t),
     year:(x,y)=> (y.b.year||0)-(x.b.year||0) || COLL.compare(x.t, y.t),
   }[ui.sort] || ((x,y)=> (y.b.addedAt||'').localeCompare(x.b.addedAt||''));
-  return dec.sort(cmp).map(o => o.b);
+  const out = dec.sort(cmp).map(o => o.b);
+  return ui.sortDesc ? out.reverse() : out;
 }
 function bookHaystack(b){
-  return (b.title+' '+authorsStr(b)+' '+(b.series||'')+' '+(b.tags||[]).join(' ')+' '+
+  return fold(b.title+' '+authorsStr(b)+' '+(b.series||'')+' '+(b.tags||[]).join(' ')+' '+
     (b.review||'')+' '+(b.synopsis||'')+' '+(b.moods||[]).join(' ')+' '+
-    (b.quotes||[]).map(q=>q.text).join(' ')).toLowerCase();
+    (b.quotes||[]).map(q=>q.text).join(' '));
 }
 function progressPct(b){
-  if(!b.pages || !b.currentPage) return null;
-  return Math.min(100, Math.round(b.currentPage / b.pages * 100));
+  if(b.pages && b.currentPage) return Math.min(100, Math.round(b.currentPage / b.pages * 100));
+  // F40 : sans pagination, la saisie « 35 % » porte la barre à elle seule
+  if(!b.pages && b.currentPct!=null) return Math.min(100, Math.round(b.currentPct));
+  return null;
+}
+// F40 : la saisie de progression accepte une page (« 210 ») ou un pourcentage (« 35 % » — ou « ,35 »,
+// car le pavé décimal du mobile n’a pas de touche %). Pagination connue : le % devient une page ;
+// inconnue : il est gardé tel quel (currentPct). null = champ vide ou illisible.
+function parseProgressInput(v, b){
+  const s = String(v==null ? '' : v).replace(/\s/g,'').replace(',', '.');
+  if(!s) return null;
+  let pct = null;
+  const m = s.match(/^(\d{1,3})%$/);
+  if(m) pct = +m[1];
+  else if(/^0?\.\d{1,2}$/.test(s)) pct = Math.round(parseFloat(s)*100);
+  if(pct!==null){ pct = Math.min(100, pct); return b.pages ? {page: Math.round(pct/100*b.pages)} : {pct}; }
+  const n = numOrNull(s);
+  return n===null ? null : {page:n};
+}
+// Ce que montre le champ « Ma progression » : la page, sinon le % estimé, sinon rien
+function progressFieldValue(b){ return b.currentPage ?? (b.currentPct!=null ? fmtPct(b.currentPct) : ''); }
+// « reste 526 p. » — vide tant que rien n’est lu ou que la pagination manque
+function pagesLeftText(b){
+  const n = (b.pages && b.currentPage) ? b.pages - b.currentPage : 0;
+  return n>0 ? `reste ${n}\u00A0p.` : '';
+}
+// Ligne d’Aujourd’hui : « Page 210 sur 736 · reste 526 p. »
+function progressLine(b){
+  if(b.currentPage){ const left = pagesLeftText(b); return `Page ${b.currentPage}${b.pages?` sur ${b.pages}`:''}${left?` · ${left}`:''}`; }
+  if(!b.pages && b.currentPct!=null) return 'Progression estimée';
+  return 'Progression non renseignée';
 }
 function renderNowReading(){
   const strip = $('#now-reading');
@@ -1200,7 +1437,7 @@ function renderNowReading(){
       <div class="ni">
         <div class="nt">${esc(fullTitle(b))}</div>
         <div class="track"><div class="fill" style="width:${pct??0}%"></div></div>
-        <div class="np">${b.currentPage ? `p. ${b.currentPage}${b.pages?' / '+b.pages:''}` : 'progression non renseignée'}${pct!==null ? ` · ${fmtPct(pct)}` : ''}</div>
+        <div class="np">${b.currentPage ? `p. ${b.currentPage}${b.pages?' / '+b.pages:''}${pct!==null ? ` · ${fmtPct(pct)}` : ''}` : pct!==null ? fmtPct(pct) : 'progression non renseignée'}</div>
       </div>
       <button class="btn small plus" data-plus10="${esc(b.id)}" title="Avancer de 10 pages">＋10</button>
     </div>`;
@@ -1227,9 +1464,10 @@ function patchProgressUI(b){
     const row = $('#detail-body .prog-row');
     if(row){
       const inp = row.querySelector('#d-page');
-      if(inp) inp.value = b.currentPage ?? '';      // reflète l’éventuel plafonnement à b.pages
+      if(inp) inp.value = progressFieldValue(b);      // reflète l’éventuel plafonnement à b.pages, ou le % (F40)
       const fill = row.querySelector('.fill'); if(fill) fill.style.width = (pct??0)+'%';
       const val = row.querySelector('b'); if(val) val.textContent = pct!==null ? fmtPct(pct) : '—';
+      const rest = row.querySelector('.prog-rest'); if(rest) rest.textContent = pagesLeftText(b);
       done = true;
     }
   }
@@ -1239,11 +1477,11 @@ function patchProgressUI(b){
     if(step && step.dataset.book===b.id){
       const meta = focus.querySelector('.today-progress-meta');
       const line = meta && meta.querySelector('span');
-      if(line) line.textContent = b.currentPage ? `Page ${b.currentPage}${b.pages?` sur ${b.pages}`:''}` : 'Progression non renseignée';
+      if(line) line.textContent = progressLine(b);
       if(meta){
         let strong = meta.querySelector('strong');
         if(pct===null){ if(strong) strong.remove(); }
-        else { if(!strong){ strong = document.createElement('strong'); meta.append(strong); } strong.textContent = pct+'%'; }
+        else { if(!strong){ strong = document.createElement('strong'); meta.append(strong); } strong.textContent = fmtPct(pct); }
       }
       const track = focus.querySelector('.today-track');
       if(track){
@@ -1277,6 +1515,29 @@ function setProgress(b, page){
     else if(!patchProgressUI(b)) scheduleRender();
   }});
 }
+// F40 : « 35 % » sur un livre sans pagination — le pourcentage est gardé tel quel (aucune page à
+// calculer, donc pas de session dans progressLog) ; comme setProgress, la barre est repeinte en place.
+function setProgressPct(b, pct){
+  b.currentPct = pct; b.currentPage = null; invalidateCache();
+  save();
+  if(!patchProgressUI(b) || $('.overlay.open')) scheduleRender();
+  if(pct>=100 && b.status!=='read'){
+    toast(`Dernière page de « ${fullTitle(b)} »`, { label:'Marquer comme lu', ms:6000, onAction:()=>{
+      markRead(b); save();
+      if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id, {pulse:true});
+      scheduleRender();
+    }});
+    return;
+  }
+  toast(`Progression : ${fmtPct(pct)} ✓`);
+}
+// F40 : date de début d’une lecture. Posée quand le livre PASSE « en cours » (jamais rétroactivement),
+// retirée quand il retourne dans la pile ou est dit « lu » sans passer par markRead (qui, lui, la
+// reporte dans readings[].start) ; un abandon la garde, au cas où la lecture reprend.
+function syncStartedAt(b){
+  if(b.status==='reading'){ if(!b.startedAt) b.startedAt = today(); }
+  else if(b.status==='wishlist' || b.status==='read') b.startedAt = null;
+}
 // Marque le livre comme lu. Une DEUXIÈME date n’est ajoutée que s’il s’agit d’une vraie relecture
 // (livre « en cours », ou pages enregistrées après la dernière date connue) : sinon un ✓ donné par
 // erreur sur un livre déjà lu inventerait une lecture datée d’aujourd’hui dans le journal.
@@ -1285,12 +1546,20 @@ function setProgress(b, page){
 // posée d’office (depuis la fiche, où l’on voit la ligne apparaître au journal).
 function markRead(b, opts){
   b.readings = b.readings||[];
-  const prevStatus = b.status;
+  const prevStatus = b.status, prevStart = b.startedAt || null;
   const last = lastReadDate(b);
   const relecture = !!b.readings.length && (prevStatus==='reading' || (b.progressLog||[]).some(p=>p.date>last));
   b.status = 'read';
   let newId = null;
-  if(!b.readings.length || relecture){ const r = {id:uid(), date:today(), rating:null}; b.readings.push(r); newId = r.id; }
+  if(!b.readings.length || relecture){
+    // F40 : la date de début vient du passage « en cours » (startedAt), sinon de la première page
+    // enregistrée depuis la lecture précédente — et jamais d’une date postérieure à la fin.
+    const firstLog = (b.progressLog||[]).map(p=>p.date).filter(d=>d>last).sort()[0] || null;
+    const start = prevStart || firstLog;
+    const r = {id:uid(), start: (start && start<=today()) ? start : null, date:today(), rating:null};
+    b.readings.push(r); newId = r.id;
+  }
+  b.startedAt = null; // consommée : la lecture en cours est close
   invalidateCache(); // la lecture vient de changer : ne pas lire un décompte périmé
   const y = new Date().getFullYear();
   const gi = goalInfo(y);
@@ -1305,7 +1574,8 @@ function markRead(b, opts){
       if(!v || !isValidDate(v)) return;
       if(v > today()){ toast('Une lecture ne peut pas être datée du futur'); return; } // même garde que le champ de la fiche
       const r = (b.readings||[]).find(x=>x.id===newId); if(!r) return;
-      r.date = v; invalidateCache(); save();
+      r.date = v; if(r.start && r.start > v) r.start = null; // fin avancée avant le début : ce début n’était pas le bon
+      invalidateCache(); save();
       if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
       scheduleRender();
       toast(`Lecture datée du ${fmtDate(v)} ✓`);
@@ -1313,7 +1583,7 @@ function markRead(b, opts){
     return;
   }
   toast(msg, {label:'Annuler', ms:6000, onAction:()=>{
-    b.status = prevStatus;
+    b.status = prevStatus; b.startedAt = prevStart;
     if(newId) b.readings = (b.readings||[]).filter(r=>r.id!==newId);
     invalidateCache(); save(); scheduleRender();
     if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
@@ -1324,9 +1594,11 @@ function markRead(b, opts){
 const DEMO_BOOKS = [
   {title:'Berserk', series:'Berserk', volume:1, seriesTotal:41, type:'manga', authors:['Kentarō Miura'], year:1990, pages:224, status:'read', rating:5, favorite:true, tags:['dark fantasy','coup de cœur'], moods:['sombre','tendu'], pace:'moyen', review:'Un sommet du manga : violence, deuil et démesure.', cover:'https://covers.openlibrary.org/b/isbn/9781593070205-M.jpg', readings:[{date:'2025-03-12', rating:5}]},
   {title:'Watchmen', type:'bd', authors:['Alan Moore','Dave Gibbons'], year:1987, pages:416, status:'read', rating:5, favorite:true, tags:['comics','classique'], moods:['sombre','réflexif'], review:'La BD qui a fait grandir le medium.', cover:'https://covers.openlibrary.org/b/isbn/9780930289232-M.jpg', readings:[{date:'2026-01-20', rating:5}]},
-  {title:'Dune', type:'livre', authors:['Frank Herbert'], year:1965, pages:688, status:'read', rating:4.5, tags:['SF','classique'], moods:['réflexif','inspirant'], pace:'lent', review:'Politique, écologie, mysticisme — dense et magistral.', cover:'https://covers.openlibrary.org/b/isbn/9780441172719-M.jpg', readings:[{date:'2026-02-15', rating:4.5}]},
+  {title:'Dune', type:'livre', authors:['Frank Herbert'], year:1965, pages:688, status:'read', rating:4.5, tags:['SF','classique'], moods:['réflexif','inspirant'], pace:'lent', review:'Politique, écologie, mysticisme — dense et magistral.', cover:'https://covers.openlibrary.org/b/isbn/9780441172719-M.jpg', readings:[{start:'2026-01-20', date:'2026-02-15', rating:4.5}]},
   {title:'Pluto', series:'Pluto', volume:1, seriesTotal:8, type:'manga', authors:['Naoki Urasawa'], year:2003, pages:200, status:'read', rating:5, tags:['SF'], moods:['émouvant','tendu'], cover:'https://covers.openlibrary.org/b/isbn/9781421519180-M.jpg', readings:[{date:'2026-03-30', rating:5}]},
-  {title:'La Horde du Contrevent', type:'livre', authors:['Alain Damasio'], year:2004, pages:736, status:'reading', currentPage:210, tags:['SF','français'], cover:'https://covers.openlibrary.org/b/isbn/9782070464234-M.jpg'},
+  // Seul exemple « en cours » : daté et jalonné pour que la démo montre le début de lecture et les
+  // sessions du Journal (F40) ; Dune, ci-dessus, montre une lecture datée de bout en bout.
+  {title:'La Horde du Contrevent', type:'livre', authors:['Alain Damasio'], year:2004, pages:736, status:'reading', currentPage:210, startedAt:'2026-08-28', progressLog:[{date:'2026-08-28',page:40},{date:'2026-09-01',page:120},{date:'2026-09-05',page:210}], tags:['SF','français'], cover:'https://covers.openlibrary.org/b/isbn/9782070464234-M.jpg'},
   {title:'L’Étranger', type:'livre', authors:['Albert Camus'], year:1942, pages:159, status:'read', rating:4, tags:['classique'], moods:['mélancolique'], cover:'https://covers.openlibrary.org/b/isbn/9782070360024-M.jpg', readings:[{date:'2026-04-08', rating:4}]},
   // Seul exemple doté d’un mode étude : sans lui, la démo ne montre jamais les fiches de
   // révision (la carte est due dans le passé pour que « À réviser » apparaisse sur Aujourd’hui).
@@ -1356,7 +1628,7 @@ function loadDemo(){
   DEMO_BOOKS.forEach(d=>{
     // newBook ne normalise pas `study` : on passe par normalizeStudy pour que la démo ait
     // exactement la forme attendue par studyCounts/studyDueCards (ids, dates, compteurs).
-    const b = newBook(Object.assign({}, d, {tags:[...(d.tags||[]),'exemple'], study:normalizeStudy(d.study), readings:(d.readings||[]).map(r=>({id:uid(), date:r.date, rating:r.rating??null}))}));
+    const b = newBook(Object.assign({}, d, {tags:[...(d.tags||[]),'exemple'], study:normalizeStudy(d.study), readings:(d.readings||[]).map(r=>({id:uid(), start:r.start||null, date:r.date, rating:r.rating??null}))}));
     state.books.push(b);
   });
   // Objectif prêté, pas donné : on le marque pour pouvoir le retirer avec les exemples, sinon
@@ -1429,6 +1701,14 @@ function renderLibrary(){
   renderLoanAlert();
   renderStudyAlert();
   $('#btn-pick-next').hidden = !state.books.some(b=>b.status==='wishlist');
+  // La file de notation n’était accessible que depuis l’accueil : la bibliothèque, où l’on
+  // constate les notes manquantes, y mène aussi. Le compte dit ce qui attend ; masqué sinon.
+  const nbANoter = unratedBooks().length, btnRate = $('#btn-rate-all');
+  btnRate.hidden = !nbANoter;
+  if(nbANoter){
+    btnRate.querySelector('.rate-label').textContent = plur(nbANoter, 'lecture');
+    btnRate.setAttribute('aria-label', `Noter ${plur(nbANoter, 'lecture')} sans note`);
+  }
   // « Mémoriser » n’a de sens qu’avec des filtres à mémoriser : sur la bibliothèque entière il
   // laissait croire à un filtre supplémentaire (« ＋ Filtre ») qu’il ne posait pas.
   $('#lib-savefilter').hidden = !(ui.status!=='all' || ui.types.size || ui.tag || ui.q);
@@ -1457,7 +1737,7 @@ function renderLibrary(){
       <div class="ob-or">ou tape parmi ces incontournables :</div>
       <div class="onboard-grid">
         ${ONBOARD_PICKS.map((p,i)=>`<button class="ob-pick" data-pick="${i}" aria-label="Ajouter ${esc(p.title)}">
-          <div class="ob-cov">${p.cover?`<img src="${esc(p.cover)}" alt="" loading="lazy"${xorigin(p.cover)} referrerpolicy="no-referrer"><div class="ob-ph">${esc(p.title)}</div>`:`<div class="ob-ph">${esc(p.title)}</div>`}</div>
+          <div class="ob-cov">${p.cover?`<img src="${esc(p.cover)}" alt="" loading="lazy"${xorigin(p.cover)} referrerpolicy="no-referrer">`:''}${phHTML(p)}</div>
           <div class="ob-t">${esc(p.title)}</div><div class="ob-check">✓ Ajouté</div>
         </button>`).join('')}
       </div>
@@ -1475,7 +1755,10 @@ function renderLibrary(){
     emptyBox.querySelector('.onboard-grid').addEventListener('click', e=>{
       const btn = e.target.closest('.ob-pick'); if(!btn || btn.classList.contains('done')) return;
       const p = ONBOARD_PICKS[+btn.dataset.pick]; if(!p) return;
-      const b = newBook(Object.assign({}, p, { status:'read', readings:[{id:uid(), date:today(), rating:null}] }));
+      // « Lu » sans date : newBook daterait la lecture d’aujourd’hui, ce qui est faux pour un
+      // classique lu on ne sait plus quand — Journal et courbe de l’année restent vides à raison,
+      // et « Sans note » sur Aujourd’hui proposera de noter (et de dater) plus tard.
+      const b = newBook(Object.assign({}, p, { status:'read' })); b.readings = [];
       state.books.unshift(b); save();                          // seed la biblio (+ sync compte si connecté)
       btn.classList.add('done'); added++;
       const doneBtn = $('#ob-done'); doneBtn.hidden = false; $('#ob-n').textContent = '('+added+')';
@@ -1510,7 +1793,11 @@ function renderLibrary(){
   // après un import, et un rendu intermédiaire ne doit pas l’effacer (_coverProgress la porte).
   const countTxt = `${plur(nBooks,'ouvrage')}${nItems!==nBooks ? ` · ${plur(nItems,'carte')}` : ''}`;
   $('#lib-count').dataset.base = countTxt;
-  $('#lib-count').textContent = countTxt + (_coverProgress ? ` · ${_coverProgress}` : '');
+  // Un statut filtré se lit aussi ici : sur téléphone la puce active peut être sortie du ruban, et
+  // après un saut depuis Aujourd’hui on doit pouvoir revenir à tout d’un geste.
+  const STATUS_FILTER_LBL = {read:'Lus', reading:'En cours', wishlist:'À lire', abandoned:'Abandonnés', fav:'Favoris', loan:'Prêtés'};
+  $('#lib-count').innerHTML = `<span class="lc-txt">${esc(countTxt + (_coverProgress ? ` · ${_coverProgress}` : ''))}</span>` +
+    (ui.status!=='all' ? ` · Filtre : ${esc(STATUS_FILTER_LBL[ui.status]||ui.status)} · <button type="button" class="linkish" id="lib-showall">Tout afficher</button>` : '');
   if(!arr.length){
     emptyBox.innerHTML = `<div class="empty"><div class="big orn" aria-hidden="true">❦</div>
       <h3>Rien sur cette étagère</h3><p>Ces filtres ne laissent passer aucun titre. Élargis, ou range-les.</p>
@@ -1541,9 +1828,8 @@ function renderLoanAlert(){
 function resetFilters(){
   ui.status='all'; ui.types.clear(); ui.tag=''; ui.q='';
   $('#lib-q').value=''; $('#lib-tag').value='';
-  $$('#status-chips .chip').forEach(x=>{ const on=x.dataset.status==='all'; x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
-  $$('#type-chips .chip[data-type]').forEach(x=>{ x.classList.remove('active'); x.setAttribute('aria-pressed','false'); });
-  persistUI(); renderLibrary();
+  syncFilterChips();
+  libFilterChanged(); renderLibrary();
 }
 // Recommandations locales dérivées de mes propres notes (aucun réseau)
 function recommendations(){
@@ -1619,13 +1905,14 @@ async function chooseNextRead(){
     if(action==='again'){ seen.add(b.id); continue; }
     if(action==='view'){ openDetail(b.id); return; }
     if(action==='start'){
-      b.status='reading'; if(b.currentPage==null) b.currentPage=0;
+      b.status='reading'; syncStartedAt(b); if(b.currentPage==null) b.currentPage=0;
       save(); render(); openDetail(b.id); toast('Bonne lecture'); return;
     }
     return;
   }
 }
 $('#btn-pick-next').addEventListener('click', chooseNextRead);
+$('#btn-rate-all').addEventListener('click', openQuickRate);
 /* ---- Idées du jour : découverte externe « Comme X et Y », 3 idées, nouvelles chaque jour ----
    Déterministe par date (même trio toute la journée), cache localStorage (1 requête API max/jour),
    repli silencieux si aucune note ≥ 4 ou API indisponible. */
@@ -1868,19 +2155,20 @@ function bookCardHTML(b){
   const hitLabel = ui.selectMode ? `${sel?'Désélectionner':'Sélectionner'} ${fullTitle(b)}` : `Ouvrir ${fullTitle(b)}${b.authors.length?', '+authorsStr(b):''}`;
   return `
     <div class="card${sel?' selected':''}" data-id="${esc(b.id)}">
-      <button type="button" class="card-hit" aria-label="${esc(hitLabel)}"${ui.selectMode?` aria-pressed="${sel}"`:''}></button>
+      <button type="button" class="card-hit" aria-label="${esc(hitLabel)}" aria-keyshortcuts="l f"${ui.selectMode?` aria-pressed="${sel}"`:''}></button>
       <div class="cover">
         <span class="badge ${esc(b.type)}">${TYPE_LABEL[b.type]||''}</span>
-        <button class="selbox${sel?' on':''}" data-select="${esc(b.id)}" role="checkbox" aria-checked="${sel}" aria-label="Sélectionner">${sel?'✓':''}</button>
+        <button class="selbox${sel?' on':''}" data-select="${esc(b.id)}" role="checkbox" aria-checked="${sel}" aria-label="Sélectionner" tabindex="-1">${sel?'✓':''}</button>
         <span class="qk">
-          ${b.status!=='read' ? `<button data-quick="read" data-id="${esc(b.id)}" title="Marquer comme lu" aria-label="Marquer comme lu">✓</button>` : ''}
-          <button data-quick="fav" data-id="${esc(b.id)}" class="${b.favorite?'on':''}" title="Favori" aria-label="Favori">♥</button>
+          ${b.status!=='read' ? `<button data-quick="read" data-id="${esc(b.id)}" title="Marquer comme lu" aria-label="Marquer comme lu" tabindex="-1">✓</button>` : ''}
+          <button data-quick="fav" data-id="${esc(b.id)}" class="${b.favorite?'on':''}" title="Favori" aria-label="Favori" tabindex="-1">♥</button>
+          <button data-quick="menu" data-id="${esc(b.id)}" title="Plus d’actions" aria-label="Plus d’actions" tabindex="-1">⋯</button>
         </span>
         ${coverHTML(b)}
         ${ribbon}
       </div>
       <div class="under">
-        ${b.rating ? `<span class="stars">${starsTxt(b.rating)}</span>` : ''}
+        ${starsHTML(b.rating)}
         ${b.favorite ? `<span class="fav">♥</span>` : ''}
         ${b.review ? `<span class="rv">${ic('doc',13)}</span>` : ''}
         ${(b.quotes||[]).length ? `<span class="qmark" title="${plur(b.quotes.length,'passage')}">❝</span>` : ''}
@@ -1897,15 +2185,16 @@ function bookRowHTML(b){
   const hitLabel = ui.selectMode ? `${sel?'Désélectionner':'Sélectionner'} ${fullTitle(b)}` : `Ouvrir ${fullTitle(b)}${b.authors.length?', '+authorsStr(b):''}`;
   return `
     <div class="card lrow${sel?' selected':''}" data-id="${esc(b.id)}">
-      <button type="button" class="card-hit" aria-label="${esc(hitLabel)}"${ui.selectMode?` aria-pressed="${sel}"`:''}></button>
-      <button class="selbox${sel?' on':''}" data-select="${esc(b.id)}" role="checkbox" aria-checked="${sel}" aria-label="Sélectionner">${sel?'\u2713':''}</button>
+      <button type="button" class="card-hit" aria-label="${esc(hitLabel)}" aria-keyshortcuts="l f"${ui.selectMode?` aria-pressed="${sel}"`:''}></button>
+      <button class="selbox${sel?' on':''}" data-select="${esc(b.id)}" role="checkbox" aria-checked="${sel}" aria-label="Sélectionner" tabindex="-1">${sel?'\u2713':''}</button>
       <div class="lcov">${coverHTML(b, true)}</div>
       <div class="ri"><b class="rt">${esc(fullTitle(b))}</b><span class="ra">${esc(authorsStr(b))}</span></div>
       <div class="rmeta">
         ${statut}
-        ${b.rating ? `<span class="stars">${starsTxt(b.rating)}</span>` : ''}
+        <span class="rstars row-stars${b.rating?'':' unrated'}" data-book="${esc(b.id)}" role="slider" tabindex="0" aria-label="Note" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${b.rating||0}" aria-valuetext="${ratingText(b.rating)}">${starInputHTML(b.rating||0, 'rst')}</span>
         ${b.favorite ? `<span class="fav">\u2665</span>` : ''}
         ${b.review ? `<span class="rv">${ic('doc',13)}</span>` : ''}
+        <button class="rmenu" data-quick="menu" data-id="${esc(b.id)}" title="Plus d\u2019actions" aria-label="Plus d\u2019actions">\u22ef</button>
       </div>
     </div>`;
 }
@@ -1927,14 +2216,18 @@ function seriesRowHTML(it){
       <button type="button" class="card-hit" aria-label="${esc(hitLabel)}"${ui.selectMode?` aria-pressed="${allSel}"`:''}></button>
       <div class="lcov">${coverHTML(rep, true)}</div>
       <div class="ri"><b class="rt">${esc(it.name)}</b><span class="ra">${fmtRatio(read, total||it.books.length)} lus \u00B7 ${plur(it.books.length,'tome')}</span></div>
-      <div class="rmeta">${shown ? `<span class="stars">${starsTxt(shown)}</span>` : ''}</div>
+      <div class="rmeta">${starsHTML(shown)}</div>
     </div>`;
 }
 function syncLibLayoutBtn(){
   const btn = $('#lib-layout'); if(!btn) return;
   const liste = ui.libLayout==='list';
-  btn.setAttribute('aria-pressed', liste);
-  btn.title = liste ? 'Passer en grille' : 'Passer en liste';
+  // Pas d’aria-pressed : ce n’est pas un interrupteur « liste : oui/non » mais un bouton qui
+  // fait l’action inverse de l’affichage courant — son nom suffit, et il change avec l’état.
+  btn.removeAttribute('aria-pressed');
+  const lbl = liste ? 'Afficher en grille' : 'Afficher en liste';
+  btn.setAttribute('aria-label', lbl);
+  btn.title = lbl;
   btn.innerHTML = liste
     ? `<svg viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg> Grille`
     : `<svg viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><rect x="4" y="4.6" width="2.8" height="2.8" rx="1"/><rect x="4" y="10.6" width="2.8" height="2.8" rx="1"/><rect x="4" y="16.6" width="2.8" height="2.8" rx="1"/></svg> Liste`;
@@ -1961,12 +2254,12 @@ function seriesCardHTML(it){
       <button type="button" class="card-hit" aria-label="${esc(hitLabel)}"${ui.selectMode?` aria-pressed="${allSel}"`:''}></button>
       <div class="cover">
         <span class="badge ${esc(rep.type)}">${TYPE_LABEL[rep.type]||''}</span>
-        <button class="selbox${allSel?' on':''}" data-select-series="${esc(it.name)}" role="checkbox" aria-checked="${allSel}" aria-label="Sélectionner la série">${allSel?'✓':(someSel?'–':'')}</button>
+        <button class="selbox${allSel?' on':''}" data-select-series="${esc(it.name)}" role="checkbox" aria-checked="${allSel}" aria-label="Sélectionner la série" tabindex="-1">${allSel?'✓':(someSel?'–':'')}</button>
         ${coverHTML(rep)}
         <span class="ribbon serie ${done?'done':''}">${esc(it.name)} · ${read}/${total||it.books.length}${done?' ✓':''}</span>
       </div>
       <div class="under">
-        ${shown ? `<span class="stars">${starsTxt(Math.round(shown*2)/2)}</span>` : ''}
+        ${starsHTML(shown ? Math.round(shown*2)/2 : null)}
         ${fav ? `<span class="fav">♥</span>` : ''}
       </div>
     </div>`;
@@ -2027,12 +2320,20 @@ $('#lib-grid').addEventListener('click', e => {
   if(qk){
     const b = state.books.find(x=>x.id===qk.dataset.id); if(!b) return;
     const kind = qk.dataset.quick;
+    if(kind==='menu'){ openCardMenu(b); return; }
     if(kind==='fav'){ b.favorite = !b.favorite; }
     else if(kind==='read'){ markRead(b); }
-    save();
-    const stillMatches = !((ui.status==='fav' && kind==='fav' && !b.favorite) || (ui.status==='reading' && kind==='read') || (ui.status==='wishlist' && kind==='read') || (ui.status==='abandoned' && kind==='read'));
-    if(stillMatches && !seriesKey(b) && patchCard(b.id)){ renderNowReading(); renderDiscover(); }
-    else renderLibrary();
+    save(); refreshAfterQuick(b);
+    return;
+  }
+  // Étoiles d’une rangée (mode liste) : la note se pose sans ouvrir la fiche, même règle du
+  // toucher que sur la fiche (tapRating). La rangée seule est remplacée : la liste ne se retrie
+  // pas sous le doigt, même triée par note.
+  const rs = e.target.closest('.row-stars .rst');
+  if(rs){
+    const b = state.books.find(x=>x.id===rs.closest('.row-stars').dataset.book); if(!b) return;
+    setBookRating(b, tapRating(b.rating, rs, e.clientX));
+    save(); patchCard(b.id);
     return;
   }
   const sc = e.target.closest('[data-series]');
@@ -2040,17 +2341,85 @@ $('#lib-grid').addEventListener('click', e => {
   const card = e.target.closest('.card');
   if(card && card.dataset.id) openDetail(card.dataset.id);
 });
-// Appui long tactile → entrer en mode sélection
-let _lpTimer = null, _lpFired = false, _lpX = 0, _lpY = 0;
+// Après une action rapide (✓, ♥, statut depuis le menu) : la carte se remplace sur place tant que
+// le livre reste dans le filtre courant ; sinon la grille se reconstruit, il vient d’en sortir.
+function refreshAfterQuick(b){
+  const s = ui.status;
+  const stillMatches = s==='all' || (s==='fav' ? !!b.favorite : s==='loan' ? !!b.loan : s===b.status);
+  if(stillMatches && !seriesKey(b) && patchCard(b.id)){ renderNowReading(); renderDiscover(); }
+  else renderLibrary();
+}
+// Glissé sur les étoiles d’une rangée : même pose que le toucher, au relâchement.
+bindStarSlider($('#lib-grid'), '.row-stars', (host, v) => {
+  const b = state.books.find(x=>x.id===host.dataset.book); if(!b) return;
+  setBookRating(b, v); save(); patchCard(b.id);
+});
+// Menu d’actions d’un livre (appui long sur mobile, bouton ⋯ à la souris) : noter, changer de
+// statut, favori, liste, ou passer en sélection multiple — l’appui long n’entrait avant qu’en
+// sélection, la seule action qui ne s’offre nulle part ailleurs sur la carte.
+async function openCardMenu(b){
+  const a = await uiChoose({ title:fullTitle(b), choices:[
+    { label: b.rating ? '★ Modifier la note…' : '★ Noter…', value:'rate' },
+    { label: b.status==='reading' ? 'Marquer comme lu' : b.status==='wishlist' ? 'Commencer' : 'Changer le statut…', value:'status' },
+    { label: b.favorite ? 'Retirer des favoris' : '♥ Mettre en favori', value:'fav' },
+    { label:'Ajouter à une liste…', value:'list' },
+    { label:'Sélectionner plusieurs', value:'select' },
+  ]});
+  if(!a) return;
+  if(a==='rate'){ openDetail(b.id, {pulse:true}); return; }
+  if(a==='fav'){ b.favorite = !b.favorite; save(); refreshAfterQuick(b); return; }
+  if(a==='select'){
+    enterSelect();
+    toggleId(b.id, document.querySelector('#lib-grid .card[data-id="'+CSS.escape(b.id)+'"]'));
+    return;
+  }
+  if(a==='list'){
+    if(!state.lists.length){ toast('Crée d’abord une liste (onglet Listes)'); return; }
+    const lid = await uiChoose({ title:'Ajouter à une liste', message:fullTitle(b), choices: state.lists.map((l,i)=>({ label:l.name, value:l.id, default:i===0 })) });
+    const list = state.lists.find(x=>x.id===lid); if(!list) return;
+    if(list.bookIds.includes(b.id)){ toast(`Déjà dans « ${list.name} »`); return; }
+    if(list.bookIds.length>=MAX_BOOKIDS){ toast('Cette liste est pleine'); return; }
+    list.bookIds.push(b.id); save();
+    toast(`Ajouté à « ${list.name} » ✓`, {label:'Annuler', onAction:()=>{ list.bookIds = list.bookIds.filter(id=>id!==b.id); save(); }});
+    return;
+  }
+  if(a==='status'){
+    let s = b.status==='reading' ? 'read' : b.status==='wishlist' ? 'reading' : null;
+    if(!s) s = await uiChoose({ title:'Changer le statut', message:fullTitle(b), choices: Object.entries(STATUS_LABEL).filter(([k])=>k!==b.status).map(([k,v])=>({ label:v, value:k })) });
+    if(s) applyQuickStatus(b, s);
+  }
+}
+// Statut depuis le menu d’une carte. « Lu » passe par markRead (relecture, journal, objectif) ;
+// reprendre un livre terminé remet la progression à zéro (F14) comme sur la fiche.
+function applyQuickStatus(b, s){
+  if(s==='read'){ markRead(b); }
+  else {
+    const prev = b.status, prevStart = b.startedAt || null;
+    if(s==='reading' && b.pages && (b.currentPage||0)>=b.pages) updateBookProgress(b, 0);
+    b.status = s; syncStartedAt(b); invalidateCache();
+    const msg = {reading:'Passé en cours de lecture ✓', wishlist:'Remis dans la pile à lire ✓', abandoned:'Marqué abandonné ✓'}[s] || `${STATUS_LABEL[s]} ✓`;
+    toast(msg, {label:'Annuler', onAction:()=>{ b.status = prev; b.startedAt = prevStart; invalidateCache(); save(); renderLibrary(); }});
+  }
+  save(); refreshAfterQuick(b);
+}
+// Appui long tactile → menu d’actions du livre (une carte série, elle, entre en sélection : le
+// menu ne vaut que pour un livre). Le menu s’ouvre au RELÂCHEMENT, pas à la 450e milliseconde :
+// ouvert sous le doigt encore posé, le dialogue recevait le relâchement — clic sur son fond
+// (donc fermé aussitôt) ou, pire, sur un de ses boutons. La vibration, elle, marque l’instant
+// où l’appui a pris.
+let _lpTimer = null, _lpFired = false, _lpX = 0, _lpY = 0, _lpMenu = null;
 $('#lib-grid').addEventListener('pointerdown', e => {
-  _lpFired = false; // repart propre à chaque geste (un appui long sans click ne bloque pas le tap suivant)
+  _lpFired = false; _lpMenu = null; // repart propre à chaque geste (un appui long sans click ne bloque pas le tap suivant)
   if(e.pointerType!=='touch') return;
   const card = e.target.closest('.card'); if(!card) return;
   _lpX = e.clientX; _lpY = e.clientY;
   clearTimeout(_lpTimer);
   _lpTimer = setTimeout(()=>{
-    enterSelect();
-    card.dataset.series ? toggleSeries(card.dataset.series, card) : toggleId(card.dataset.id, card);
+    _lpTimer = null;
+    if(card.dataset.series || ui.selectMode){
+      enterSelect();
+      card.dataset.series ? toggleSeries(card.dataset.series, card) : toggleId(card.dataset.id, card);
+    } else _lpMenu = state.books.find(x=>x.id===card.dataset.id) || null;
     _lpFired = true;
     if(navigator.vibrate) try{ navigator.vibrate(15); }catch(_){}
   }, 450);
@@ -2058,16 +2427,61 @@ $('#lib-grid').addEventListener('pointerdown', e => {
 $('#lib-grid').addEventListener('pointermove', e => {
   if(_lpTimer && (Math.abs(e.clientX-_lpX)>10 || Math.abs(e.clientY-_lpY)>10)){ clearTimeout(_lpTimer); _lpTimer=null; }
 });
-['pointerup','pointercancel','pointerleave'].forEach(ev=>$('#lib-grid').addEventListener(ev, ()=>{ clearTimeout(_lpTimer); _lpTimer=null; }));
+['pointerup','pointercancel','pointerleave'].forEach(ev=>$('#lib-grid').addEventListener(ev, ()=>{
+  clearTimeout(_lpTimer); _lpTimer=null;
+  const m = _lpMenu; _lpMenu = null;
+  if(m) openCardMenu(m);
+}));
 // Android et iOS ouvrent leur menu « Enregistrer l’image / Copier » sur l’appui long, par-dessus
 // notre mode sélection. On ne l’étouffe que pendant un appui long en cours (_lpTimer), juste après
 // qu’il a abouti (_lpFired), ou en mode sélection : ailleurs, le menu du navigateur reste dû.
 $('#lib-grid').addEventListener('contextmenu', e => {
   if(_lpTimer || _lpFired || ui.selectMode) e.preventDefault();
 });
+// La carte vient d’être reconstruite (outerHTML) : le focus clavier est tombé sur body. On le rend
+// au bouton-cible de sa remplaçante, retrouvée par sa clé (data-id ou data-series).
+function refocusCardHit(card){
+  const key = card.dataset.series ? '[data-series="'+CSS.escape(card.dataset.series)+'"]' : '[data-id="'+CSS.escape(card.dataset.id||'')+'"]';
+  const hit = document.querySelector('#lib-grid .card'+key+' .card-hit');
+  if(hit) hit.focus({preventScroll:true});
+}
 // Navigation clavier entre les couvertures (flèches)
 $('#lib-grid').addEventListener('keydown', e => {
+  // Raccourcis d’une carte : L (marquer lu), F (favori), Espace (sélectionner) — actifs seulement
+  // quand son bouton-cible a le focus, ce que WCAG 2.1.4 permet sans modificateur (contrairement
+  // aux raccourcis globaux, qui exigent Alt). Les boutons rapides ✓ ♥ ⋯ et la case de sélection
+  // sont sortis de l’ordre de tabulation : vingt cartes = vingt arrêts Tab, plus quatre-vingts.
+  if(e.target.matches('.card-hit') && !e.altKey && !e.ctrlKey && !e.metaKey){
+    const card = e.target.closest('.card'), k = e.key.toLowerCase();
+    if(e.key===' '){
+      e.preventDefault(); // sinon le bouton « clique » au relâchement et ouvre la fiche
+      enterSelect();
+      card.dataset.series ? toggleSeries(card.dataset.series, card) : toggleId(card.dataset.id, card);
+      refocusCardHit(card);
+      return;
+    }
+    if((k==='l' || k==='f') && card.dataset.id){
+      const b = state.books.find(x=>x.id===card.dataset.id); if(!b) return;
+      if(k==='l' && b.status==='read') return; // déjà lu : rien à faire, la touche reste au navigateur
+      e.preventDefault();
+      if(k==='f') b.favorite = !b.favorite; else markRead(b);
+      save(); refreshAfterQuick(b);
+      refocusCardHit(card);
+      return;
+    }
+  }
   if(!['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Home','End'].includes(e.key)) return;
+  // Étoiles d’une rangée au clavier (← → ↑ ↓ par demi-étoile, Home efface, End met 5) : même
+  // curseur que sur la fiche, sinon le slider est focusable mais muet. La rangée se reconstruit :
+  // on rend le focus aux étoiles.
+  if(e.target.matches('.row-stars')){
+    const b = state.books.find(x=>x.id===e.target.dataset.book); if(!b) return;
+    const v = sliderKeyValue(e.key, b.rating); if(v===undefined) return;
+    e.preventDefault();
+    setBookRating(b, v); save(); patchCard(b.id);
+    const nrs = document.querySelector('#lib-grid .row-stars[data-book="'+CSS.escape(b.id)+'"]'); if(nrs) nrs.focus();
+    return;
+  }
   if(!e.target.matches('.card-hit')) return;
   const cards = [...$('#lib-grid').querySelectorAll('.card')];
   if(!cards.length) return;
@@ -2085,6 +2499,11 @@ $('#lib-grid').addEventListener('keydown', e => {
   else if(e.key==='End') n = cards.length-1;
   const target = cards[n].querySelector('.card-hit');
   if(target) target.focus();
+});
+// Espace sur une carte : le keydown a déjà sélectionné ; on étouffe aussi le keyup, sur lequel
+// certains navigateurs déclenchent malgré tout le click du bouton (qui ouvrirait la fiche).
+$('#lib-grid').addEventListener('keyup', e => {
+  if(e.key===' ' && e.target.matches && e.target.matches('.card-hit')) e.preventDefault();
 });
 
 /* =============== Actions en masse =============== */
@@ -2154,9 +2573,10 @@ async function onBulk(action){
     ]});
     if(!s) return;
     applyBulk({
-      snapshot:b=>({status:b.status, readings:b.readings.slice()}),
-      apply:b=>{ b.status=s; if(s==='read'){ b.readings=b.readings||[]; if(!b.readings.length) b.readings.push({id:uid(), date:today(), rating:null}); } },
-      restore:(b,p)=>{ b.status=p.status; b.readings=p.readings; },
+      snapshot:b=>({status:b.status, startedAt:b.startedAt||null, readings:b.readings.slice()}),
+      // la date de début (F40) part avec la lecture créée, puis syncStartedAt la pose ou la retire selon le statut
+      apply:b=>{ b.status=s; if(s==='read'){ b.readings=b.readings||[]; if(!b.readings.length) b.readings.push({id:uid(), start:b.startedAt||null, date:today(), rating:null}); } syncStartedAt(b); },
+      restore:(b,p)=>{ b.status=p.status; b.startedAt=p.startedAt; b.readings=p.readings; },
     }, `Statut → ${STATUS_LABEL[s]}`);
     return;
   }
@@ -2199,22 +2619,26 @@ $('#bulk-bar').addEventListener('click', e => {
 /* =============== Collections intelligentes (filtres sauvegardés) =============== */
 function renderSmartChips(){
   const box = $('#smart-chips'); if(!box) return;
+  // Deux boutons frères, pas un ✕ imbriqué dans le bouton du filtre : un contrôle dans un contrôle
+  // n’existe pas pour le clavier ni le lecteur d’écran — « oublier » n’était atteignable qu’à la souris.
   box.innerHTML = state.smartCollections.map(c=>
-    `<button class="chip" data-sc="${esc(c.id)}">${esc(c.name)} <span class="sc-del" data-sc-del="${esc(c.id)}" aria-label="Oublier ce filtre">✕</span></button>`).join('');
+    `<span class="sc-group"><button type="button" class="chip" data-sc="${esc(c.id)}">${esc(c.name)}</button><button type="button" class="chip sc-del" data-sc-del="${esc(c.id)}" aria-label="Oublier le filtre « ${esc(c.name)} »">✕</button></span>`).join('');
 }
 $('#lib-savefilter').addEventListener('click', async ()=>{
   const name = await uiPrompt({ title:'Mémoriser ces filtres', message:'Retrouve cette combinaison de filtres en un clic depuis ta bibliothèque.', placeholder:'ex : Mangas en cours, SF notés 4+', okLabel:'Mémoriser' });
   if(!name || !name.trim()) return;
-  state.smartCollections.push({id:uid(), name:name.trim().slice(0,80), f:{status:ui.status, types:[...ui.types], tag:ui.tag, q:ui.q, sort:ui.sort}});
+  // q : le texte tel que tapé (accents compris), pas sa forme repliée — c’est lui qu’on réaffichera
+  state.smartCollections.push({id:uid(), name:name.trim().slice(0,80), f:{status:ui.status, types:[...ui.types], tag:ui.tag, q:$('#lib-q').value.trim(), sort:ui.sort}});
   if(state.smartCollections.length>MAX_SMART) state.smartCollections = state.smartCollections.slice(-MAX_SMART);
   save(); renderSmartChips(); toast('Filtres mémorisés ✓');
 });
 function applySmart(c){
-  ui.status=c.f.status; ui.types=new Set(c.f.types); ui.tag=c.f.tag; ui.q=c.f.q; ui.sort=c.f.sort;
+  ui.status=c.f.status; ui.types=new Set(c.f.types); ui.tag=c.f.tag; ui.q=fold(c.f.q).trim(); ui.sort=c.f.sort;
+  // un filtre mémorisé porte un tri, pas un sens : « Mieux notés » doit redonner les mieux notés en tête
+  ui.sortDesc=false; syncSortDirBtn();
   $('#lib-q').value=c.f.q; $('#lib-sort').value=c.f.sort;
-  $$('#status-chips .chip').forEach(x=>{ const on=x.dataset.status===c.f.status; x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
-  $$('#type-chips .chip[data-type]').forEach(x=>{ const on=ui.types.has(x.dataset.type); x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
-  persistUI(); renderLibrary();
+  syncFilterChips();
+  libFilterChanged(); renderLibrary();
   $('#lib-tag').value = c.f.tag;
 }
 $('#smart-chips').addEventListener('click', e => {
@@ -2225,6 +2649,35 @@ $('#smart-chips').addEventListener('click', e => {
 });
 
 /* =============== Journal =============== */
+// Nom accessible d’une ligne du journal : ce que la ligne montre (type, note, relecture) doit
+// aussi s’entendre — avant, le lecteur d’écran n’avait que le titre et la date.
+function entryLabel(b, date, shown, nth){
+  return `${fullTitle(b)}, ${TYPE_LABEL[b.type]||''}, lu le ${fmtDate(date)}${shown?`, ${fmtDec(shown)} sur 5`:''}${nth>0?', relecture':''}`;
+}
+// F40 : sessions de lecture pour le Journal — une par jour et par livre (dernière page du jour),
+// hors jours où une lecture se termine (la ligne « lu » suffit) et hors remises à zéro (page 0).
+function sessionEntries(books=state.books){
+  const out = [];
+  for(const b of books){
+    const log = b.progressLog||[]; if(!log.length) continue;
+    const ends = new Set((b.readings||[]).map(r=>r.date));
+    const byDay = new Map();
+    for(const p of log) if(p.page>0 && !ends.has(p.date)) byDay.set(p.date, p.page);
+    for(const [date, page] of byDay) out.push({kind:'session', date, b, page});
+  }
+  return out;
+}
+// Ligne compacte d’une session : le jour, le titre et la page atteinte — ni note ni badge, ce
+// n’est pas une lecture terminée. Même délégation que les lectures (clic → fiche).
+function sessionEntryHTML(e){
+  const b = e.b, d = new Date(e.date+'T12:00:00');
+  const where = `→ page ${e.page}${b.pages ? ` / ${b.pages}` : ''}`;
+  return `<div class="entry session" data-id="${esc(b.id)}" data-type="${esc(b.type)}" role="button" tabindex="0" aria-label="${esc(`${fullTitle(b)}, session de lecture du ${fmtDate(e.date)}, page ${e.page}`)}">
+    <div class="day"><b>${d.getDate()}</b><span>${d.toLocaleDateString('fr-FR',{weekday:'short'})}</span></div>
+    <div class="mini">${coverHTML(b, true)}</div>
+    <div class="einfo"><div class="et">${esc(fullTitle(b))}</div><div class="ea">${esc(where)}</div></div>
+  </div>`;
+}
 function renderJournal(){
   const y = new Date().getFullYear();
   const gi = goalInfo(y);
@@ -2242,7 +2695,12 @@ function renderJournal(){
     </div>`;
   $('#jgoal').addEventListener('click', ()=>setGoal(y));
 
-  let entries = allReadings().sort((a,b)=> b.date.localeCompare(a.date));
+  // F40 : les sessions de lecture (pages enregistrées jour par jour) se glissent entre les lectures
+  // terminées, derrière une puce désactivée par défaut — elles noieraient sinon les lectures.
+  const sessions = sessionEntries();
+  let entries = allReadings().slice();
+  if(ui.journalSessions && sessions.length) entries = entries.concat(sessions);
+  entries.sort((a,b)=> b.date.localeCompare(a.date) || (a.kind==='session') - (b.kind==='session'));
   const box = $('#journal-body');
   if(!entries.length){
     // Un état vide qui explique sans rien proposer laisse au lecteur le soin de deviner par où
@@ -2260,12 +2718,16 @@ function renderJournal(){
   // groupement par mois ; le choix est persisté (persistUI) car on revient souvent à la même année.
   const years = [...new Set(entries.map(e=>e.date.slice(0,4)))].sort((a,b)=>b.localeCompare(a)).slice(0,8);
   if(ui.journalYear!=='all' && !years.includes(ui.journalYear)){ ui.journalYear = 'all'; persistUI(); }
-  const yearsHTML = years.length>1
-    ? `<div class="chips" id="journal-years" role="group" aria-label="Filtrer le journal par année">` +
-      ['all', ...years].map(y=>{
+  // Puce « Sessions » (F40) : seulement s’il y a des pages enregistrées quelque part — sinon rien à montrer.
+  const sessChip = sessions.length
+    ? `<button type="button" class="chip chip-sess${ui.journalSessions?' active':''}" data-jsess aria-pressed="${!!ui.journalSessions}" title="Montrer les pages enregistrées jour par jour">Sessions</button>`
+    : '';
+  const yearsHTML = (years.length>1 || sessChip)
+    ? `<div class="chips" id="journal-years" role="group" aria-label="Filtrer le journal">` +
+      (years.length>1 ? ['all', ...years].map(y=>{
         const on = ui.journalYear===y;
         return `<button type="button" class="chip${on?' active':''}" data-jy="${esc(y)}" aria-pressed="${on}">${y==='all'?'Tout':esc(y)}</button>`;
-      }).join('') + `</div>`
+      }).join('') : '') + sessChip + `</div>`
     : '';
   if(ui.journalYear!=='all') entries = entries.filter(e=>e.date.startsWith(ui.journalYear));
   const groups = new Map();
@@ -2280,28 +2742,31 @@ function renderJournal(){
   const _past = new Date(); _past.setFullYear(_past.getFullYear()-1);
   const _lo = new Date(_past); _lo.setDate(_lo.getDate()-15);
   const _hi = new Date(_past); _hi.setDate(_hi.getDate()+15);
-  const ago = entries.filter(e=>e.date>=dateKey(_lo) && e.date<=dateKey(_hi));
+  const ago = entries.filter(e=>e.kind!=='session' && e.date>=dateKey(_lo) && e.date<=dateKey(_hi));
   if(ago.length){
     html += `<div class="month ago-month"><h3>${ic('calendar',15)} À la même période l’an dernier</h3>` + ago.slice(0,6).map(e=>{
       const b = e.b, d = new Date(e.date+'T12:00:00'), shown = e.rating ?? b.rating;
-      return `<div class="entry" data-id="${esc(b.id)}" data-type="${esc(b.type)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, lu le ${fmtDate(e.date)}">
+      return `<div class="entry" data-id="${esc(b.id)}" data-type="${esc(b.type)}" role="button" tabindex="0" aria-label="${esc(entryLabel(b, e.date, shown, 0))}">
         <div class="day"><b>${d.getDate()}</b><span>${d.toLocaleDateString('fr-FR',{weekday:'short'})}</span></div>
         <div class="mini">${coverHTML(b, true)}</div>
         <div class="einfo"><div class="et">${esc(fullTitle(b))}</div><div class="ea">${esc(authorsStr(b))}</div></div>
-        <div class="emeta">${shown?`<span class="stars">${starsTxt(shown)}</span>`:''}</div>
+        <div class="emeta">${starsHTML(shown)}</div>
       </div>`;
     }).join('') + `</div>`;
   }
   for(const [key, list] of groups){
     const label = new Date(key+'-15T12:00:00').toLocaleDateString('fr-FR', {month:'long', year:'numeric'});
     // Le compte par mois donne le rythme d’un coup d’œil sans avoir à dénombrer les lignes.
-    html += `<div class="month"><h3>${label} <span class="mcount">· ${plur(list.length,'lecture')}</span></h3>` + list.map(e => {
+    const nRead = list.filter(e=>e.kind!=='session').length, nSess = list.length - nRead;
+    const count = [nRead ? plur(nRead,'lecture') : '', nSess ? plur(nSess,'session') : ''].filter(Boolean).join(' · ');
+    html += `<div class="month"><h3>${label} <span class="mcount">· ${count}</span></h3>` + list.map(e => {
+      if(e.kind==='session') return sessionEntryHTML(e);
       const b = e.b;
       const d = new Date(e.date+'T12:00:00');
       const sorted = (b.readings||[]).slice().sort((x,y2)=>x.date.localeCompare(y2.date)||String(x.id).localeCompare(String(y2.id)));
       const nth = sorted.findIndex(r=>r.id===e.rid);
       const shown = e.rating ?? b.rating;
-      return `<div class="entry" data-id="${esc(b.id)}" data-type="${esc(b.type)}" role="button" tabindex="0" aria-label="${esc(fullTitle(b))}, lu le ${fmtDate(e.date)}">
+      return `<div class="entry" data-id="${esc(b.id)}" data-type="${esc(b.type)}" role="button" tabindex="0" aria-label="${esc(entryLabel(b, e.date, shown, nth))}">
         <div class="day"><b>${d.getDate()}</b><span>${d.toLocaleDateString('fr-FR',{weekday:'short'})}</span></div>
         <div class="mini">${coverHTML(b, true)}</div>
         <div class="einfo">
@@ -2313,7 +2778,8 @@ function renderJournal(){
           ${b.review ? `<span class="rv" title="Critique">${ic('doc',13)}</span>` : ''}
           ${b.favorite ? `<span class="fav" style="color:var(--orange)">♥</span>` : ''}
           <span class="tbadge ${esc(b.type)}">${TYPE_LABEL[b.type]}</span>
-          <span class="stars">${starsTxt(shown)}</span>
+          ${shown ? starsHTML(shown)
+                  : `<button type="button" class="btn small" data-rate="${esc(b.id)}" aria-label="Noter ${esc(fullTitle(b))}">★ Noter</button>`}
         </div>
       </div>`;
     }).join('') + `</div>`;
@@ -2325,10 +2791,16 @@ function renderJournal(){
 $('#journal-body').addEventListener('click', e => {
   const chip = e.target.closest('[data-jy]');
   if(chip){ ui.journalYear = chip.dataset.jy; persistUI(); renderJournal(); return; }
+  if(e.target.closest('[data-jsess]')){ ui.journalSessions = !ui.journalSessions; persistUI(); renderJournal(); return; }
   // « Lu » comme statut par défaut : depuis le Journal on saisit une lecture terminée,
   // pas une envie (cf. openSearch({status})).
   if(e.target.closest('#journal-add-read')){ openSearch({status:'read'}); return; }
   if(e.target.closest('#journal-lib')){ selectView('library'); return; }
+  // « ★ Noter » d’une ligne sans note : la fiche s’ouvre avec la ligne d’étoiles mise en avant
+  // (pulse), au lieu de laisser chercher où l’on note. Le bouton vit dans une ligne role=button :
+  // au lecteur d’écran la ligne reste un seul bouton (la fiche, où la note se pose aussi).
+  const rt = e.target.closest('[data-rate]');
+  if(rt){ e.stopPropagation(); openDetail(rt.dataset.rate, {pulse:true}); return; }
   const row = e.target.closest('.entry'); if(row) openDetail(row.dataset.id);
 });
 
@@ -2685,7 +3157,7 @@ function endSearchSession(){
       // dans Bibliothèque (on les y voit) — auquel cas on confirme la datation.
       if(n > 0 && ui.view !== 'library') toast(`${plur(n,'livre ajouté','livres ajoutés')}`, { label:'Voir', onAction:()=>{
         resetFilters();                 // sinon un filtre laissé actif cache justement l’ajout
-        ui.sort = 'added'; $('#lib-sort').value = 'added';
+        resetSort();
         persistUI(); selectView('library');
       }});
       else if(datees){ const m = sansDate.length; toast(`Lecture${m>1?'s':''} datée${m>1?'s':''} d’aujourd’hui ✓`); }
@@ -2717,8 +3189,16 @@ async function askReadDates(ids){
 }
 
 /* =============== Synopsis à la demande =============== */
+// Livres dont la recherche est en cours : un second tap pendant les quelques secondes de la
+// requête relançait tout (deux appels réseau, deux toasts). Le bouton se grise ; comme la fiche
+// se reconstruit à chaque action (statut, note…), openDetail le regénère grisé tant que l’id est ici.
+const _synBusy = new Set();
 async function fetchSynopsis(b){
-  toast('Recherche du synopsis…');
+  if(_synBusy.has(b.id)) return;
+  _synBusy.add(b.id);
+  const btn = $('#d-syn-fetch');
+  if(btn){ btn.disabled = true; btn.setAttribute('aria-busy','true'); btn.textContent = 'Recherche…'; }
+  toast('Recherche du synopsis…', {ms:20000}); // remplacé par le toast de résultat, jamais avant
   try{
     let hit = null;
     try{
@@ -2734,12 +3214,16 @@ async function fetchSynopsis(b){
     if(hit && state.books.includes(b) && !b.synopsis){
       b.synopsis = cleanSynopsis(hit.description);
       save();
-      if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
       toast('Synopsis ajouté ✓');
     }else{
       toast('Pas de synopsis trouvé — tu peux le coller via ✎ Modifier');
     }
   }catch(_){ toast('Recherche indisponible'); }
+  finally{
+    _synBusy.delete(b.id);
+    // la fiche encore ouverte sur ce livre se reconstruit : synopsis affiché, ou bouton rendu
+    if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
+  }
 }
 
 /* =============== Scanner ISBN (caméra) =============== */
@@ -2881,11 +3365,21 @@ function fieldError(inputSel, msg){
   let e = inp.parentElement.querySelector('.field-err');
   if(!e){ e = document.createElement('div'); e.className='field-err'; e.setAttribute('role','alert'); inp.after(e); }
   e.textContent = msg;
+  // Le message est relié au champ (aria-describedby, sans écraser une description déjà là) et le
+  // champ se déclare invalide : le lecteur d’écran relit l’erreur en revenant sur le champ, pas
+  // seulement à l’instant où elle surgit. Les deux attributs partent avec le message.
+  e.id = (inp.id || 'field') + '-err';
+  const desc = (inp.getAttribute('aria-describedby') || '').split(/\s+/).filter(x => x && x !== e.id);
+  inp.setAttribute('aria-describedby', desc.concat(e.id).join(' '));
+  inp.setAttribute('aria-invalid', 'true');
   // champ dans un bloc replié (« Plus de détails ») : l’ouvrir, sinon le focus part sur un
   // élément invisible et le message d’erreur reste caché
   const det = inp.closest('details'); if(det) det.open = true;
   inp.classList.add('invalid'); inp.focus();
-  inp.addEventListener('input', ()=>{ e.remove(); inp.classList.remove('invalid'); }, {once:true});
+  inp.addEventListener('input', ()=>{
+    e.remove(); inp.classList.remove('invalid'); inp.removeAttribute('aria-invalid');
+    if(desc.length) inp.setAttribute('aria-describedby', desc.join(' ')); else inp.removeAttribute('aria-describedby');
+  }, {once:true});
 }
 // Entrée depuis n’importe quel champ, clic sur « Enregistrer » : un seul chemin (submit du form)
 $('#edit-form').addEventListener('submit', e => { e.preventDefault(); saveEdit(); });
@@ -2921,7 +3415,10 @@ function saveEdit(){
     // pagination corrigée à la baisse : une progression au-delà de la dernière page donnerait
     // 118 % sur la fiche et sur Aujourd’hui
     if(b.currentPage != null && data.pages && b.currentPage > data.pages) b.currentPage = data.pages;
-    if(b.status==='read' && !wasRead && !(b.readings||[]).length) b.readings = [{id:uid(), date:today(), rating:null}];
+    // pagination enfin connue : le % estimé (F40) devient une vraie page
+    if(b.currentPage == null && b.currentPct != null && data.pages){ b.currentPage = Math.round(b.currentPct/100*data.pages); b.currentPct = null; }
+    if(b.status==='read' && !wasRead && !(b.readings||[]).length) b.readings = [{id:uid(), start:b.startedAt||null, date:today(), rating:null}];
+    syncStartedAt(b);
   }else{
     state.books.unshift(newBook(data));
   }
@@ -2937,11 +3434,12 @@ function saveEdit(){
 function newBook(data){
   const b = Object.assign({
     id:uid(), rating:null, review:'', synopsis:'', favorite:false, tags:[], readings:[],
-    currentPage:null, progressLog:[], moods:[], pace:null, quotes:[], loan:null, study:null,
+    currentPage:null, currentPct:null, startedAt:null, progressLog:[], moods:[], pace:null, quotes:[], loan:null, study:null,
     volume:null, seriesTotal:null, year:null, pages:null, cover:'', series:'', authors:[], type:'livre',
     status:'wishlist', addedAt:new Date().toISOString()
   }, data);
   if(b.status==='read' && !b.readings.length) b.readings = [{id:uid(), date:today(), rating:null}];
+  syncStartedAt(b); // ajouté directement « en cours » : la lecture commence aujourd’hui (F40)
   return b;
 }
 
@@ -3004,7 +3502,7 @@ function renderStudyEditor(b, focus=''){
       <div class="study-stats"><div class="study-stat"><b>${c.cards}</b><span>cartes</span></div><div class="study-stat"><b>${c.due}</b><span>à revoir</span></div><div class="study-stat"><b>${fmtPct(c.mastery)}</b><span>maîtrise</span></div></div>
     </div>
     <div class="study-actions">
-      <button class="btn primary" data-study-review="${c.due?'due':'all'}">${ic('play',13)} ${c.due?`Réviser ${plur(c.due,'carte')}`:'S’entraîner'}</button>
+      <button class="btn primary" data-study-review="${c.due?'due':'all'}">${ic('play',13)} ${c.due?`Réviser ${plur(Math.min(c.due,20),'carte')}${c.due>20?` sur ${c.due}`:''}`:'S’entraîner'}</button>
       <button class="btn" data-study-export="md">${ic('download',14)} Texte (.md)</button>
       <button class="btn" data-study-export="print">${ic('print',14)} Imprimer / PDF</button>
       <button class="btn" data-study-back>← Revenir au livre</button>
@@ -3074,8 +3572,14 @@ function printStudy(b){
 let studySaveTimer=0;
 const studySession={queue:[],index:0,revealed:false,reviewed:0,bookId:null};
 function startStudyReview(bookId=null, all=false){
-  const queue=studyDueCards(bookId,all).slice(0,5);
-  if(!queue.length){ toast('Crée d’abord une carte mémoire'); return; }
+  // Plafond à 20 cartes par session : le bouton « Réviser N cartes » annonce le même chiffre
+  // (renderStudyEditor), la promesse est donc tenue ; au-delà, « Continuer » enchaîne.
+  const queue=studyDueCards(bookId,all).slice(0,20);
+  if(!queue.length){
+    // Des cartes existent mais aucune n’est due : demander d’en créer une serait faux.
+    toast(studyDueCards(bookId,true).length ? 'Aucune carte à réviser aujourd’hui — reviens demain' : 'Crée d’abord une carte mémoire');
+    return;
+  }
   Object.assign(studySession,{queue,index:0,revealed:false,reviewed:0,bookId});
   openOverlay('#ov-study'); renderStudyReview();
 }
@@ -3093,8 +3597,8 @@ function renderStudyReview(){
   // réellement disponible (toucher la carte, qui révèle aussi la réponse — voir le clic délégué).
   const coarse = matchMedia('(pointer:coarse)').matches;
   $('#study-body').innerHTML=`<div class="study-review" tabindex="0">
-    <div class="study-review-top"><span>${fmtRatio(n, total)}</span><div class="track"><div class="fill" style="width:${Math.round((n-1)/total*100)}%"></div></div><button data-review-exit>Quitter</button></div>
-    <div class="study-flash"><div class="book">${esc(fullTitle(book))}</div><div class="front">${esc(card.front)}</div>
+    <div class="study-review-top"><span>${fmtRatio(n, total)}</span><div class="track"><div class="fill" style="width:${Math.round((n-1)/total*100)}%"></div></div><button class="btn small" data-review-exit>Quitter</button></div>
+    <div class="study-flash"${studySession.revealed?'':' data-study-reveal'}><div class="book">${esc(fullTitle(book))}</div><div class="front">${esc(card.front)}</div>
       ${studySession.revealed?`<div class="study-answer">${esc(card.back)}</div>`:''}</div>
     <div class="study-review-actions">${studySession.revealed
       ? '<button class="btn" data-study-grade="again">À revoir</button><button class="btn" data-study-grade="hard">Difficile</button><button class="btn primary" data-study-grade="good">Bien</button><button class="btn" data-study-grade="easy">Facile</button>'
@@ -3112,9 +3616,14 @@ function gradeStudyCard(card,grade){
   card.lastReviewed=today(); card.due=isoAfterDays(today(),card.interval); return card.interval;
 }
 function renderStudyDone(){
-  const remain=studyDueCards().length;
+  // « Continuer » ne vaut que pour le périmètre de la session (le livre ouvert, ou tous) : sinon
+  // l’utilisateur relançait une session vide. Quand seuls d’autres livres ont des cartes dues,
+  // on le dit et on propose de les réviser, sans changer le périmètre à son insu.
+  const remainHere=studyDueCards(studySession.bookId).length, remainAll=studyDueCards().length;
+  const next = remainHere ? '<button class="btn primary" data-review-more>Continuer</button>'
+    : remainAll ? `<button class="btn primary" data-review-others>Réviser les autres livres (${remainAll})</button>` : '';
   $('#study-head').textContent='Session terminée';
-  $('#study-body').innerHTML=`<div class="study-done"><div class="big orn" aria-hidden="true">❦</div><h4>${plur(studySession.reviewed,'carte révisée','cartes révisées')}</h4><p>Chaque rappel réussi espace un peu plus la prochaine révision.</p><div class="study-actions" style="justify-content:center">${remain?'<button class="btn primary" data-review-more>Continuer</button>':''}${studySession.bookId?'<button class="btn" data-review-editor>Revenir à la fiche</button>':''}<button class="btn" data-close>Terminer</button></div></div>`;
+  $('#study-body').innerHTML=`<div class="study-done"><div class="big orn" aria-hidden="true">❦</div><h4>${plur(studySession.reviewed,'carte révisée','cartes révisées')}</h4><p>Chaque rappel réussi espace un peu plus la prochaine révision.</p><div class="study-actions" style="justify-content:center">${next}${studySession.bookId?'<button class="btn" data-review-editor>Revenir à la fiche</button>':''}<button class="btn" data-close>Terminer</button></div></div>`;
   scheduleRender();
 }
 
@@ -3188,14 +3697,26 @@ $('#study-body').addEventListener('click',e=>{
   }
   if(e.target.closest('[data-study-reveal]') || (!studySession.revealed && e.target.closest('.study-flash'))){ studySession.revealed=true; renderStudyReview(); return; }
   const grade=e.target.closest('[data-study-grade]');
-  if(grade){ const cur=currentStudyCard(); if(!cur)return; gradeStudyCard(cur.card,grade.dataset.studyGrade); touchStudy(cur.book); save(); studySession.reviewed++; studySession.index++; studySession.revealed=false; renderStudyReview(); return; }
+  if(grade){
+    const cur=currentStudyCard(); if(!cur)return;
+    const ref=studySession.queue[studySession.index];
+    gradeStudyCard(cur.card,grade.dataset.studyGrade); touchStudy(cur.book); save();
+    // « À revoir » : la carte revient une fois en fin de session (seconde chance), pas plus —
+    // sinon une carte qu’on ne sait pas rendrait la session interminable. Le compteur final
+    // compte les cartes, pas les passages : le second passage n’incrémente pas.
+    if(grade.dataset.studyGrade==='again' && !ref.retried) studySession.queue.push({...ref, retried:true});
+    if(!ref.retried) studySession.reviewed++;
+    studySession.index++; studySession.revealed=false; renderStudyReview(); return;
+  }
   if(e.target.closest('[data-review-more]')){ startStudyReview(studySession.bookId); return; }
+  if(e.target.closest('[data-review-others]')){ startStudyReview(); return; }
   if(e.target.closest('[data-review-editor]')){ const id=studySession.bookId; if(id)openStudy(id); return; }
   if(e.target.closest('[data-review-exit]')){ studySession.bookId?openStudy(studySession.bookId):closeTopOverlay(); return; }
 });
 $('#study-body').addEventListener('keydown',e=>{
   if($('#study-head').textContent!=='Révision') return;
-  if(!studySession.revealed && (e.key===' ' || e.key==='Enter')){ e.preventDefault(); const btn=$('#study-body [data-study-reveal]'); if(btn)btn.click(); return; }
+  // La carte elle-même porte aussi data-study-reveal (tap tactile) : on vise le bouton.
+  if(!studySession.revealed && (e.key===' ' || e.key==='Enter')){ e.preventDefault(); const btn=$('#study-body button[data-study-reveal]'); if(btn)btn.click(); return; }
   if(studySession.revealed && ['1','2','3','4'].includes(e.key)){
     e.preventDefault(); const grade=['again','hard','good','easy'][+e.key-1], btn=$(`#study-body [data-study-grade="${grade}"]`); if(btn)btn.click();
   }
@@ -3214,6 +3735,28 @@ function autoGrowReview(el){
   el.style.height = 'auto';
   const bords = el.offsetHeight - el.clientHeight; // box-sizing:border-box : scrollHeight ignore les bordures
   el.style.height = Math.min(el.scrollHeight + bords, Math.round(window.innerHeight * 0.6)) + 'px';
+}
+// F40 : dates d’une lecture sur la fiche. Avec un début : « du … au … · N jours », les deux dates
+// corrigeables en place (.rstart / .rdate) ; sinon la seule date de fin, comme avant (F15).
+function readingDatesHTML(r){
+  if(!r.start) return `<label class="rdate-wrap">${ic('calendar',13)}<input type="date" class="rdate" data-rid="${esc(r.id)}" value="${esc(r.date)}" max="${today()}" aria-label="Date de cette lecture"></label>`;
+  return `<span class="rdate-wrap">${ic('calendar',13)}<span class="rlbl">du</span><input type="date" class="rstart" data-rid="${esc(r.id)}" value="${esc(r.start)}" max="${esc(r.date)}" aria-label="Début de cette lecture"><span class="rlbl">au</span><input type="date" class="rdate" data-rid="${esc(r.id)}" value="${esc(r.date)}" max="${today()}" aria-label="Fin de cette lecture"></span><span class="rdays" data-rid="${esc(r.id)}">${readingDaysText(r)}</span>`;
+}
+function readingDaysText(r){ return r.start ? `· ${plur(Math.max(1, daysBetween(r.start, r.date)),'jour')}` : ''; }
+// Repeint la durée « · N jours » (et la borne du début) d’une ligne sans reconstruire la fiche :
+// reconstruire refermerait le sélecteur de date sous le doigt.
+function patchReadingDays(r){
+  const d = $(`#detail-body .rdays[data-rid="${CSS.escape(r.id)}"]`); if(d) d.textContent = readingDaysText(r);
+  const s = $(`#detail-body .rstart[data-rid="${CSS.escape(r.id)}"]`); if(s) s.max = r.date;
+}
+// F40 : rythme constaté sur la dernière lecture datée de bout en bout — une indication sous les
+// boutons Lent / Moyen / Rapide, pas un choix posé d’office.
+function paceHintHTML(b){
+  if(!b.pages) return '';
+  const r = (b.readings||[]).filter(x=>x.start).sort((x,y)=>y.date.localeCompare(x.date))[0];
+  if(!r) return '';
+  const days = Math.max(1, daysBetween(r.start, r.date)), perDay = Math.round(b.pages/days);
+  return perDay ? `<div class="card-hint" id="d-pace-hint">Lu en ${plur(days,'jour')}, soit environ ${plur(perDay,'page')} par jour</div>` : '';
 }
 function openDetail(id, opts={}){
   // la fiche se reconstruit en innerHTML à chaque action (note, statut, ♥…) : sans ça, le
@@ -3272,13 +3815,13 @@ function openDetail(id, opts={}){
   // clics sortants ne concerne que les deux liens marchands, cf. le beacon /api/out).
   const aAcheter = b.status==='wishlist' || b.status==='abandoned';
   const buyLinks = [
-    aAcheter ? `<a class="btn buy" data-buy="amazon" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter</a>` : '',
-    aAcheter ? `<a class="btn buy" data-buy="kindle" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle</a>` : '',
+    aAcheter ? `<a class="btn buy" data-buy="amazon" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter<span class="sr-only"> (nouvelle fenêtre)</span></a>` : '',
+    aAcheter ? `<a class="btn buy" data-buy="kindle" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle<span class="sr-only"> (nouvelle fenêtre)</span></a>` : '',
     social.me ? `<button type="button" class="btn buy" data-reco="${esc(b.id)}" title="Recommander ce livre à un ami">${ic('share',16)} Recommander</button>` : '',
     !isDemoBook(b) ? `<a class="btn buy" href="/livre/${esc(bookSlugOf(b))}" title="La page publique de ce livre sur Tome (avis des lecteurs)">${ic('link',16)} Page du livre</a>` : ''
   ].filter(Boolean).join('');
   const buyRowHTML = buyLinks
-    ? `<div class="buy-row">${buyLinks}${AMAZON_TAG && aAcheter ? `<span class="buy-note" tabindex="0" title="En tant que Partenaire Amazon, ce site perçoit une commission sur les achats remplissant les conditions requises. Aucun surcoût pour toi.">Partenaire Amazon</span>` : ''}</div>`
+    ? `<div class="buy-row">${buyLinks}${AMAZON_TAG && aAcheter ? `<details class="buy-note"><summary>Partenaire Amazon</summary><p>En tant que Partenaire Amazon, ce site perçoit une commission sur les achats remplissant les conditions requises. Aucun surcoût pour toi.</p></details>` : ''}</div>`
     : '';
 
   $('#detail-body').innerHTML = `
@@ -3293,7 +3836,9 @@ function openDetail(id, opts={}){
       <div class="dmeta">${esc(meta)}${meta && tagsHtml ? ' · ' : ''}${tagsHtml}</div>
       ${b.synopsis
         ? `<div class="syn collapsed" id="d-syn">${esc(b.synopsis)}</div>${b.synopsis.length>180 ? '<button class="syn-more" id="d-syn-more">voir plus</button>' : ''}`
-        : `<button class="syn-more" id="d-syn-fetch">${ic('search',13)} Chercher le synopsis</button>`}
+        : _synBusy.has(b.id)
+          ? `<button class="syn-more" id="d-syn-fetch" disabled aria-busy="true">Recherche…</button>`
+          : `<button class="syn-more" id="d-syn-fetch">${ic('search',13)} Chercher le synopsis</button>`}
 
       <div class="seg" id="d-status" role="group" aria-label="Statut">
         ${Object.entries(STATUS_LABEL).map(([k,v]) =>
@@ -3303,13 +3848,15 @@ function openDetail(id, opts={}){
       ${b.status==='reading' ? `<div class="dblock">
         <label for="d-page">Ma progression</label>
         <div class="prog-row">
-          <input type="number" id="d-page" min="0" ${b.pages?`max="${b.pages}"`:''} value="${b.currentPage??''}" placeholder="page" aria-label="Page courante">
+          <input type="text" inputmode="decimal" id="d-page" value="${esc(String(progressFieldValue(b)))}" placeholder="page ou %" aria-label="Page courante, ou pourcentage lu" title="Une page (210) ou un pourcentage (35 %)">
           <span class="lbl2">/ ${b.pages||'?'} p.</span>
           <div class="track"><div class="fill" style="width:${pct??0}%"></div></div>
           <b>${pct!==null ? fmtPct(pct) : '—'}</b>
+          <span class="lbl2 prog-rest">${pagesLeftText(b)}</span>
           <button type="button" class="btn small" data-prog-step="10" aria-label="Avancer de 10 pages">＋10</button>
           <button type="button" class="btn small" data-prog-step="25" aria-label="Avancer de 25 pages">＋25</button>
         </div>
+        ${b.startedAt ? `<div class="card-hint">Lecture commencée le ${fmtDate(b.startedAt)}${daysBetween(b.startedAt, today())>0 ? ` · ${plur(daysBetween(b.startedAt, today()),'jour')}` : ''}</div>` : ''}
       </div>` : ''}
 
       <div class="rate-row${opts.pulse?' pulse':''}" id="d-rate-row">
@@ -3317,7 +3864,7 @@ function openDetail(id, opts={}){
         ${b.rating ? `<button class="clear-rate" id="d-clear-rate">effacer</button>` : ''}
         <button class="heart ${b.favorite?'on':''}" id="d-fav" title="Favori" aria-label="Favori" aria-pressed="${b.favorite}">♥</button>
       </div>
-      ${!b.rating ? `<div class="card-hint" id="d-rate-hint">Moitié gauche d’une étoile = demi-note</div>` : ''}
+      ${!b.rating ? `<div class="card-hint" id="d-rate-hint">Touche une étoile, ou glisse pour ajuster à la demi-étoile</div>` : ''}
 
       <div class="dblock" id="d-friends" hidden></div>
 
@@ -3327,24 +3874,25 @@ function openDetail(id, opts={}){
         ${shareHint}
       </div>
 
-      <div class="dblock">
-        <label>Ambiances</label>
+      <div class="dblock" role="group" aria-labelledby="lbl-moods">
+        <span class="lbl" id="lbl-moods">Ambiances</span>
         <div class="mood-chips" id="d-moods">
           ${MOODS.map(m=>`<button class="mood ${b.moods.includes(m)?'on':''}" data-mood="${esc(m)}" aria-pressed="${b.moods.includes(m)}">${m}</button>`).join('')}
         </div>
       </div>
 
       <div class="dblock">
-        <label>Rythme</label>
+        <span class="lbl" id="lbl-pace">Rythme</span>
         <div class="seg" id="d-pace" role="group" aria-label="Rythme de lecture">
           ${Object.entries(PACE_LABEL).map(([k,v])=>`<button data-pace="${k}" class="${b.pace===k?'on':''}" aria-pressed="${b.pace===k}">${v}</button>`).join('')}
         </div>
+        ${paceHintHTML(b)}
       </div>` : `<div class="dblock wish-cta">
         <button type="button" class="btn small" id="d-mark-read">${b.status==='reading' ? 'Terminé ? Marquer comme lu et noter' : 'Déjà lu ? Marquer comme lu et noter'}</button>
       </div>`}
 
-      <div class="dblock">
-        <label>Passages${(b.quotes||[]).length ? ` (${b.quotes.length})` : ''}</label>
+      <div class="dblock" role="group" aria-labelledby="lbl-quotes">
+        <span class="lbl" id="lbl-quotes">Passages${(b.quotes||[]).length ? ` (${b.quotes.length})` : ''}</span>
         <div id="d-quotes">${(b.quotes||[]).map(q=>`
           <div class="quote-item">
             <div class="qtxt">« ${esc(q.text)} »</div>
@@ -3365,8 +3913,8 @@ function openDetail(id, opts={}){
         <button class="btn small${study.due?' primary':''}" id="d-study">${studyHasContent(b.study)?'Ouvrir la fiche':'Créer ma fiche'}</button>
       </div>
 
-      <div class="dblock">
-        <label>Prêt</label>
+      <div class="dblock" role="group" aria-labelledby="lbl-loan">
+        <span class="lbl" id="lbl-loan">Prêt</span>
         <div class="loan-row" id="d-loan">
           ${b.loan
             ? `<span class="lnw">Prêté à ${esc(b.loan.to)}</span><span style="color:var(--faint)">depuis le ${fmtDate(b.loan.since)}</span>${loanDue?`<span class="loan-due ${loanDue.level}">${esc(loanDue.text)}</span>`:'<span class="loan-due">sans date de retour</span>'}<button class="btn small" id="d-loan-date">${ic('calendar',13)} Date</button><button class="btn small" id="d-loan-back">Rendu ✓</button>`
@@ -3376,11 +3924,11 @@ function openDetail(id, opts={}){
 
       ${buyRowHTML}
 
-      ${hasRead ? `<div class="dblock">
-        <label>Lectures${readings.length>1 ? ` (${readings.length})` : ''}</label>
+      ${hasRead ? `<div class="dblock" role="group" aria-labelledby="lbl-readings">
+        <span class="lbl" id="lbl-readings">Lectures${readings.length>1 ? ` (${readings.length})` : ''}</span>
         <div class="readings">${readings.map(r =>
-          `<div class="reading-row"><label class="rdate-wrap">${ic('calendar',13)}<input type="date" class="rdate" data-rid="${esc(r.id)}" value="${esc(r.date)}" max="${today()}" aria-label="Date de cette lecture"></label>
-            ${readings.length>1 ? `<span class="rstars" data-rid="${esc(r.id)}" title="Note de cette lecture">${starInputHTML(r.rating, 'rst')}</span>` : ''}
+          `<div class="reading-row">${readingDatesHTML(r)}
+            ${readings.length>1 ? `<span class="rstars" data-rid="${esc(r.id)}" title="Note de cette lecture" tabindex="0" role="slider" aria-label="Note de la lecture du ${fmtDate(r.date)}" aria-valuemin="0" aria-valuemax="5" aria-valuenow="${r.rating||0}" aria-valuetext="${ratingText(r.rating)}">${starInputHTML(r.rating, 'rst')}</span>` : ''}
             <button class="del" data-rid="${esc(r.id)}" title="Supprimer cette date" aria-label="Supprimer cette date">✕</button>
           </div>`).join('') || '<span style="font-size:13px;color:var(--faint)">Aucune date enregistrée</span>'}</div>
         <div class="add-reading">
@@ -3389,16 +3937,19 @@ function openDetail(id, opts={}){
         </div>
       </div>` : ''}
 
-      ${state.lists.length ? `<div class="dblock">
-        <label>Listes</label>
-        <div class="chips-line" style="margin-bottom:8px">
+      <div class="dblock" role="group" aria-labelledby="lbl-lists">
+        <span class="lbl" id="lbl-lists">Listes</span>
+        ${inLists.length ? `<div class="chips-line" style="margin-bottom:8px">
           ${inLists.map(l=>`<span class="pill">${esc(l.name)} <button data-unlist="${esc(l.id)}" aria-label="Retirer de ${esc(l.name)}">✕</button></span>`).join('')}
-        </div>
+        </div>` : ''}
         ${otherLists.length ? `<div class="list-add">
           <select id="d-list-sel" aria-label="Choisir une liste">${otherLists.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}</select>
           <button class="btn small" id="d-list-add">Ajouter</button>
-        </div>` : ''}
-      </div>` : ''}
+        </div>`
+        // Aucune liste où ranger ce titre (pas de liste du tout, ou déjà dans toutes) : le bloc reste
+        // là et propose d’en créer une, au lieu de disparaître comme si les listes n’existaient pas.
+        : `<button class="btn small" id="d-list-new">＋ Créer une liste</button>`}
+      </div>
 
       <div class="detail-footer">
         <button class="btn small" id="d-edit">✎ Modifier</button>
@@ -3444,7 +3995,7 @@ async function loadDetailFriends(b){
     box.hidden = false;
     box.innerHTML = `<label>Chez tes amis</label>` + d.friends.map(f=>
       `<div class="dfriend">${avatarHTML(f.displayName,"sm")}<b>${esc(f.displayName)}</b>${
-        f.rating ? `<span class="stars">${starsTxt(f.rating)}</span>` : `<span class="df-none">pas encore noté</span>`}</div>`).join('');
+        f.rating ? starsHTML(f.rating) : `<span class="df-none">pas encore noté</span>`}</div>`).join('');
   }catch(_){ /* silencieux : la fiche reste purement locale */ }
 }
 
@@ -3453,7 +4004,7 @@ async function loadDetailFriends(b){
 $('#detail-body').addEventListener('click', e => {
   const b = state.books.find(x=>x.id===ui.detailId); if(!b) return;
 
-  if(e.target.closest('[data-zoom]') && b.cover){ openCover(b.cover); return; }
+  if(e.target.closest('[data-zoom]') && b.cover){ openCover(b.cover, fullTitle(b)); return; }
   // « Modifier » sous la critique : le réglage se change là où il se règle, sans le chercher.
   if(e.target.closest('[data-share-settings]')){ closeOverlays(); social.tab='me'; selectView('friends'); return; }
   // « Page du livre » : la page publique s’ouvre PAR-DESSUS l’app, sans rechargement (recharger
@@ -3465,8 +4016,8 @@ $('#detail-body').addEventListener('click', e => {
   // Clic sur le petit calendrier d’une date de lecture : ouvre le sélecteur natif. Le champ
   // lui-même reste tapable au clavier (on n’ouvre pas le panneau quand on clique dans les chiffres).
   const rw = e.target.closest('.rdate-wrap');
-  if(rw && !e.target.closest('.rdate')){
-    const inp = rw.querySelector('.rdate');
+  if(rw && !e.target.closest('input')){
+    const inp = rw.querySelector('input'); // le premier champ de la ligne : le début (F40) s’il existe, sinon la fin
     if(inp){ inp.focus(); if(inp.showPicker){ try{ inp.showPicker(); }catch(_){ } } }
     return;
   }
@@ -3482,37 +4033,22 @@ $('#detail-body').addEventListener('click', e => {
     else {
       // Reprendre un livre terminé : la progression repart de zéro plutôt que de rester à 100 %.
       if(s==='reading' && b.pages && (b.currentPage||0)>=b.pages) updateBookProgress(b, 0);
-      b.status = s;
+      b.status = s; syncStartedAt(b);
       save(); openDetail(b.id); scheduleRender();
     }
     return;
   }
   const st = e.target.closest('#d-stars .st');
   if(st){
-    const n = +st.dataset.n;
-    const half = halfFromClick(st, e.clientX);
-    // C’est la moitié touchée qui décide, toujours : re-toucher la même étoile du même côté ne
-    // change plus rien (avant, TOUT re-tap basculait plein ↔ demi, on n’osait plus confirmer une
-    // note de peur de la perdre). Seule exception : toucher la moitié déjà dorée d’une demi-étoile
-    // la complète — le geste naturel pour « finir » l’étoile sans viser ses 16 px de droite.
-    let v = half ? n-0.5 : n;
-    if(b.rating===n-0.5 && half) v = n;
-    const prev = b.rating;
-    b.rating = v;
-    syncReadingRatings(b, prev);
+    // règle du toucher (moitié touchée, demi-étoile complétée) : tapRating, partagée avec le mode liste
+    setBookRating(b, tapRating(b.rating, st, e.clientX));
     save(); openDetail(b.id); scheduleRender(); return;
   }
   const rst = e.target.closest('.rstars .rst');
   if(rst){
-    const rid = rst.closest('.rstars').dataset.rid;
-    const r = (b.readings||[]).find(x=>x.id===rid); if(!r) return;
     const n = +rst.dataset.n;
-    r.rating = halfFromClick(rst, e.clientX) ? n-0.5 : n;
-    // La note de la lecture la plus récente EST la note du livre (c’est celle qu’affichent la
-    // bibliothèque, les stats et le fil) : elle remonte même si le livre était déjà noté.
-    const recent = (b.readings||[]).slice().sort((a,c)=>(c.date||'').localeCompare(a.date||''))[0];
-    if(recent && recent.id===r.id) b.rating = r.rating;
-    save(); openDetail(b.id); scheduleRender(); return;
+    setReadingRating(b, rst.closest('.rstars').dataset.rid, halfFromClick(rst, e.clientX) ? n-0.5 : n);
+    return;
   }
   // Effacer la note : les lectures qui suivaient la note du livre s’effacent avec elle, sinon le
   // Journal garderait une note fantôme pour un livre redevenu « non noté ».
@@ -3585,8 +4121,11 @@ $('#detail-body').addEventListener('click', e => {
     const d = $('#d-newdate').value;
     if(!isValidDate(d)) return;
     b.readings = b.readings||[];
-    b.readings.push({id:uid(), date:d, rating:null});
+    // un livre « en cours » qu’on date à la main garde sa date de début (F40), si elle précède la fin
+    const start = (b.status==='reading' && b.startedAt && b.startedAt<=d) ? b.startedAt : null;
+    b.readings.push({id:uid(), start, date:d, rating:null});
     if(b.status!=='read') b.status = 'read';
+    syncStartedAt(b);
     $('#d-newdate').value = today();   // remis à zéro avant le re-rendu (report des brouillons)
     save(); openDetail(b.id); scheduleRender(); return;
   }
@@ -3602,6 +4141,14 @@ $('#detail-body').addEventListener('click', e => {
   if(unl){
     const l = state.lists.find(x=>x.id===unl.dataset.unlist);
     if(l){ l.bookIds = l.bookIds.filter(x=>x!==b.id); save(); openDetail(b.id); scheduleRender(); }
+    return;
+  }
+  if(e.target.closest('#d-list-new')){
+    (async()=>{
+      const name = await uiPrompt({ title:'Nouvelle liste', placeholder:'ex : Pépites SF, À offrir, Top 2026', okLabel:'Créer' });
+      if(!name || !name.trim()) return;
+      createList(name, [b.id]); openDetail(b.id); scheduleRender();
+    })();
     return;
   }
   if(e.target.closest('#d-list-add')){
@@ -3658,9 +4205,10 @@ $('#detail-body').addEventListener('change', e => {
   }else if(e.target.id==='d-page'){
     // Saisie directe de la page : on repeint la barre en place au lieu de reconstruire la fiche.
     // Reconstruire ici volait le tap suivant (« Lu » demandait deux tapes) et fermait le clavier.
-    const p = numOrNull(e.target.value);
-    if(p===null) return;
-    updateBookProgress(b, p);
+    const p = parseProgressInput(e.target.value, b);
+    if(!p){ e.target.value = progressFieldValue(b); return; }   // vide ou illisible : on remontre la valeur connue
+    if(p.pct!=null){ setProgressPct(b, p.pct); return; }        // BD sans pagination : « 35 % » (F40)
+    updateBookProgress(b, p.page);
     save(); patchProgressUI(b); scheduleRender();
     if(b.pages && b.currentPage >= b.pages && b.status!=='read'){
       toast(`Dernière page de « ${fullTitle(b)} »`, {label:'Marquer comme lu', ms:6000, onAction:()=>{
@@ -3675,14 +4223,30 @@ $('#detail-body').addEventListener('change', e => {
     // champ vidé ou date impossible : on repose la valeur connue plutôt que de laisser un vide
     if(!isValidDate(v)){ e.target.value = old; return; }
     if(v > today()){ e.target.value = old; toast('Une lecture ne peut pas être datée du futur'); return; }
+    if(r.start && v < r.start){ e.target.value = old; toast('La fin ne peut pas précéder le début de la lecture'); return; }
     if(v === old) return;
-    r.date = v;
+    r.date = v; patchReadingDays(r);
     invalidateCache(); // objectif, séries et journal comptent par date : le cache est périmé
     save(); scheduleRender();
     // Pas de openDetail ici : la fiche se reconstruirait sous le doigt et refermerait le sélecteur.
     // Les lignes seront retriées à la prochaine ouverture.
     toast(`Lecture datée du ${fmtDate(v)} ✓`, {label:'Annuler', onAction:()=>{
       r.date = old; invalidateCache(); save();
+      if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
+      scheduleRender();
+    }});
+  }else if(e.target.classList.contains('rstart')){
+    // F40 : début d’une lecture, corrigeable en place comme la fin ; champ vidé = début retiré
+    const r = (b.readings||[]).find(x=>x.id===e.target.dataset.rid); if(!r) return;
+    const v = e.target.value, old = r.start;
+    if(!v){ r.start = null; save(); openDetail(b.id); scheduleRender(); toast('Date de début retirée'); return; }
+    if(!isValidDate(v)){ e.target.value = old||''; return; }
+    if(v > r.date){ e.target.value = old||''; toast('Le début ne peut pas suivre la fin de la lecture'); return; }
+    if(v === old) return;
+    r.start = v; patchReadingDays(r);
+    save(); scheduleRender();
+    toast(`Lecture commencée le ${fmtDate(v)} ✓`, {label:'Annuler', onAction:()=>{
+      r.start = old; save();
       if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id);
       scheduleRender();
     }});
@@ -3694,16 +4258,36 @@ $('#detail-body').addEventListener('input', e => {
 // ✎ dans l’en-tête de la fiche : « Modifier » était en bas, après Passages, Prêt et Lectures —
 // hors de vue sur mobile alors que c’est l’action la plus demandée après la note.
 $('#d-edit-top').addEventListener('click', ()=>{ if(ui.detailId) openEdit(ui.detailId); });
+// Note du livre (#d-stars) et note d’une lecture (.rstars, résolue par data-rid) au clavier :
+// les étoiles d’une lecture étaient un slider à la souris seulement.
 $('#detail-body').addEventListener('keydown', e => {
-  if(!e.target.closest || !e.target.closest('#d-stars')) return;
+  const host = e.target.closest && e.target.closest('#d-stars, .rstars'); if(!host) return;
   const b = state.books.find(x=>x.id===ui.detailId); if(!b) return;
-  const prev = b.rating;
-  if(e.key==='ArrowRight'){ e.preventDefault(); b.rating = Math.min(5, (b.rating||0)+0.5); }
-  else if(e.key==='ArrowLeft'){ e.preventDefault(); const v = (b.rating||0)-0.5; b.rating = v<0.5 ? null : v; }
-  else return;
-  syncReadingRatings(b, prev);   // au clavier comme à la souris : la lecture suit la note du livre
-  save(); openDetail(b.id); scheduleRender();
-  $('#d-stars').focus();
+  const rid = host.dataset.rid || null;
+  const r = rid ? (b.readings||[]).find(x=>x.id===rid) : null;
+  if(rid && !r) return;
+  const v = sliderKeyValue(e.key, r ? r.rating : b.rating); if(v===undefined) return;
+  e.preventDefault();
+  if(r) setReadingRating(b, rid, v);   // sauve, redessine la fiche et le fond
+  else { setBookRating(b, v); save(); openDetail(b.id); scheduleRender(); }   // la lecture suit la note du livre
+  const again = rid ? $('#detail-body .rstars[data-rid="'+CSS.escape(rid)+'"]') : $('#d-stars');
+  if(again) again.focus();
+});
+// Note d’une lecture (ligne du journal de la fiche). La note de la lecture la plus récente EST la
+// note du livre (c’est celle qu’affichent la bibliothèque, les stats et le fil) : elle remonte
+// même si le livre était déjà noté.
+function setReadingRating(b, rid, v){
+  const r = (b.readings||[]).find(x=>x.id===rid); if(!r) return;
+  r.rating = v;
+  const recent = (b.readings||[]).slice().sort((a,c)=>(c.date||'').localeCompare(a.date||''))[0];
+  if(recent && recent.id===r.id) b.rating = r.rating;
+  invalidateCache(); save(); openDetail(b.id); scheduleRender();
+}
+// Glissé sur les étoiles de la fiche (note du livre) et sur celles d’une lecture.
+bindStarSlider($('#detail-body'), '#d-stars, .rstars', (host, v) => {
+  const b = state.books.find(x=>x.id===ui.detailId); if(!b) return;
+  if(host.id==='d-stars'){ setBookRating(b, v); save(); openDetail(b.id); scheduleRender(); }
+  else setReadingRating(b, host.dataset.rid, v);
 });
 
 /* =============== Tome suivant =============== */
@@ -3750,18 +4334,24 @@ function addNextTome(seriesName, opts={}){
 }
 
 /* =============== Listes & panneau série =============== */
+// Une seule forme de liste, qu’elle naisse dans l’onglet Listes ou depuis la fiche d’un livre
+// (qui y entre alors d’emblée) : la fiche ne fabrique pas son propre objet.
+function createList(name, bookIds=[]){
+  const l = {id:uid(), name:name.trim().slice(0,150), desc:'', bookIds:[...bookIds], createdAt:new Date().toISOString()};
+  state.lists.unshift(l); save(); renderLists(); toast('Liste créée ✓');
+  return l;
+}
 $('#btn-new-list').addEventListener('click', async ()=>{
   const name = await uiPrompt({ title:'Nouvelle liste', placeholder:'ex : Pépites SF, À offrir, Top 2026', okLabel:'Créer' });
   if(!name || !name.trim()) return;
-  state.lists.unshift({id:uid(), name:name.trim().slice(0,150), desc:'', bookIds:[], createdAt:new Date().toISOString()});
-  save(); renderLists(); toast('Liste créée ✓');
+  createList(name);
 });
 function renderLists(){
   const grid = $('#lists-grid'), emptyBox = $('#lists-empty');
   if(!state.lists.length){
     grid.innerHTML = '';
     emptyBox.innerHTML = `<div class="empty"><div class="big orn" aria-hidden="true">❦</div><h3>Aucune liste</h3>
-      <p>Crée des listes thématiques — « Pépites SF », « Mangas à finir », « À offrir à Noël »… — puis ajoute des titres depuis leur fiche.</p></div>`;
+      <p>Crée des listes thématiques — « Pépites SF », « Mangas à finir », « À offrir à Noël »… — puis remplis-les depuis la liste elle-même ou depuis la fiche d’un livre.</p></div>`;
     return;
   }
   emptyBox.innerHTML = '';
@@ -3776,21 +4366,59 @@ function renderLists(){
   }).join('');
 }
 $('#lists-grid').addEventListener('click', e => {
-  const card = e.target.closest('.list-card'); if(card) openList(card.dataset.id);
+  const card = e.target.closest('.list-card'); if(card){ ui.listPickQ = null; openList(card.dataset.id); }
 });
+// Sélecteur d’ajout du panneau liste : les titres de la bibliothèque absents de la liste, filtrés
+// sur titre + auteurs (fold : accents et casse ignorés), 20 au plus pour rester lisible.
+function listPickHTML(l){
+  const q = fold(ui.listPickQ||'').trim();
+  const rest = state.books.filter(b=>!l.bookIds.includes(b.id));
+  const hits = q ? rest.filter(b=>fold(fullTitle(b)+' '+authorsStr(b)).includes(q)) : rest;
+  if(!hits.length){
+    const why = !state.books.length ? 'Ta bibliothèque est encore vide — ajoute d’abord quelques livres.'
+      : !rest.length ? 'Toute ta bibliothèque est déjà dans cette liste.' : 'Aucun titre ne correspond.';
+    return `<p class="l-pick-hint">${why}</p>`;
+  }
+  return hits.slice(0,20).map(b=>`<div class="sr">
+      <div class="mini">${coverHTML(b,true)}</div>
+      <div class="sri"><b>${esc(fullTitle(b))}</b><span>${esc(authorsStr(b))}</span></div>
+      <button type="button" class="btn small primary add" data-pick="${esc(b.id)}" aria-label="Ajouter ${esc(fullTitle(b))} à la liste">Ajouter</button>
+    </div>`).join('')
+    + (hits.length>20 ? `<p class="l-pick-hint">${plur(hits.length-20,'autre titre')} — précise ta recherche.</p>` : '');
+}
+// Ajoute un titre depuis le sélecteur et re-rend, sans fermer le panneau ni perdre la saisie.
+// `keep` : 'input' (Entrée dans le champ, on y reste) ou le rang du bouton cliqué (le focus passe
+// au titre qui prend sa place, pour enchaîner plusieurs ajouts sans repasser par le champ).
+function pickIntoList(l, id, keep){
+  const b = state.books.find(x=>x.id===id); if(!b || l.bookIds.includes(id)) return;
+  l.bookIds.push(id); save(); openList(l.id); renderLists();
+  let t = $('#l-pick-q');
+  if(keep!=='input'){ const btns = $$('#l-pick-res [data-pick]'); t = btns[Math.min(keep, btns.length-1)] || $('#l-add'); }
+  if(t) t.focus({preventScroll:true});
+  toast(`« ${fullTitle(b)} » ajouté ✓`);
+}
 function openList(id){
+  if(ui.listId!==id) ui.listPickQ = null;   // le sélecteur d’ajout ne suit pas d’une liste à l’autre
   ui.listId = id; ui.listMode = 'list';
   const l = state.lists.find(x=>x.id===id); if(!l) return;
   const books = l.bookIds.map(bid=>state.books.find(b=>b.id===bid)).filter(Boolean);
+  // Liste vide : le sélecteur d’ajout EST l’état vide — plus de renvoi vers la fiche d’un titre.
+  const pick = ui.listPickQ!=null || !books.length;
   $('#list-head').textContent = l.name;
   $('#list-body').innerHTML = `
     <div style="display:flex; gap:10px; margin-bottom:4px; flex-wrap:wrap">
+      ${books.length ? `<button class="btn small primary" id="l-add" aria-expanded="${pick}"${pick ? ' aria-controls="l-picker"' : ''}>${ic('plus',14)} Ajouter des titres</button>` : ''}
       <button class="btn small" id="l-rename">✎ Renommer</button>
       <button class="btn small" id="l-desc">${ic('doc',13)} Décrire</button>
       <span style="flex:1"></span>
       <button class="btn small danger" id="l-delete">Supprimer la liste</button>
     </div>
     ${l.desc ? `<p class="list-desc">${esc(l.desc)}</p>` : ''}
+    ${pick ? `<div class="l-picker" id="l-picker">
+      ${books.length ? '' : `<p class="l-pick-empty"><span class="orn" aria-hidden="true">❦</span> Liste vide — choisis des titres dans ta bibliothèque.</p>`}
+      <input type="search" id="l-pick-q" value="${esc(ui.listPickQ||'')}" placeholder="Filtrer ma bibliothèque…" aria-label="Chercher un titre à ajouter" autocomplete="off">
+      <div id="l-pick-res">${listPickHTML(l)}</div>
+    </div>` : ''}
     ${books.length ? `<div class="ld-grid">${books.map((b,i)=>`
       <div class="ld-item" data-id="${esc(b.id)}">
         <button type="button" class="ld-hit" aria-label="Ouvrir ${esc(fullTitle(b))}, position ${i+1}"></button>
@@ -3800,9 +4428,10 @@ function openList(id){
         <span class="mv">
           <button data-mv="-1" data-bid="${esc(b.id)}" title="Avancer" aria-label="Avancer dans la liste">◂</button>
           <button data-mv="1" data-bid="${esc(b.id)}" title="Reculer" aria-label="Reculer dans la liste">▸</button>
+          <button data-mv="top" data-bid="${esc(b.id)}" title="Mettre en tête" aria-label="Mettre en tête de la liste">⇱</button>
         </span>
       </div>`).join('')}</div>`
-    : `<p style="color:var(--muted); font-size:14px; padding:20px 0; text-align:center">Liste vide — ouvre la fiche d’un titre et utilise « Listes › Ajouter ».</p>`}`;
+    : ''}`;
   openOverlay('#ov-list');
 }
 function openSeries(name){
@@ -3830,7 +4459,7 @@ function openSeries(name){
       <button type="button" class="tome-row" data-id="${esc(b.id)}" aria-label="Ouvrir ${esc(fullTitle(b))}, ${STATUS_LABEL[b.status]}">
         <div class="mini">${coverHTML(b, true)}</div>
         <div class="ti"><b>${b.volume!=null ? 'tome '+b.volume : '—'}</b>${b.title && b.title.toLowerCase()!==name.toLowerCase() ? ' · '+esc(b.title) : ''}</div>
-        ${b.rating ? `<span class="stars" style="font-size:12px">${starsTxt(b.rating)}</span>` : ''}
+        ${starsHTML(b.rating, 'font-size:12px')}
         <span class="st-tag ${esc(b.status)}">${STATUS_LABEL[b.status]}</span>
       </button>`).join('')}
     <div style="display:flex; margin-top:12px">
@@ -3850,13 +4479,26 @@ function pruneSeriesRec(name){
 // Note de série au clavier (←/→) : même comportement que le slider de la fiche livre (#d-stars),
 // sinon le slider est focusable mais totalement inopérant au clavier et au lecteur d’écran.
 $('#list-body').addEventListener('keydown', e => {
+  // Entrée dans le champ du sélecteur d’ajout : le premier titre proposé entre dans la liste, le
+  // curseur reste dans le champ (« du » ⏎ « la » ⏎… sans toucher la souris).
+  if(e.key==='Enter' && e.target.id==='l-pick-q' && ui.listMode==='list'){
+    e.preventDefault();
+    const l = state.lists.find(x=>x.id===ui.listId), first = $('#l-pick-res [data-pick]');
+    if(l && first) pickIntoList(l, first.dataset.pick, 'input');
+    return;
+  }
   if(ui.listMode!=='series' || !e.target.closest || !e.target.closest('#s-stars')) return;
   const r = seriesRec(ui.seriesName);
-  if(e.key==='ArrowRight'){ e.preventDefault(); r.rating = Math.min(5, (r.rating||0)+0.5); }
-  else if(e.key==='ArrowLeft'){ e.preventDefault(); const v=(r.rating||0)-0.5; r.rating = v<0.5 ? null : v; if(r.rating==null) pruneSeriesRec(ui.seriesName); }
-  else return;
+  const v = sliderKeyValue(e.key, r.rating); if(v===undefined) return;
+  e.preventDefault();
+  r.rating = v; if(v==null) pruneSeriesRec(ui.seriesName);
   save(); openSeries(ui.seriesName); renderLibrary();
   const el=$('#s-stars'); if(el) el.focus();
+});
+// Glissé sur la note de la série : même pose que le toucher, au relâchement.
+bindStarSlider($('#list-body'), '#s-stars', (host, v) => {
+  if(ui.listMode!=='series') return;
+  seriesRec(ui.seriesName).rating = v; save(); openSeries(ui.seriesName); renderLibrary();
 });
 // Un seul écouteur délégué pour le panneau liste/série, résolu via ui.listId / ui.seriesName.
 $('#list-body').addEventListener('click', e => {
@@ -3875,6 +4517,15 @@ $('#list-body').addEventListener('click', e => {
     return;
   }
   const l = state.lists.find(x=>x.id===ui.listId); if(!l) return;
+  // « Ajouter des titres » : ouvre ou replie le sélecteur (une liste vide l’affiche d’office).
+  if(e.target.closest('#l-add')){
+    ui.listPickQ = ui.listPickQ==null ? '' : null;
+    openList(l.id);
+    const t = $('#l-pick-q') || $('#l-add'); if(t) t.focus({preventScroll:true});
+    return;
+  }
+  const pk = e.target.closest('[data-pick]');
+  if(pk){ pickIntoList(l, pk.dataset.pick, $$('#l-pick-res [data-pick]').indexOf(pk)); return; }
   if(e.target.closest('#l-rename')){
     (async()=>{
       const name = await uiPrompt({ title:'Renommer la liste', value:l.name, okLabel:'Renommer' });
@@ -3891,12 +4542,16 @@ $('#list-body').addEventListener('click', e => {
   }
   const mv = e.target.closest('[data-mv]');
   if(mv){
-    const i = l.bookIds.indexOf(mv.dataset.bid);
-    const j = i + (+mv.dataset.mv);
-    if(i>-1 && j>=0 && j<l.bookIds.length){
-      [l.bookIds[i], l.bookIds[j]] = [l.bookIds[j], l.bookIds[i]];
-      save(); openList(l.id); renderLists();
-    }
+    const id = mv.dataset.bid, dir = mv.dataset.mv, i = l.bookIds.indexOf(id);
+    if(i<0) return;
+    if(dir==='top'){ if(i===0) return; l.bookIds.splice(i,1); l.bookIds.unshift(id); }
+    else { const j = i + (+dir); if(j<0 || j>=l.bookIds.length) return; [l.bookIds[i], l.bookIds[j]] = [l.bookIds[j], l.bookIds[i]]; }
+    save(); openList(l.id); renderLists();
+    // Le focus suit le titre déplacé, sur la même commande : sinon openOverlay le renvoyait sur
+    // « Renommer », tout en haut, à chaque déplacement. Les flèches ne sont rendues qu’au survol ou
+    // au focus dans l’item (.mv) : on pose d’abord le focus sur le bouton d’ouverture, toujours là.
+    const item = $(`#list-body .ld-item[data-id="${CSS.escape(id)}"]`);
+    if(item){ item.querySelector('.ld-hit').focus({preventScroll:true}); const again = item.querySelector(`[data-mv="${dir}"]`); if(again) again.focus(); }
     return;
   }
   if(e.target.closest('#l-delete')){
@@ -3907,9 +4562,30 @@ $('#list-body').addEventListener('click', e => {
     return;
   }
   const rm = e.target.closest('[data-rm]');
-  if(rm){ l.bookIds = l.bookIds.filter(x=>x!==rm.dataset.rm); save(); openList(l.id); renderLists(); return; }
+  if(rm){
+    const id = rm.dataset.rm, i = l.bookIds.indexOf(id); if(i<0) return;
+    l.bookIds.splice(i,1); save(); openList(l.id); renderLists();
+    // Le focus passe au titre qui prend la place (ou au dernier), pas au <body>.
+    const items = $$('#list-body .ld-item'), nx = items[Math.min(i, items.length-1)];
+    if(nx) nx.querySelector('.ld-hit').focus({preventScroll:true});
+    toast('Retiré de la liste', {label:'Annuler', onAction:()=>{
+      if(!state.lists.includes(l) || l.bookIds.includes(id)) return; // liste supprimée, ou titre déjà remis entre-temps
+      l.bookIds.splice(Math.min(i, l.bookIds.length), 0, id); save();   // à sa position d’origine
+      if(ui.listId===l.id && $('#ov-list').classList.contains('open')) openList(l.id);
+      renderLists();
+    }});
+    return;
+  }
   const item = e.target.closest('.ld-item');
   if(item){ openDetail(item.dataset.id); }
+});
+// Filtre du sélecteur d’ajout : seule la colonne de résultats est re-rendue (le champ garde
+// focus et curseur), la saisie est mémorisée pour survivre aux re-rendus du panneau.
+$('#list-body').addEventListener('input', e => {
+  if(e.target.id!=='l-pick-q' || ui.listMode!=='list') return;
+  ui.listPickQ = e.target.value;
+  const l = state.lists.find(x=>x.id===ui.listId), res = $('#l-pick-res');
+  if(l && res) res.innerHTML = listPickHTML(l);
 });
 // critique de série : sauvegarde au blur (comme la fiche), sans ré-ouvrir à chaque frappe
 $('#list-body').addEventListener('change', e => {
@@ -4115,12 +4791,15 @@ function renderStats(){
     <div class="track"><div class="fill" style="width:${s.n/sm*100}%; background:var(--orange)"></div></div>
     <span class="val">${s.n}</span></div>`).join('') || '<p style="font-size:13px;color:var(--faint)">Renseigne le champ Série pour suivre tes sagas.</p>';
 
-  // Infos d’export
+}
+// Panneau « Mes données » (vue Mon compte) : infos d’export et bouton Restaurer à jour.
+function refreshDataPanel(){
   const m = state.meta || {};
-  $('#export-info').textContent = m.lastExport
+  const info = $('#export-info');
+  if(info) info.textContent = m.lastExport
     ? `Dernier export : ${fmtDate(m.lastExport)} · ${plur(m.changes||0,'modification')} depuis`
     : 'Aucun export pour l’instant.';
-  $('#btn-restore').hidden = !hasRecoverable();
+  const r = $('#btn-restore'); if(r) r.hidden = !hasRecoverable();
 }
 function renderHeat(){
   const y = ui.heatYear;
@@ -4296,7 +4975,7 @@ $('#btn-export').addEventListener('click', ()=>{
   state.meta.changes = 0;
   state.meta.lastExport = today();
   save(true);
-  if(ui.view==='stats') renderStats();
+  refreshDataPanel();   // « Dernier export : aujourd’hui » dans Mon compte › Mes données, d’où qu’on ait exporté
   toast('Export téléchargé ✓');
 });
 $('#btn-export-csv').addEventListener('click', ()=>{
@@ -4469,7 +5148,10 @@ function setCoverProgress(txt){
   const el = $('#lib-count'); if(!el) return;
   // renderLibrary() a rangé le décompte seul dans data-base : on le complète sans le recalculer
   const base = el.dataset.base || '';
-  el.textContent = base + (txt ? (base ? ' · ' : '') + txt : '');
+  const full = base + (txt ? (base ? ' · ' : '') + txt : '');
+  // .lc-txt porte le décompte seul ; le lien « Tout afficher » qui le suit doit survivre à la mise à jour
+  const span = el.querySelector('.lc-txt');
+  if(span) span.textContent = full; else el.textContent = full;
 }
 function queueCovers(pairs){
   pairs = pairs.filter(p=>p.isbn);
@@ -4505,7 +5187,9 @@ function queueCovers(pairs){
   next();
 }
 // Éteint le toast en cours (« Lecture du fichier… ») quand ce qui suit — dialogue, résultat — le remplace.
-function hideToast(){ const t = $('#toast'); if(t._h && t._hide) t._hide(); }
+// Avec msg, seulement s’il affiche encore ce message : un état d’attente devenu caduc ne doit pas
+// emporter un retour plus récent qui l’aurait déjà remplacé.
+function hideToast(msg){ const t = $('#toast'); if(t._h && t._hide && (!msg || t.textContent===msg)) t._hide(); }
 // Un import raté se dit en dialogue, pas en toast de deux secondes : le message reste lisible,
 // rappelle les formats acceptés et propose directement de choisir un autre fichier (input : lequel
 // rouvrir — le sélecteur CSV ou le JSON, selon le bouton d’où l’on vient).
@@ -4562,7 +5246,7 @@ async function importCSV(text){
   if(choice===null) return; // Annuler / Échap / clic hors modale = AUCUNE écriture
   const doReplace = (choice==='replace');
   // Effacer une bibliothèque entière mérite une seconde confirmation, Annuler par défaut (danger)
-  if(doReplace && !await uiConfirm({ title:`Effacer ${plur(state.books.length,'livre')} ?`, message:'Ils seront remplacés par le fichier. Une sauvegarde sera restaurable dans Stats › Mes données.', okLabel:'Effacer et importer', danger:true })) return;
+  if(doReplace && !await uiConfirm({ title:`Effacer ${plur(state.books.length,'livre')} ?`, message:'Ils seront remplacés par le fichier. Une sauvegarde sera restaurable dans Mon compte › Mes données.', okLabel:'Effacer et importer', danger:true })) return;
   const pairs = [];
   let added=0, skipped=0;
   if(doReplace){
@@ -4588,7 +5272,7 @@ async function importCSV(text){
   // Différé : le dialogue qui vient de se fermer rend son entrée d’historique par un history.go
   // asynchrone, dont le popstate rejoue le hash de l’onglet courant (#stats) et annulerait une
   // navigation faite tout de suite — même délai qu’endSearchSession.
-  setTimeout(()=>{ ui.sort = 'added'; $('#lib-sort').value = 'added'; openTodayShelf('all'); }, 160);
+  setTimeout(()=>{ resetSort(); openTodayShelf('all'); }, 160);
 }
 $('#btn-import-csv').addEventListener('click', ()=>$('#import-csv-file').click());
 $('#import-csv-file').addEventListener('change', e => {
@@ -4778,7 +5462,7 @@ async function showPublicProfile(uname){
       </div>
     </header>
     ${coeur ? `<section class="pp-fav">
-      <div class="pp-fav-cov">${coeur.cover ? `<img src="${esc(coeur.cover)}" alt=""${xorigin(coeur.cover)} referrerpolicy="no-referrer"><div class="pp-ph" style="background:${phInk({title:coeur.title, type:'livre'})}">${esc(coeur.title)}</div>` : `<div class="pp-ph" style="background:${phInk({title:coeur.title, type:'livre'})}">${esc(coeur.title)}</div>`}</div>
+      <div class="pp-fav-cov">${coeur.cover ? `<img src="${esc(coeur.cover)}" alt=""${xorigin(coeur.cover)} referrerpolicy="no-referrer">` : ''}${phPubHTML(coeur)}</div>
       <div class="pp-fav-txt">
         <div class="pp-fav-kicker">${ic('star',14)} Son coup de cœur</div>
         <div class="pp-fav-title">${esc(coeur.title)}</div>
@@ -4789,13 +5473,13 @@ async function showPublicProfile(uname){
     </section>` : ''}
     ${favoris.length>=2 ? `<div class="pp-sec">Ses favoris</div>
       <div class="pp-favs">${favoris.map(b=>`<div class="pp-item">
-        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>` : `<div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>`}</div>
+        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer">` : ''}${phPubHTML(b)}</div>
         <div class="pp-t">${esc(b.title)}</div>
         <div class="pp-r">${starsTxt(b.rating)}</div>
       </div>`).join('')}</div>` : ''}
     ${reste.length ? `<div class="pp-sec">${(coeur||favoris.length>=2) ? 'Ses autres lectures' : 'Ses lectures'}</div>
       <div class="pp-grid">${reste.map(b=>`<div class="pp-item">
-        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>` : `<div class="pp-ph" style="background:${phInk({title:b.title, type:'livre'})}">${esc(b.title)}</div>`}</div>
+        <div class="pp-cov">${b.cover ? `<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer">` : ''}${phPubHTML(b)}</div>
         <div class="pp-t">${esc(b.title)}</div>
         ${b.rating ? `<div class="pp-r">${starsTxt(b.rating)}</div>` : ''}
       </div>`).join('')}</div>` : `<div class="pp-empty">Cette personne n’a encore rien partagé.</div>`}
@@ -4885,7 +5569,7 @@ async function showPublicBook(slug){
     : `<a class="btn primary lp-big" href="/">Créer ma bibliothèque</a><a class="btn lp-big" href="/" data-pb-try>Essayer sans compte</a>`;
   body.innerHTML = `
     <header class="pp-head pb-head">
-      <div class="pp-fav-cov pb-cov">${b.cover ? `<img src="${esc(b.cover)}" alt=""${xorigin(b.cover)} referrerpolicy="no-referrer">` : `<div class="pp-ph" style="background:${phInk({title:b.title, type:b.type})}"><span>${esc((b.title||'?').slice(0,1))}</span></div>`}</div>
+      <div class="pp-fav-cov pb-cov">${b.cover ? `<img src="${esc(b.cover)}" alt=""${xorigin(b.cover)} referrerpolicy="no-referrer">` : phPubHTML(b)}</div>
       <div class="pb-txt">
         <div class="pp-fav-kicker">${meta || 'Livre'}</div>
         <h1 class="pp-name">${esc(b.title)}</h1>
@@ -4945,11 +5629,26 @@ function unratedBooks(){
 }
 function lastReadDate(b){ return (b.readings||[]).map(r=>r.date).filter(Boolean).sort().pop() || ''; }
 let _qrQueue = [], _qrDone = 0, _qrTotal = 0;
+// Pile des gestes de la session (note posée, ou titre passé) : « Précédent » remet le titre en
+// tête de file et, s’il avait été noté, restaure sa note et celles de ses lectures — une étoile
+// touchée par erreur ne coûte plus un détour par la fiche. _qrFeedback : le feedback « enregistré »
+// avant d’enchaîner ; tant qu’il court, un second toucher ne doit pas noter le titre suivant.
+let _qrHistory = [], _qrFeedback = 0;
 function openQuickRate(){
   _qrQueue = unratedBooks().map(b=>b.id); _qrDone = 0; _qrTotal = _qrQueue.length;
+  _qrHistory = []; clearTimeout(_qrFeedback); _qrFeedback = 0;
   if(!_qrTotal){ toast('Tout est déjà noté ✓'); return; }
   renderQuickRate(); openOverlay('#ov-rate');
 }
+// L’aide sous les étoiles parlait de « toucher » à tout le monde : au clavier, on ajuste aux
+// flèches et on valide à Entrée ; au doigt (et à la souris), on touche, ou l’on glisse pour la
+// demi-étoile — plus de « moitié gauche » à viser.
+function qrHintTxt(){
+  return matchMedia('(pointer:coarse)').matches
+    ? 'Touche une étoile, ou glisse pour ajuster'
+    : 'Clique ou glisse sur les étoiles, ou ← → puis Entrée';
+}
+const qrPrevBtn = () => `<button class="btn" id="qr-prev"${_qrHistory.length ? '' : ' disabled'}>← Précédent</button>`;
 function renderQuickRate(){
   const el = $('#rate-body'); if(!el) return;
   while(_qrQueue.length && !state.books.some(x=>x.id===_qrQueue[0])) _qrQueue.shift(); // livres disparus entre-temps
@@ -4959,57 +5658,90 @@ function renderQuickRate(){
     el.innerHTML = `<div class="qr-done"><div class="big orn" aria-hidden="true">❦</div>
       <h4>${_qrDone ? `${plur(_qrDone,'lecture notée','lectures notées')}` : 'C’est tout pour l’instant'}</h4>
       <p>${_qrDone ? 'Tes stats, ton récap et ton fil viennent de gagner en relief.' : 'Reviens quand tu auras terminé un livre.'}${reste?` Il reste ${plur(reste,'titre')} à noter plus tard.`:''}</p>
-      <div class="qr-actions"><button class="btn primary" data-close>Terminer</button></div></div>`;
+      <div class="qr-actions">${_qrHistory.length ? qrPrevBtn() : ''}<button class="btn primary" data-close>Terminer</button></div></div>`;
     return;
   }
   const when = lastReadDate(b);
+  const r = b.rating || 0;   // déjà notée (sur la fiche ouverte par-dessus) : étoiles pleines, pas vides
   el.innerHTML = `
     <div class="qr-prog"><div class="qr-bar"><i style="width:${Math.round(_qrDone/_qrTotal*100)}%"></i></div>
       <span class="qr-count">${_qrDone} / ${_qrTotal}</span></div>
     <div class="qr-card">
-      <div class="qr-cover">${b.cover ? `<img src="${esc(b.cover)}" alt=""${xorigin(b.cover)} referrerpolicy="no-referrer"><div class="qr-ph">${esc(b.title)}</div>` : `<div class="qr-ph">${esc(b.title)}</div>`}</div>
+      <div class="qr-cover">${b.cover ? `<img src="${esc(b.cover)}" alt=""${xorigin(b.cover)} referrerpolicy="no-referrer">` : ''}${phHTML(b)}</div>
       <div class="qr-title">${esc(fullTitle(b))}</div>
       <div class="qr-author">${esc(authorsStr(b))}</div>
       ${when ? `<div class="qr-when">lu le ${fmtDate(when)}</div>` : ''}
       <div class="star-input qr-stars" id="qr-stars" tabindex="0" role="slider" aria-label="Ma note"
-           aria-valuemin="0" aria-valuemax="5" aria-valuenow="0" aria-valuetext="non noté">${starInputHTML(0)}</div>
-      <div class="qr-hint">Touche la moitié gauche d’une étoile pour une demi-note</div>
+           aria-valuemin="0" aria-valuemax="5" aria-valuenow="${r}" aria-valuetext="${ratingText(r)}">${starInputHTML(r)}</div>
+      <div class="qr-hint">${r ? `Déjà notée ${starsTxt(r)} — modifie la note ou passe au titre suivant` : qrHintTxt()}</div>
       <div class="qr-actions">
+        ${qrPrevBtn()}
         <button class="btn" id="qr-skip">Passer</button>
         <button class="btn" id="qr-open">Ouvrir la fiche</button>
         <button class="btn" data-close>Fermer</button>
       </div>
     </div>`;
+  // Le clavier doit retrouver les étoiles à chaque carte (l’ancien nœud est parti avec le rendu)
+  // et dès l’ouverture, plutôt que le ✕ de l’en-tête : sinon l’aide « ← → puis Entrée » ment.
+  // Microtâche : à l’ouverture, la modale n’est .open qu’après ce rendu (cf. openQuickRate).
+  queueMicrotask(()=>{ const s = $('#qr-stars'); if(s && $('#ov-rate').classList.contains('open')) s.focus({preventScroll:true}); });
 }
-function qrAdvance(){ _qrQueue.shift(); renderQuickRate(); }
+function qrAdvance(){ clearTimeout(_qrFeedback); _qrFeedback = 0; _qrQueue.shift(); renderQuickRate(); }
+// Pose la note depuis la file : l’état d’avant (note du livre ET de ses lectures, que
+// syncReadingRatings va aligner) part dans la pile pour « Précédent ».
+function qrRate(b, v){
+  _qrHistory.push({id:b.id, prev:b.rating, prevRs:(b.readings||[]).map(r=>r.rating)});
+  const prev = b.rating; b.rating = v;
+  syncReadingRatings(b, prev);   // les notes de lecture suivent : le Journal reste cohérent avec la fiche
+  save(); _qrDone++;
+}
+// « Précédent » : le dernier titre revient en tête de file ; s’il avait été noté (et non passé),
+// sa note et le compteur reviennent aussi. Pendant le feedback « enregistré », c’est ce titre-là
+// qu’on annule — il est encore affiché, on coupe simplement l’enchaînement programmé.
+function qrUndo(){
+  const h = _qrHistory.pop(); if(!h) return;
+  clearTimeout(_qrFeedback); _qrFeedback = 0;
+  const bb = state.books.find(x=>x.id===h.id);
+  if(bb && !h.skip){
+    bb.rating = h.prev;
+    (bb.readings||[]).forEach((r,i)=>{ r.rating = h.prevRs[i] ?? null; });
+    save(); _qrDone = Math.max(0, _qrDone-1);
+  }
+  _qrQueue = [h.id, ..._qrQueue.filter(id=>id!==h.id)];   // en tête, sans doublon
+  renderQuickRate(); scheduleRender();
+}
 $('#rate-body').addEventListener('click', e=>{
+  if(e.target.closest('#qr-prev')){ qrUndo(); return; }
+  if(_qrFeedback) return;   // feedback d’une note en cours : on laisse la carte s’enchaîner
   const b = state.books.find(x=>x.id===_qrQueue[0]);
   const st = e.target.closest('#qr-stars .st');
   if(st && b){
     const n = +st.dataset.n;
-    const prev = b.rating;
-    b.rating = halfFromClick(st, e.clientX) ? n-0.5 : n;
-    syncReadingRatings(b, prev);   // les notes de lecture suivent : le Journal reste cohérent avec la fiche
-    save(); _qrDone++;
-    $('#qr-stars').innerHTML = starInputHTML(b.rating);          // feedback avant d’enchaîner
-    $('#rate-body').querySelector('.qr-hint').textContent = `${starsTxt(b.rating)} — enregistré ✓`;
-    setTimeout(()=>{ qrAdvance(); scheduleRender(); }, 420);
+    qrCommit(b, halfFromClick(st, e.clientX) ? n-0.5 : n);
     return;
   }
-  if(e.target.closest('#qr-skip')){ qrAdvance(); return; }
+  if(e.target.closest('#qr-skip')){ if(b) _qrHistory.push({id:b.id, skip:true}); qrAdvance(); return; }
   if(e.target.closest('#qr-open') && b){ openDetail(b.id); return; }
 });
-// clavier : ← → pour choisir, Entrée pour valider et enchaîner
+// Note posée au toucher ou au glissé : feedback « enregistré » puis enchaînement sur le suivant.
+function qrCommit(b, v){
+  qrRate(b, v);
+  $('#qr-stars').innerHTML = starInputHTML(b.rating);          // feedback avant d’enchaîner
+  $('#rate-body').querySelector('.qr-hint').textContent = `${starsTxt(b.rating)} — enregistré ✓`;
+  _qrFeedback = setTimeout(()=>{ qrAdvance(); scheduleRender(); }, 420);
+}
+bindStarSlider($('#rate-body'), '#qr-stars', (host, v) => {
+  if(_qrFeedback) return;
+  const b = state.books.find(x=>x.id===_qrQueue[0]); if(b) qrCommit(b, v);
+});
+// clavier : ← → ↑ ↓ pour choisir (Home efface, End met 5), Entrée pour valider et enchaîner
 $('#rate-body').addEventListener('keydown', e=>{
   const host = e.target.closest && e.target.closest('#qr-stars'); if(!host) return;
-  const b = state.books.find(x=>x.id===_qrQueue[0]); if(!b) return;
+  const b = state.books.find(x=>x.id===_qrQueue[0]); if(!b || _qrFeedback) return;
   let v = +host.getAttribute('aria-valuenow') || 0;
-  if(e.key==='ArrowRight'){ e.preventDefault(); v = Math.min(5, v+0.5); }
-  else if(e.key==='ArrowLeft'){ e.preventDefault(); v = Math.max(0, v-0.5); }
-  else if(e.key==='Enter' && v){ e.preventDefault(); const prev = b.rating; b.rating = v;
-    syncReadingRatings(b, prev);
-    save(); _qrDone++; qrAdvance(); scheduleRender(); return; }
-  else return;
+  if(e.key==='Enter'){ if(!v) return; e.preventDefault(); qrRate(b, v); qrAdvance(); scheduleRender(); return; }
+  const nv = sliderKeyValue(e.key, v); if(nv===undefined) return;
+  e.preventDefault(); v = nv || 0;   // ici 0 = « pas encore choisi », pas une note effacée
   host.setAttribute('aria-valuenow', v); host.setAttribute('aria-valuetext', ratingText(v));
   host.innerHTML = starInputHTML(v);
 });
@@ -5049,9 +5781,28 @@ function wrapText(ctx, text, x, y, maxW, lineH, maxLines){
 // native (Instagram, WhatsApp…) — LE canal viral ; sinon repli sur le téléchargement.
 const SITE_URL = 'https://montome.fr';
 let _cardUrl = ''; // blob-URL de l’aperçu courant, révoquée à la génération suivante
+// Une carte à la fois : polices, couverture et canvas prennent plusieurs secondes sur mobile,
+// et sans retour visible un second tap relançait tout (deux aperçus empilés). Le bouton
+// déclencheur reste grisé jusqu’à l’aperçu ou l’échec ; garde-fou de 30 s si la couverture ne
+// répond jamais (ni onload ni onerror), pour ne pas laisser le bouton mort.
+const CARD_WAIT_MSG = 'Préparation de la carte…';
+let _cardBtn = null, _cardBusy = false, _cardWatch = 0;
+function beginCard(btn){
+  if(_cardBusy) return false;
+  _cardBusy = true; _cardBtn = btn || null;
+  if(btn){ btn.disabled = true; btn.setAttribute('aria-busy','true'); }
+  toast(CARD_WAIT_MSG, {ms:10000});
+  _cardWatch = setTimeout(endCard, 30000);
+  return true;
+}
+function endCard(){
+  clearTimeout(_cardWatch); _cardWatch = 0;
+  const btn = _cardBtn; _cardBtn = null; _cardBusy = false;
+  if(btn){ btn.disabled = false; btn.removeAttribute('aria-busy'); }
+}
 function presentCard(cv, filename, shareText){
   cv.toBlob(blob=>{
-    if(!blob){ toast('Génération impossible'); return; }
+    if(!blob){ endCard(); toast('Génération impossible'); return; }
     if(_cardUrl){ try{ URL.revokeObjectURL(_cardUrl); }catch(_){ } }
     _cardUrl = URL.createObjectURL(blob);
     // aperçu en data: (la CSP img-src autorise data: mais pas blob:) ; le blob sert au partage/téléchargement
@@ -5072,6 +5823,7 @@ function presentCard(cv, filename, shareText){
       const a = document.createElement('a'); a.href = _cardUrl; a.download = filename; a.click();
       toast('Carte téléchargée ✓');
     });
+    endCard(); hideToast(CARD_WAIT_MSG); // l’aperçu remplace l’état d’attente
     openCard(); // par-dessus la modale ouverte (rétro/détail), sans la fermer
   }, 'image/png');
 }
@@ -5160,10 +5912,7 @@ function drawCard(b, coverImg){
   if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(cx,cy,cw,ch,16); ctx.clip(); }
   if(coverImg){ ctx.drawImage(coverImg, cx, cy, cw, ch); }
   else{
-    const hues = {livre:205, bd:28, manga:340}; const h = hues[b.type] ?? 150;
-    const pg = ctx.createLinearGradient(cx,cy,cx+cw,cy+ch);
-    pg.addColorStop(0,`hsl(${h},32%,26%)`); pg.addColorStop(1,`hsl(${h},38%,13%)`);
-    ctx.fillStyle = pg; ctx.fillRect(cx,cy,cw,ch);
+    ctx.fillStyle = phInk(b); ctx.fillRect(cx,cy,cw,ch); // même encre que le placeholder HTML
     ctx.fillStyle = '#ece3d1'; ctx.textAlign = 'center';
     ctx.font = 'bold 26px system-ui, sans-serif';
     wrapText(ctx, fullTitle(b), cx+cw/2, cy+ch/2-20, cw-60, 34, 4);
@@ -5196,6 +5945,7 @@ function drawCard(b, coverImg){
   return cv;
 }
 async function shareCard(b){
+  if(!beginCard($('#d-card'))) return;
   await ensureCardFonts();
   const generate = (img)=>{
     try{
@@ -5205,7 +5955,7 @@ async function shareCard(b){
     }catch(e){
       // canvas « souillé » (couverture sans CORS) → on regénère sans l’image
       if(img) generate(null);
-      else toast('Génération impossible');
+      else{ endCard(); toast('Génération impossible'); }
     }
   };
   if(b.cover && /^(https?:\/\/|data:image\/)/.test(b.cover)){
@@ -5283,11 +6033,12 @@ function drawYearCard(year, coverImg){
 async function shareYearCard(year){
   const r = yearRecap(year);
   if(!r.count){ toast('Rien à mettre sur la carte pour cette année'); return; }
+  if(!beginCard($('#recap-share'))) return;
   await ensureCardFonts();
   const generate = (img)=>{
     try{
       presentCard(drawYearCard(year, img), `tome-retro-${year}.png`, `Ma rétro lecture ${year} · ${SITE_URL}`);
-    }catch(e){ if(img) generate(null); else toast('Génération impossible'); }
+    }catch(e){ if(img) generate(null); else{ endCard(); toast('Génération impossible'); } }
   };
   const cover = r.best && r.best.cover;
   if(cover && /^(https?:\/\/|data:image\/)/.test(cover)){
@@ -5534,10 +6285,12 @@ function closeCover(restore=true, fromPop=false){
   }
   _coverLastFocus = null;
 }
-function openCover(url){
+function openCover(url, title){
   const ov = $('#ov-cover');
   _coverLastFocus = document.activeElement;
-  ov.querySelector('img').src = url;
+  const img = ov.querySelector('img');
+  img.src = url;
+  img.alt = title ? 'Couverture de ' + title : 'Couverture';
   if(!ov.classList.contains('open')) _coverDepth = pushOverlayHistory();
   ov.classList.add('open');
   syncModalIsolation();
@@ -5619,7 +6372,7 @@ function applyHashView(hash){
     if(state.books.some(b=>b.id===id)){ selectView('library'); openDetail(id); }
     return;
   }
-  if(['today','library','journal','lists','stats','friends'].includes(h) && h!==ui.view) selectView(h);
+  if(['today','library','journal','lists','stats','friends','account'].includes(h) && h!==ui.view) selectView(h);
 }
 
 /* =============== PWA =============== */
@@ -5775,7 +6528,7 @@ document.addEventListener('keydown', e => {
   if(k==='a' || k==='n'){ e.preventDefault(); openSearch(); }
   else if(k==='/' || e.code==='Slash'){ e.preventDefault(); selectView('library'); $('#lib-q').focus(); }
   else if(k==='r'){ const b = lastReadingBook(); if(b){ e.preventDefault(); openDetail(b.id); } }
-  else if(digit){ const btns=$$('#nav button'), n=+digit[1]; if(btns[n-1]){ e.preventDefault(); selectView(btns[n-1].dataset.view); } }
+  else if(digit){ const btns=$$('#nav button'), n=+digit[1]; if(btns[n-1]){ e.preventDefault(); selectView(btns[n-1].dataset.view, {focus:true}); } }
 });
 
 /* =============== Amis (Tome Social) =============== */
@@ -5806,10 +6559,10 @@ function flagSessionExpired(){
   social.sessionExpired = true;
   social.me = null; social.view = null;
   try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
-  setLibStatus(''); setFriendsBadge(0);
-  if(ui.view==='friends'){ renderFriends(); return; }     // l’explication est déjà sur le formulaire
+  setLibStatus(''); setFriendsBadge(0); syncMeButton();
+  if(ui.view==='friends' || ui.view==='account'){ render(); return; }     // l’explication est déjà sur le formulaire
   if(premier) toast('Session expirée — reconnecte-toi pour continuer à sauvegarder ta bibliothèque',
-    { label:'Amis', ms:8000, onAction:()=>{ social.tab='feed'; selectView('friends'); } });
+    { label:'Se connecter', ms:8000, onAction:()=>selectView('account') });
 }
 // Un seul vocabulaire pour les pannes réseau : « Serveur injoignable » était répété 36 fois, sans
 // dire quoi faire, et ne distinguait pas une coupure locale d'une saturation ou d'une panne de Tome.
@@ -5852,6 +6605,19 @@ function avatarStyle(seed){
 function avatarHTML(name, cls=''){
   return `<div class="avatar${cls?' '+cls:''}" style="${avatarStyle(name)}">${esc(initials(name))}</div>`;
 }
+// Le bouton « Mon compte » de l’en-tête dit qui est connecté : les initiales (mêmes couleurs que
+// partout ailleurs) une fois connecté, une silhouette sinon. Le nom accessible suit, sinon deux
+// comptes sur le même appareil s’appelleraient tous deux « Mon compte » au lecteur d’écran.
+function syncMeButton(){
+  const b = $('#btn-me'); if(!b) return;
+  const key = social.me ? 'me:'+social.me.displayName : 'anon';
+  if(b.dataset.key === key) return;            // render() repasse souvent : ne rien réécrire pour rien
+  b.dataset.key = key;
+  b.innerHTML = social.me ? avatarHTML(social.me.displayName, 'sm') : ic('user',18);
+  const lbl = social.me ? `Mon compte (${social.me.displayName})` : 'Mon compte';
+  b.setAttribute('aria-label', lbl); b.title = lbl;
+}
+$('#btn-me').addEventListener('click', ()=>selectView('account', {focus:true}));
 // clé stable d’un livre côté social — DOIT rester identique entre la synchro (shareableBooks)
 // et les lectures croisées (« chez tes amis »), sinon les correspondances se perdent
 function shelfKey(b){ return (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume??'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,''); }
@@ -5895,13 +6661,13 @@ function setFriendsBadge(n){
 // le badge de l’onglet Amis = demandes reçues + notifications non lues (tout ce qui est « nouveau »)
 function refreshSocBadge(){ setFriendsBadge((social.pendingRequests||0) + (social.unreadNotifs||0)); }
 async function socRefresh(){
-  if(!socToken()){ social.me=null; social.sessionError=''; social.pendingRequests=0; social.unreadNotifs=0; setFriendsBadge(0); return; }
+  if(!socToken()){ social.me=null; social.sessionError=''; social.pendingRequests=0; social.unreadNotifs=0; setFriendsBadge(0); syncMeButton(); return; }
   try{ const d = await api('/api/me');
        if(social.todayFeedUser && social.todayFeedUser!==d.user.id){ social.todayFeed=null; social.todayFeedAt=0; social.todayFeedError=''; }
        social.me = d.user; social.todayFeedUser=d.user.id; social.sessionError=''; social.tosOutdated = !!d.tosOutdated;
        social.hasRecovery = !!d.hasRecovery;
        social.publicProfile = !!d.publicProfile;
-       social.pendingRequests = d.pendingRequests||0; social.unreadNotifs = d.unreadNotifs||0; refreshSocBadge();
+       social.pendingRequests = d.pendingRequests||0; social.unreadNotifs = d.unreadNotifs||0; refreshSocBadge(); syncMeButton();
        if((social.tosOutdated || social.unreadNotifs) && ui.view==='friends') renderFriends();
        if(ui.view==='today') renderToday(); }
   // 401 au démarrage : le jeton stocké ne vaut plus rien (déconnexion à distance, jeton révoqué)
@@ -6189,9 +6955,10 @@ window.addEventListener('online', ()=>{
   if(_libDirty) scheduleLibPush(0);
   if(_shelfDirty) scheduleShelfPush(0);
 });
-// Les cinq sous-onglets du réseau, dans l’ordre d’affichage : une seule source pour le rendu
-// (renderFriends) et pour la navigation au clavier (flèches / Origine / Fin).
-const SOC_TABS = [['feed','Fil'], ['friends','Amis'], ['notifs','Notifs'], ['me','Partage'], ['account','Compte']];
+// Les quatre sous-onglets du réseau, dans l’ordre d’affichage : une seule source pour le rendu
+// (renderFriends) et pour la navigation au clavier (flèches / Origine / Fin). « Compte » n’en
+// fait plus partie : il a sa propre vue (#view-account), atteinte par l’avatar de l’en-tête.
+const SOC_TABS = [['feed','Fil'], ['friends','Mes amis'], ['notifs','Notifs'], ['me','Partage']];
 // Un seul vocabulaire pour dire le mode de partage — barre « moi », fiche livre, invitation.
 const SHARE_WORD = { none:'rien', ratings:'notes seules', all:'notes et critiques' };
 function shareMode(){ return (social.me && social.me.shareMode) || 'none'; }
@@ -6202,6 +6969,8 @@ function meBarShareHTML(){
 function updateMeBarShare(){ const el = $('#me-share-line'); if(el) el.innerHTML = meBarShareHTML(); }
 function renderFriends(){
   const box = $('#friends-body');
+  // Ancien sous-onglet « Compte » (état hérité d’un chemin non migré) : il vit dans sa propre vue.
+  if(social.tab==='account'){ social.tab='feed'; selectView('account'); return; }
   // Le titre de la vue suit l’état : « Amis » n’a de sens qu’une fois connecté ; avant, c’est
   // son compte que l’utilisateur vient créer ou retrouver.
   const h = $('#view-friends h2.section'); if(h) h.textContent = social.me ? 'Amis' : 'Mon compte';
@@ -6265,8 +7034,21 @@ function renderFriends(){
   if(social.tab==='feed') renderFeed();
   else if(social.tab==='friends') renderFriendsList();
   else if(social.tab==='notifs') renderNotifications();
-  else if(social.tab==='account') renderAccount();
   else renderMyShare();
+}
+// Vue « Mon compte » : en haut, ce qui dépend d’une session (formulaire de connexion ou réglages
+// du compte) ; en dessous, les panneaux statiques d’index.html (Mes données, Affichage), qui
+// valent avec ou sans compte — d’où une vue à part plutôt qu’un sous-onglet d’Amis.
+function renderAccountView(){
+  const box = $('#account-cloud'); if(!box) return;
+  if(social.me){
+    const fab = $('#fab'); if(fab) fab.hidden = false;   // caché par renderAuth tant qu’on n’était pas connecté
+    renderAccount();
+  }
+  else if(social.sessionExpired) renderAuth(box, 'login', 'Ta session a expiré — reconnecte-toi pour retrouver ton compte et la sauvegarde de ta bibliothèque.');
+  else renderAuth(box, 'login');
+  refreshDataPanel();
+  syncThemeSeg();
 }
 async function renderNotifications(){
   const el = $('#soc-tab'); el.innerHTML = `<p class="friends-empty">Chargement…</p>`;
@@ -6296,9 +7078,12 @@ async function renderNotifications(){
       // refuse ici aussi, sinon la seule issue était d’ignorer la ligne pour toujours.
       const actions = n.type==='friend_request' && n.actorId
         ? `<div class="notif-actions"><button class="btn small primary" data-accept="${esc(n.actorId)}">Accepter</button><button class="btn small" data-notif-refuse="${esc(n.actorId)}">Refuser</button></div>` : '';
-      return `<div class="notif${n.read?'':' unread'}" data-notif-type="${esc(n.type)}" data-book-key="${esc(n.bookKey||'')}" ${b?`data-profile-book="${esc(b.id)}"`:''} ${n.username?`data-profile-user="${esc(n.username)}"`:''}>
+      // Le nom est un vrai bouton (profil) : la ligne entière était cliquable sans être atteignable
+      // au clavier ni annoncée comme un lien. Le clic sur le reste de la ligne mène au fil (plus bas).
+      const who = n.username ? `<button type="button" class="linkish notif-who" data-profile-user="${esc(n.username)}"><b>${esc(n.displayName)}</b></button>` : `<b>${esc(n.displayName)}</b>`;
+      return `<div class="notif${n.read?'':' unread'}" data-notif-type="${esc(n.type)}" data-book-key="${esc(n.bookKey||'')}" ${b?`data-profile-book="${esc(b.id)}"`:''}>
         ${avatarHTML(n.displayName,"sm")}
-        <div class="notif-body"><span class="notif-ic">${ic}</span> <b>${esc(n.displayName)}</b> ${verb[n.type]||''}${book}
+        <div class="notif-body"><span class="notif-ic">${ic}</span> ${who} ${verb[n.type]||''}${book}
           <span class="notif-when">${notifWhen(n.at)}</span>${actions}</div>
       </div>`;
     }).join('');
@@ -6337,13 +7122,14 @@ async function renderNotifications(){
         catch(err){ toast(netMsg(err)); ref.disabled = false; }
         return;
       }
+      const who = e.target.closest('[data-profile-user]');
+      if(who){ openProfile(who.dataset.profileUser); return; }
       const row = e.target.closest('[data-notif-type]');
       if(!row) return;
       // « X a commenté ta lecture » doit MENER à cette conversation : le fil, déplié sur la bonne
       // ligne. Sans ça la notification renvoyait au profil de l’auteur, où la réponse n’est pas.
       const t = row.dataset.notifType, key = row.dataset.bookKey;
       if((t==='comment' || t==='reaction') && key && social.me) return openFeedThread(key);
-      if(row.dataset.profileUser) openProfile(row.dataset.profileUser);
     };
   }catch(e){ el.innerHTML = `<p class="friends-empty">${esc(netMsg(e))}</p>`; }
 }
@@ -6354,7 +7140,8 @@ function notifWhen(ts){
   return 'il y a '+Math.floor(s/86400)+' j';
 }
 async function renderAccount(){
-  const el = $('#soc-tab');
+  // Rendu dans la vue Mon compte (plus dans un sous-onglet d’Amis) : le conteneur est fixe.
+  const el = $('#account-cloud'); if(!el || !social.me) return;
   el.innerHTML = `<div class="acct">
     <h4>Profil</h4>
     <input id="acc-dn" maxlength="40" value="${esc(social.me.displayName)}" placeholder="Nom affiché" aria-label="Nom affiché">
@@ -6380,7 +7167,9 @@ async function renderAccount(){
     <button class="btn" id="acc-rec-gen">${ic('key',16)} ${social.hasRecovery?'Régénérer mon code':'Générer mon code'}</button>
     <h4>Utilisateurs bloqués</h4>
     <div id="acc-blocks"><p class="friends-empty" style="padding:8px 0">Chargement…</p></div>
-    <h4>Mes données</h4>
+    <!-- « Compte et données » et non « Mes données » : le panneau local du même nom suit juste
+         en dessous dans la vue, deux titres identiques rendraient la page illisible. -->
+    <h4>Compte et données</h4>
     <div class="data-actions">
       <button class="btn" id="acc-export">${ic('download',15)} Exporter mes données (JSON)</button>
       <!-- Déplacé ici depuis la barre « moi » (F20). Placé contre « Se déconnecter partout » plutôt
@@ -6398,7 +7187,7 @@ async function renderAccount(){
     </div>
   </div>`;
   $('#acc-save').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
-    try{ const d = await api('/api/account/profile', {method:'POST', body:{displayName:$('#acc-dn').value, bio:frTypo($('#acc-bio').value)}}); social.me=d.user; toast('Profil mis à jour ✓'); renderFriends(); }
+    try{ const d = await api('/api/account/profile', {method:'POST', body:{displayName:$('#acc-dn').value, bio:frTypo($('#acc-bio').value)}}); social.me=d.user; toast('Profil mis à jour ✓'); render(); }
     catch(err){ toast(netMsg(err)); b.disabled=false; } };
   $('#acc-pw').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
     try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé — autres appareils déconnectés ✓'); }
@@ -6444,18 +7233,19 @@ async function renderAccount(){
     finally{ b.disabled=false; } };
   $('#acc-legal').onclick = ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]});
   $('#acc-pledge').onclick = showPledge;
+  $('#soc-logout').onclick = socLogout;   // hors du délégué de #friends-body : le bouton n’y vit plus
   $('#acc-logoutall').onclick = async ()=>{
     if(!await uiConfirm({title:'Se déconnecter partout ?', message:'Toutes tes sessions seront fermées, y compris ici.', okLabel:'Déconnecter', danger:true})) return;
     let ok = true;
     try{ await api('/api/account/logout-all', {method:'POST'}); }catch(_){ ok = false; }
-    try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); renderFriends();
+    try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render();
     toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici — les autres appareils n’ont pas pu être joints'); };
   $('#acc-delete').onclick = async ()=>{
     if(!await uiConfirm({title:'Supprimer ton compte ?', message:'Action IRRÉVERSIBLE. Ton profil, tes amis, ta bibliothèque privée sauvegardée et ton étagère partagée seront effacés du serveur. Ta bibliothèque locale reste sur cet appareil.', okLabel:'Continuer', danger:true})) return;
     const pw = await uiPrompt({title:'Confirme avec ton mot de passe', message:'Tape ton mot de passe pour supprimer définitivement le compte.', type:'password', okLabel:'Supprimer'});
     if(pw==null) return;
     try{ await api('/api/account/delete', {method:'POST', body:{password:pw}});
-      try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); renderFriends(); toast('Compte supprimé.'); }
+      try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render(); toast('Compte supprimé.'); }
     catch(err){ toast(netMsg(err)); } };
   // liste des bloqués
   try{
@@ -6643,8 +7433,10 @@ function renderAuth(box, mode, errMsg=''){
   // pas un mur de connexion (surtout s’il arrive par l’invitation d’un ami)
   if(!mode) mode = (socToken() && !social.invite && !loadPendingInvite()) ? 'login' : 'signup';
   // renderAuth peut être appelé directement (page d’accueil, « Inviter un ami ») sans passer par
-  // renderFriends : le titre est donc aussi posé ici
-  const h = $('#view-friends h2.section'); if(h) h.textContent = social.me ? 'Amis' : 'Mon compte';
+  // renderFriends : le titre est donc aussi posé ici — seulement dans Amis, la vue Mon compte
+  // garde le sien
+  const h = $('#view-friends h2.section'); if(h && box.closest('#view-friends')) h.textContent = social.me ? 'Amis' : 'Mon compte';
+  dropOtherAuthForm(box);
   box.innerHTML = `
     ${social.invite ? `<div class="invite-banner"><b>@${esc(social.invite)}</b> t’invite sur Tome — connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : ''}
     <div class="auth-card">
@@ -6672,7 +7464,8 @@ function renderAuth(box, mode, errMsg=''){
         : `Déjà inscrit ? <button type="button" class="linkish" data-auth="login">Se connecter</button>`}</div>
     </div>`;
   // affiche l’erreur SANS re-render (préserve pseudo/mot de passe/nom/consentement déjà saisis)
-  const showErr = m => { const e=$('#friends-body .auth-err'); if(e) e.textContent=m; const s=$('#soc-submit'); if(s){ s.disabled=false; s.textContent = mode==='login'?'Connexion':'Créer mon compte'; } };
+  // Sélecteurs relatifs à box : le formulaire vit dans Amis (inscription) comme dans Mon compte (connexion).
+  const showErr = m => { const e=box.querySelector('.auth-err'); if(e) e.textContent=m; const s=$('#soc-submit'); if(s){ s.disabled=false; s.textContent = mode==='login'?'Connexion':'Créer mon compte'; } };
   const submit = async ()=>{
     const username = $('#soc-user').value.trim().toLowerCase();
     const password = $('#soc-pass').value;
@@ -6703,7 +7496,7 @@ function renderAuth(box, mode, errMsg=''){
       // relais. Avec une invitation, l’onglet Amis reste la bonne destination (processInvite).
       const invite = social.invite || loadPendingInvite();
       if(mode==='signup' && !invite && !state.books.some(b=>!isDemoBook(b))){ selectView('today'); return; }
-      renderFriends();
+      render();   // la vue courante (Amis ou Mon compte) se repeint connectée
     }catch(e){
       showErr(netMsg(e));
     }
@@ -6718,13 +7511,22 @@ function renderAuth(box, mode, errMsg=''){
     try{ e.target.setSelectionRange(p, p); }catch(_){}
   });
   $('#soc-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
-  const legal = $('#friends-body [data-legal]'); if(legal) legal.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
-  const cgu = $('#friends-body [data-cgu]'); if(cgu) cgu.addEventListener('click', ()=>openDialog({title:"Conditions d’utilisation", message:TERMS_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
-  $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>a.dataset.auth==='recover' ? renderRecover(box) : renderAuth(box, a.dataset.auth)));
+  const legal = box.querySelector('[data-legal]'); if(legal) legal.addEventListener('click', ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
+  const cgu = box.querySelector('[data-cgu]'); if(cgu) cgu.addEventListener('click', ()=>openDialog({title:"Conditions d’utilisation", message:TERMS_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}));
+  box.querySelectorAll('[data-auth]').forEach(a=>a.addEventListener('click', ()=>a.dataset.auth==='recover' ? renderRecover(box) : renderAuth(box, a.dataset.auth)));
   const fab = $('#fab'); if(fab) fab.hidden = true;   // pas de « + » flottant par-dessus le formulaire
+}
+// Le formulaire de connexion vit dans deux vues (Amis hors session, Mon compte) et ses champs
+// sont résolus par $() en absolu (#soc-user, #soc-pass, #rec-user…) : une copie laissée dans
+// l’autre vue, plus haut dans le document, prendrait le pas sur celle qu’on remplit — « Remplis le
+// pseudo » alors que tout est saisi. Une seule copie à la fois ; l’autre vue se repeint à l’entrée.
+function dropOtherAuthForm(box){
+  const other = box.id==='account-cloud' ? $('#friends-body') : $('#account-cloud');
+  if(other && other!==box && other.querySelector('.auth-card')) other.innerHTML = '';
 }
 // Récupération de compte par code de secours (« mot de passe oublié »)
 function renderRecover(box, errMsg=''){
+  dropOtherAuthForm(box);
   box.innerHTML = `
     <div class="auth-card">
       <h3>Récupérer mon compte</h3>
@@ -6742,7 +7544,7 @@ function renderRecover(box, errMsg=''){
       <button class="btn primary" id="rec-submit" style="width:100%; justify-content:center">Récupérer mon compte</button>
       <div class="switch"><button type="button" class="linkish" data-auth="login">← Retour à la connexion</button></div>
     </div>`;
-  const showErr = m => { const e=$('#friends-body .auth-err'); if(e) e.textContent=m; const s=$('#rec-submit'); if(s){ s.disabled=false; s.textContent='Récupérer mon compte'; } };
+  const showErr = m => { const e=box.querySelector('.auth-err'); if(e) e.textContent=m; const s=$('#rec-submit'); if(s){ s.disabled=false; s.textContent='Récupérer mon compte'; } };
   const submit = async ()=>{
     const username = $('#rec-user').value.trim(), code = $('#rec-code').value.trim(), newPassword = $('#rec-pass').value;
     if(!username || !code || !newPassword){ showErr('Remplis les trois champs.'); return; }
@@ -6755,12 +7557,12 @@ function renderRecover(box, errMsg=''){
       if(!social.tosOutdated) syncLibraryOnLogin().then(()=>pushShelf());
       // même ordre qu’à l’inscription : le code d’abord, l’onglet Amis (et une éventuelle invitation) ensuite
       if(d.recoveryCode) await showRecoveryCode(d.recoveryCode, 'Compte récupéré ✓ Voici ton NOUVEAU code de secours (l’ancien ne fonctionne plus) :');
-      renderFriends();
+      render();
     }catch(e){ showErr(netMsg(e)); }
   };
   $('#rec-submit').addEventListener('click', submit);
   $('#rec-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
-  $$('#friends-body [data-auth]').forEach(a=>a.addEventListener('click', ()=>renderAuth(box, a.dataset.auth)));
+  box.querySelectorAll('[data-auth]').forEach(a=>a.addEventListener('click', ()=>renderAuth(box, a.dataset.auth)));
 }
 // La promesse publique du modèle : le cœur reste gratuit, le payant (un jour) sera du confort en
 // plus — jamais une reprise de l’existant. C’est un ENGAGEMENT : ne jamais l’affaiblir en douce.
@@ -6833,7 +7635,7 @@ function showPledge(){ openDialog({title:'Toujours gratuit', message:FREE_PLEDGE
 const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
 
 Responsable de traitement et directeur de la publication : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n’étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d’amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l’abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus — effacée automatiquement sous 48 heures). Si tu utilises les fonctions correspondantes : les recommandations de livres que tu envoies ou reçois entre amis (livre, mot d’accompagnement, expéditeur, destinataire — supprimées avec le compte de l’un ou l’autre, ou à la fin de l’amitié si elles sont encore en attente) et le réglage du rappel de lecture (heure choisie, fuseau horaire, titre de ta lecture en cours envoyé au serveur pour personnaliser le message — désactivable à tout moment dans Amis › Compte).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n’étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d’amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l’abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus — effacée automatiquement sous 48 heures). Si tu utilises les fonctions correspondantes : les recommandations de livres que tu envoies ou reçois entre amis (livre, mot d’accompagnement, expéditeur, destinataire — supprimées avec le compte de l’un ou l’autre, ou à la fin de l’amitié si elles sont encore en attente) et le réglage du rappel de lecture (heure choisie, fuseau horaire, titre de ta lecture en cours envoyé au serveur pour personnaliser le message — désactivable à tout moment dans Mon compte).
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l’inscription).
 Âge minimum : Tome s’adresse aux 15 ans et plus (âge du consentement numérique en France) ; en dessous, l’inscription nécessite l’accord d’un parent ou tuteur.
@@ -6843,8 +7645,8 @@ Services tiers : Tome n’installe aucun traceur. Ta recherche de livres transi
 Cookies et traceurs : Tome n’utilise aucun cookie publicitaire ni de mesure d’audience — uniquement le stockage strictement nécessaire au service (ta bibliothèque sur ton appareil, ta session). Ces usages sont exemptés de consentement, c’est pourquoi il n’y a pas de bannière cookies.
 Hébergement et transferts : Cloudflare, Inc. (101 Townsend St, San Francisco, États-Unis) ; la base de données est hébergée en Europe de l’Ouest. Les flux transitant hors de l’UE sont encadrés par les garanties reconnues (certification Data Privacy Framework et clauses contractuelles types).
 Liens d’achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d’affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d’Amazon qui s’appliquent.
-Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d’inactivité ; suppression immédiate possible à tout moment via Amis › Compte.
-Tes droits (RGPD) : accès et rectification (Amis › Compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil. Si tu estimes que tes droits ne sont pas respectés, tu peux adresser une réclamation à la CNIL (cnil.fr).`;
+Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d’inactivité ; suppression immédiate possible à tout moment via Mon compte.
+Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil. Si tu estimes que tes droits ne sont pas respectés, tu peux adresser une réclamation à la CNIL (cnil.fr).`;
 
 const TERMS_TEXT = `Tome — conditions d’utilisation.
 
@@ -6856,7 +7658,7 @@ Tes contenus : tes critiques, avis et listes restent les tiens. En les partagea
 Contenus interdits : contenus illégaux, harcèlement, haine, spam, usurpation d’identité, ou toute utilisation visant à nuire au service ou à ses membres.
 Critiques publiques : si tu publies ta page, tes critiques peuvent apparaître sur les pages publiques des livres, signées de ton pseudo. Tu en restes l’auteur et le responsable ; elles peuvent être signalées et retirées si elles enfreignent ces règles.
 Signalement : chaque critique, commentaire et profil public peut être signalé (bouton « Signaler »). Les signalements sont examinés rapidement ; un contenu manifestement illicite est retiré, et l’auteur peut en discuter par email.
-Modération et résiliation : en cas d’abus, Tome peut retirer un contenu, suspendre ou fermer un compte — avec explication, sauf obligation légale contraire. Tu peux supprimer ton compte à tout moment (Amis › Compte), ce qui efface tes données du serveur.
+Modération et résiliation : en cas d’abus, Tome peut retirer un contenu, suspendre ou fermer un compte — avec explication, sauf obligation légale contraire. Tu peux supprimer ton compte à tout moment (Mon compte), ce qui efface tes données du serveur.
 Disponibilité : Tome est un projet indépendant, fourni « en l’état », sans garantie de disponibilité permanente — l’export de ta bibliothèque est là pour que tes données ne dépendent jamais du service.
 Droit applicable : droit français. Contact : lucas.marroig@essec.edu.`;
 let _feedRows = [];   // dernières lignes peintes par renderFeed (source du menu « … »)
@@ -7112,7 +7914,7 @@ async function renderFriendsList(){
             : u.relation==='sent' ? `<span class="frel">en attente</span>`
             : `<button class="btn small primary" data-add="${esc(u.username)}">${u.relation==='incoming'?'Accepter':'＋ Ajouter'}</button>`;
           return `<div class="frow">${avatarHTML(u.displayName)}
-            <div class="fi clickable" data-profile="${esc(u.username)}"><b>${esc(u.displayName)}</b><span>@${esc(u.username)}</span></div>
+            <button type="button" class="fi clickable" data-profile="${esc(u.username)}"><b>${esc(u.displayName)}</b><span>@${esc(u.username)}</span></button>
             <div class="fa">${act}</div></div>`;
         }).join('');
       }catch(e){ if(my===seq) res.innerHTML = `<p class="friends-empty" style="padding:8px 0">${esc(netMsg(e))}</p>`; }
@@ -7126,8 +7928,10 @@ async function loadFriendLists(){
   const el = $('#friend-lists');
   try{
     const d = await api('/api/friends');
+    // Un <button>, pas un div cliquable : la ligne s’atteint au Tab et s’ouvre à Entrée — un
+    // lecteur d’écran ne devinait pas qu’un nom d’ami menait quelque part.
     const person = (p, actions)=>`<div class="frow">${avatarHTML(p.displayName)}
-      <div class="fi clickable" data-profile="${esc(p.username)}"><b>${esc(p.displayName)}</b><span>@${esc(p.username)}</span></div>
+      <button type="button" class="fi clickable" data-profile="${esc(p.username)}"><b>${esc(p.displayName)}</b><span>@${esc(p.username)}</span></button>
       <div class="fa">${actions}</div></div>`;
     let html = '';
     if(d.incoming.length){ html += `<h4 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:8px 0">Demandes reçues</h4>`;
@@ -7272,7 +8076,6 @@ function renderProfile(box, d){
     const avgDiff = rated.reduce((s,r)=>s+Math.abs(r.mine-r.them),0)/rated.length;
     affinity = Math.round(Math.max(0, 100 - avgDiff/4.5*100));
   }
-  const hues = {livre:205, bd:28, manga:340};
   // Le profil ne proposait AUCUN geste : on pouvait y arriver depuis le fil ou une recherche sans
   // pouvoir demander l’amitié, ni accepter celle qu’on nous avait demandée. Une seule ligne
   // d’état + action, dictée par la relation renvoyée par le serveur (friendState / iRequested).
@@ -7301,13 +8104,13 @@ function renderProfile(box, d){
     ${affinity!=null ? `<div class="affinity-ring"><span class="pct">${fmtPct(affinity)}</span><div><b>d’affinité de goût</b><div class="muted" style="color:var(--muted);font-size:12.5px">sur ${plur(rated.length,'livre noté','livres notés')} tous les deux</div></div></div>` : ''}
     ${d.areFriends ? (shelf.length ? `
       <p style="margin-bottom:14px">${plur(shelf.length,'titre partagé','titres partagés')}${common?` · <span class="common-badge">${common} en commun</span>`:''}</p>
-      ${rated.length ? `<div style="margin-bottom:16px">${rated.slice(0,8).map(r=>`<div class="cmp-row"><span class="ct">${esc(r.title)}</span><span class="me" title="ta note">${starsTxt(r.mine)}</span><span style="color:var(--faint)">vs</span><span class="them" title="sa note">${starsTxt(r.them)}</span></div>`).join('')}</div>` : ''}
+      ${rated.length ? `<div style="margin-bottom:16px">${rated.slice(0,8).map(r=>`<div class="cmp-row"><span class="ct">${esc(r.title)}</span><span class="me" title="ta note"><span class="sr-only">ta note </span><span role="img" aria-label="${fmtDec(r.mine)} sur 5">${starsTxt(r.mine)}</span></span><span style="color:var(--faint)" aria-hidden="true">vs</span><span class="them" title="sa note"><span class="sr-only">sa note </span><span role="img" aria-label="${fmtDec(r.them)} sur 5">${starsTxt(r.them)}</span></span></div>`).join('')}</div>` : ''}
       <div class="grid">${shelf.map((b,i)=>`
         <div class="card${mine.has(b.book_key)?'':' shelf-add'}"${mine.has(b.book_key)?'':` data-shelf-i="${i}" role="button" tabindex="0" aria-label="Ajouter « ${esc(b.title)} » à ma pile"`}><div class="cover">
           <span class="badge ${esc(b.type)}">${TYPE_LABEL[b.type]||''}</span>
-          ${b.cover?`<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer">`:`<div class="ph" style="background:linear-gradient(160deg,hsl(${hues[b.type]??150},32%,26%),hsl(${hues[b.type]??150},38%,13%))"><div class="ph-t">${esc(b.title)}</div><div class="ph-a">${esc(b.authors)}</div></div>`}
+          ${b.cover?`<img src="${esc(b.cover)}" alt="" loading="lazy"${xorigin(b.cover)} referrerpolicy="no-referrer">`:phPubHTML(b)}
           ${mine.has(b.book_key)?`<span class="ribbon done">✓ toi aussi</span>`:''}
-        </div><div class="under">${b.rating?`<span class="stars">${starsTxt(b.rating)}</span>`:''}</div></div>`).join('')}</div>`
+        </div><div class="under">${starsHTML(b.rating)}</div></div>`).join('')}</div>`
       : `<p class="friends-empty">${esc(d.user.displayName)} ne partage rien pour le moment.</p>`)
     : (d.iBlocked ? `<p class="friends-empty">Tu as bloqué cet utilisateur.</p>` : `<p class="friends-empty">Vous n’êtes pas encore amis — sa bibliothèque est privée.</p>`)}`;
   $('#prof-back').addEventListener('click', leaveProfile);
@@ -7316,13 +8119,13 @@ function renderProfile(box, d){
     if(blockBtn.disabled) return;
     // Bloquer efface aussi les ♥ et les réponses échangées (worker : handleBlock) : le dire avant,
     // pas après, et dire où l’annuler.
-    if(!await uiConfirm({title:'Bloquer '+d.user.displayName+' ?', message:'Vous ne serez plus amis ; cette personne ne pourra plus t’ajouter, voir tes lectures ni t’écrire. Vos réactions et réponses échangées seront effacées. Réversible depuis Amis › Compte › Utilisateurs bloqués.', okLabel:'Bloquer', danger:true})) return;
+    if(!await uiConfirm({title:'Bloquer '+d.user.displayName+' ?', message:'Vous ne serez plus amis ; cette personne ne pourra plus t’ajouter, voir tes lectures ni t’écrire. Vos réactions et réponses échangées seront effacées. Réversible depuis Mon compte › Utilisateurs bloqués.', okLabel:'Bloquer', danger:true})) return;
     blockBtn.disabled = true;
-    try{ await api('/api/block', {method:'POST', body:{username:d.user.username}}); toast('Blocage effectif — Amis › Compte pour annuler', {ms:6000}); social.profileFrom='friends'; leaveProfile(); }
+    try{ await api('/api/block', {method:'POST', body:{username:d.user.username}}); toast('Blocage effectif — Mon compte pour annuler', {ms:6000}); social.profileFrom='friends'; leaveProfile(); }
     catch(e){ blockBtn.disabled = false; toast(e.message); }
   });
   // Le serveur ne signale le blocage que dans un sens (celui qu’on a posé) : on propose donc
-  // le déblocage ici, sans obliger à passer par Compte › Utilisateurs bloqués.
+  // le déblocage ici, sans obliger à passer par Mon compte › Utilisateurs bloqués.
   const unblockBtn = box.querySelector('[data-unblock]');
   if(unblockBtn) unblockBtn.addEventListener('click', async ()=>{
     if(unblockBtn.disabled) return;
@@ -7385,29 +8188,31 @@ function askUnfriend(uname){
     message:'Vous ne verrez plus vos lectures respectives ; vos réactions et réponses échangées seront effacées. Il faudra une nouvelle demande pour redevenir amis.',
     okLabel:'Retirer', danger:true});
 }
+// Se déconnecter (bouton de la vue Mon compte). Coupe la sauvegarde : ce qui n’est pas encore
+// parti (note prise il y a deux secondes, envoi en vol) ne partirait plus jamais. On vide la file
+// d’abord, et on ne part en silence que si le serveur a bien tout pris.
+async function socLogout(){
+  if(!await uiConfirm({title:'Se déconnecter ?', message:'Ta bibliothèque reste sur cet appareil.', okLabel:'Se déconnecter'})) return;
+  if(_libDirty || _libPushing){
+    toast('Envoi des dernières modifications…', {ms:15000});
+    await flushLibrary();
+    if(_libDirty && !await uiConfirm({title:'Modifications non envoyées', message:'Pas de connexion. Te déconnecter quand même ? Elles resteront sur cet appareil seulement.', okLabel:'Quand même', danger:true})) return;
+  }
+  try{ await api('/api/logout', {method:'POST'}); }catch(_){}
+  try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
+  social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError=''; setLibStatus(''); // la biblio locale reste sur l’appareil
+  social.sessionExpired=false;   // partir de son plein gré n’est pas une session perdue : pas de message d’expiration
+  setFriendsBadge(0);
+  render();   // Mon compte repasse au formulaire de connexion, l’avatar de l’en-tête à la silhouette
+}
 // écouteur délégué unique pour toute la vue Amis
 $('#friends-body').addEventListener('click', async e => {
   const sub = e.target.closest('.friends-sub button');
   if(sub){ social.tab = sub.dataset.tab; renderFriends(); return; }
   // « Modifier » de la ligne d’état : va droit au réglage, sans passer par Compte.
   if(e.target.closest('[data-share-edit]')){ social.tab='me'; renderFriends(); return; }
-  if(e.target.closest('#soc-me')){ social.tab='account'; renderFriends(); return; }
-  if(e.target.closest('#soc-logout')){
-    if(!await uiConfirm({title:'Se déconnecter ?', message:'Ta bibliothèque reste sur cet appareil.', okLabel:'Se déconnecter'})) return;
-    // Se déconnecter coupe la sauvegarde : ce qui n’est pas encore parti (note prise il y a deux
-    // secondes, envoi en vol) ne partirait plus jamais. On vide la file d’abord, et on ne part
-    // en silence que si le serveur a bien tout pris.
-    if(_libDirty || _libPushing){
-      toast('Envoi des dernières modifications…', {ms:15000});
-      await flushLibrary();
-      if(_libDirty && !await uiConfirm({title:'Modifications non envoyées', message:'Pas de connexion. Te déconnecter quand même ? Elles resteront sur cet appareil seulement.', okLabel:'Quand même', danger:true})) return;
-    }
-    try{ await api('/api/logout', {method:'POST'}); }catch(_){}
-    try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
-    social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError=''; setLibStatus(''); // la biblio locale reste sur l’appareil
-    social.sessionExpired=false;   // partir de son plein gré n’est pas une session perdue : pas de message d’expiration
-    renderFriends(); return;
-  }
+  // La barre « moi » mène à la vue Mon compte (ex-sous-onglet Compte).
+  if(e.target.closest('#soc-me')){ selectView('account'); return; }
   const acc = e.target.closest('[data-accept]');
   if(acc){ if(acc.disabled) return; acc.disabled=true; try{ await api('/api/friends/accept', {method:'POST', body:{userId:acc.dataset.accept}}); toast('Ami ajouté ✓'); loadFriendLists(); }catch(e2){ acc.disabled=false; toast(e2.message); } return; }
   const rem = e.target.closest('[data-remove]');
@@ -7429,7 +8234,7 @@ $('#friends-body').addEventListener('click', async e => {
   if(prof){ openProfile(prof.dataset.profile); return; }
 });
 // Motif ARIA Tabs : dans une barre d’onglets, les flèches changent d’onglet et la tabulation
-// sort de la barre. Sans ça, les cinq boutons obligent à cinq Tab pour atteindre le contenu.
+// sort de la barre. Sans ça, les quatre boutons obligent à quatre Tab pour atteindre le contenu.
 $('#friends-body').addEventListener('keydown', e => {
   // La barre « moi » est un div role=button : le navigateur ne l’active pas tout seul au clavier.
   const me = e.target.closest && e.target.closest('#soc-me');
@@ -7452,10 +8257,8 @@ $('#friends-body').addEventListener('keydown', e => {
   let saved = null;
   try{ saved = JSON.parse(localStorage.getItem(UI_KEY)||'null'); }catch(_){}
   if(saved && typeof saved==='object'){
-    if(['all','read','reading','wishlist','abandoned','fav','loan'].includes(saved.status)) ui.status = saved.status;
-    if(Array.isArray(saved.types)) ui.types = new Set(saved.types.filter(t=>['livre','bd','manga'].includes(t)));
-    if(typeof saved.tag==='string') ui.tag = saved.tag;
-    if(['added','rating','title','author','year'].includes(saved.sort)) ui.sort = saved.sort;
+    if(SORT_KEYS.includes(saved.sort)) ui.sort = saved.sort;
+    ui.sortDesc = saved.sortDesc===true;
     if(typeof saved.groupSeries==='boolean') ui.groupSeries = saved.groupSeries;
     if(['ask','on'].includes(saved.ideas)) ui.ideas = saved.ideas;
     if(['count','pages'].includes(saved.typeMetric)) ui.typeMetric = saved.typeMetric;
@@ -7464,20 +8267,21 @@ $('#friends-body').addEventListener('keydown', e => {
     // Année du Journal : 'all' ou un millésime à 4 chiffres. renderJournal retombe sur 'all'
     // si l’année sauvegardée n’a plus aucune lecture (livres supprimés, import annulé).
     if(saved.journalYear==='all' || /^\d{4}$/.test(String(saved.journalYear||''))) ui.journalYear = String(saved.journalYear);
-    if(['today','library','journal','lists','stats','friends'].includes(saved.view)) ui.view = saved.view;
+    if(typeof saved.journalSessions==='boolean') ui.journalSessions = saved.journalSessions;
+    if(['today','library','journal','lists','stats','friends','account'].includes(saved.view)) ui.view = saved.view;
   }
+  // statut, types, tag : même lecture (et même reflet dans les puces) qu’au retour après un saut
+  restoreLibFilters(saved);
   // refléter dans le DOM
-  $$('#status-chips .chip').forEach(x=>{ const on=x.dataset.status===ui.status; x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
-  $$('#type-chips .chip[data-type]').forEach(x=>{ const on=ui.types.has(x.dataset.type); x.classList.toggle('active',on); x.setAttribute('aria-pressed',on); });
   $('#chip-series').classList.toggle('active', ui.groupSeries); $('#chip-series').setAttribute('aria-pressed', ui.groupSeries);
-  $('#lib-sort').value = ui.sort;
+  $('#lib-sort').value = ui.sort; syncSortDirBtn();
   // (le segment « Ajouter en » n’est plus restauré : openSearch le repositionne à chaque ouverture)
 })();
 
 // vue initiale : hash > préférence sauvegardée (capturer le hash AVANT que selectView ne le remplace)
 const _initHash = location.hash;
 const _hash = _initHash.slice(1);
-if(['today','library','journal','lists','stats','friends'].includes(_hash)) ui.view = _hash;
+if(['today','library','journal','lists','stats','friends','account'].includes(_hash)) ui.view = _hash;
 selectView(ui.view);
 _navReady = true;   // à partir d’ici, changer d’onglet pousse une entrée d’historique (cf. selectView)
 refreshResume();
@@ -7489,25 +8293,23 @@ if(_initHash.startsWith('#book/') || _initHash.startsWith('#invite/')) applyHash
 if(_loaded.migrated) save(true); // fige la migration depuis l’ancienne clé, sans compter comme une modification
 // Données illisibles au chargement : un toast de 2,4 s disparaît avant d’avoir été lu, et il n’offre
 // aucun chemin d’action. On pose un bandeau persistant (même famille que #save-warning) qui mène
-// droit à « Restaurer une sauvegarde », dans Stats › Mes données.
+// droit à « Restaurer une sauvegarde », dans Mon compte › Mes données.
 if(_loaded.notice){
   const dw = $('#data-warning');
   if(dw){
     dw.hidden = false;
     $('#data-warning-restore').addEventListener('click', ()=>{
-      selectView('stats');
+      selectView('account');
       const r = $('#btn-restore');
-      // Le cas même de cette alerte laisse la bibliothèque VIDE : renderStats masque alors tout
-      // #view-stats sauf son état vide, donc le panneau « Mes données » et son bouton Restaurer.
-      // On se fie à hasRecoverable() (la vérité sur ce qui est récupérable) et on redémasque la
-      // chaîne d’ancêtres, sinon le seul chemin de récupération reste invisible et injoignable.
+      // On se fie à hasRecoverable() (la vérité sur ce qui est récupérable) plutôt qu’à l’état
+      // affiché du bouton, sinon le seul chemin de récupération peut rester injoignable.
       if(r && hasRecoverable()){
-        for(let el = r; el && el.id !== 'view-stats'; el = el.parentElement) el.hidden = false;
+        r.hidden = false;
         // le clic doit rester dans le même geste utilisateur que celui d’origine (dialogues, fichiers)
         try{ r.scrollIntoView({block:'center'}); }catch(_){}
         r.click();
       }
-      else toast('Aucune sauvegarde récupérable — Stats › Mes données pour exporter ce qui reste', {ms:6000});
+      else toast('Aucune sauvegarde récupérable — Mon compte › Mes données pour exporter ce qui reste', {ms:6000});
     });
     $('#data-warning-close').addEventListener('click', ()=>{ dw.hidden = true; });
   }else{
@@ -7515,7 +8317,7 @@ if(_loaded.notice){
   }
 }
 // restaure la session sociale si un token existe → rafraîchit la vue Amis + synchronise la biblio du compte
-if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin().then(()=>pushShelf()); } if(ui.view==='friends') renderFriends(); else if(ui.view==='today') renderToday();
+if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin().then(()=>pushShelf()); } if(ui.view==='friends' || ui.view==='account') render(); else if(ui.view==='today') renderToday();
   paintPPCta(); });   // page publique ouverte : son appel à l’action dépend de la session, qui vient d’arriver
 
 // Page d’accueil : présentée aux visiteurs qui arrivent sans compte et sans bibliothèque à eux.
@@ -7567,7 +8369,7 @@ $('#welcome').addEventListener('click', e=>{
   if(a==='signup' || a==='login'){ selectView('friends'); if(!social.me) renderAuth($('#friends-body'), a==='signup'?'signup':'login'); }
   // « Importer ma bibliothèque » : même chemin que data-today-import — le sélecteur de fichier
   // s’ouvre dans la foulée du clic (geste utilisateur conservé), sinon le navigateur le bloquerait.
-  if(a==='import'){ selectView('stats'); $('#btn-import-csv').click(); return; }
+  if(a==='import'){ selectView('account'); $('#btn-import-csv').click(); return; }
   // « Essayer d’abord » sur une bibliothèque vide : on sème la démo pour montrer l’app
   // habitée plutôt qu’un écran nu (le bandeau « Tout effacer » permet de repartir à zéro).
   if(a==='try' && !state.books.length) startDemo();
@@ -7706,6 +8508,20 @@ if(location.search.includes('selftest')){
   assert('today : progression bornée au nombre de pages', _progressBook.currentPage===120 && _progressBook.progressLog[1].page===120);
   updateBookProgress(_progressBook,-4,'2026-08-23');
   assert('today : progression jamais négative', _progressBook.currentPage===0);
+  // F40 : progression en %, date de début de lecture, sessions du Journal
+  assert('F40 : « 35 % » devient une page quand la pagination est connue', parseProgressInput('35 %', {pages:200}).page===70);
+  assert('F40 : « 35% » sans pagination garde le pourcentage', parseProgressInput('35%', {pages:null}).pct===35);
+  assert('F40 : « ,35 » (pavé décimal) vaut 35 %, « 210 » reste une page', parseProgressInput(',35', {}).pct===35 && parseProgressInput('210', {}).page===210 && parseProgressInput('', {})===null);
+  assert('F40 : la barre suit currentPct sans pagination, la page sinon', progressPct({pages:null, currentPct:35})===35 && progressPct({pages:200, currentPage:50, currentPct:90})===25);
+  const _pctBook={pages:null, currentPct:35, currentPage:null, progressLog:[]}; updateBookProgress(_pctBook, 12, '2026-08-24');
+  assert('F40 : une page saisie efface le % estimé', _pctBook.currentPage===12 && _pctBook.currentPct===null);
+  const _nb = normalizeBook({title:'Début', startedAt:'2026-03-03', currentPct:'35', readings:[{date:'2026-03-18', start:'2026-03-03'},{date:'2026-04-01', start:'2026-05-01'}]});
+  assert('F40 : normalizeBook garde startedAt, currentPct et readings[].start (jamais après la fin)', _nb.startedAt==='2026-03-03' && _nb.currentPct===35 && _nb.readings[0].start==='2026-03-03' && _nb.readings[1].start===null);
+  assert('F40 : du 3 au 18 mars = 15 jours', daysBetween('2026-03-03','2026-03-18')===15 && readingDaysText({start:'2026-03-03', date:'2026-03-18'})==='· '+plur(15,'jour')); // plur pose l’insécable (F29)
+  const _mr = {id:'mr', title:'Fin', status:'reading', startedAt:'2026-09-01', readings:[], progressLog:[]}; markRead(_mr);
+  assert('F40 : markRead reporte la date de début sur la lecture et la consomme', _mr.status==='read' && _mr.readings[0].start==='2026-09-01' && _mr.startedAt===null);
+  const _sess = sessionEntries([{id:'x', pages:300, readings:[{date:'2026-02-10'}], progressLog:[{date:'2026-02-01',page:20},{date:'2026-02-01',page:60},{date:'2026-02-05',page:0},{date:'2026-02-10',page:300}]}]);
+  assert('F40 : une session par jour (dernière page), sans remise à zéro ni jour de fin', _sess.length===1 && _sess[0].page===60 && _sess[0].date==='2026-02-01');
   // v12 : notation rapide — sélection des lectures à noter
   const _sav = state.books;
   state.books = [
