@@ -162,7 +162,7 @@ function _dlgClose(val, fromPop){
   if(r) r(val);
 }
 function _dlgFocusable(){
-  return $$('#ov-dialog button, #ov-dialog input, #ov-dialog textarea').filter(el=>!el.hidden && el.offsetParent!==null);
+  return $$('#ov-dialog button, #ov-dialog input, #ov-dialog textarea').filter(el=>!el.hidden && !el.disabled && el.offsetParent!==null);
 }
 function _dlgKey(e){
   if(e.defaultPrevented) return;
@@ -179,7 +179,8 @@ function _dlgKey(e){
     else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
   }
 }
-// openDialog({title, message, code?, input?, actions:[{label,value,variant,default,cancel,returnsInput}]})
+// openDialog({title, message, code?, input?, actions:[{label,value,variant,default,cancel,returnsInput,disabled}]})
+// disabled : une ligne qui informe sans agir (« appartient à un autre compte ») — visible, inerte.
 function openDialog(cfg){
   return new Promise(resolve=>{
     // une seule modale à la fois : un dialogue déjà ouvert est remplacé et lui lègue son entrée
@@ -211,6 +212,7 @@ function openDialog(cfg){
       b.type='button';
       b.className='btn'+(a.variant==='primary'?' primary':a.variant==='danger'?' danger':'');
       if(a.default) b.setAttribute('data-default','');
+      if(a.disabled) b.disabled = true;
       b.textContent=a.label;
       b.addEventListener('click', ()=> _dlgClose(a.returnsInput ? inp.value : a.value));
       acts.append(b);
@@ -221,7 +223,7 @@ function openDialog(cfg){
     $('#ov-dialog').classList.add('open');
     syncModalIsolation();
     document.addEventListener('keydown', _dlgKey, true);
-    setTimeout(()=>{ const el = cfg.input ? inp : ($('#ov-dialog [data-default]') || acts.querySelector('button')); if(el){ el.focus(); if(el===inp) inp.select(); } }, 20);
+    setTimeout(()=>{ const el = cfg.input ? inp : ($('#ov-dialog [data-default]') || acts.querySelector('button:not([disabled])')); if(el){ el.focus(); if(el===inp) inp.select(); } }, 20);
   });
 }
 function uiConfirm({title, message='', okLabel='Confirmer', cancelLabel='Annuler', danger=false}){
@@ -238,10 +240,10 @@ function uiPrompt({title, message='', value='', placeholder='', type='text', mul
     { label:okLabel, variant:'primary', default:true, returnsInput:true },
   ]});
 }
-// uiChoose({title, message, choices:[{label,value,variant,default}]}) → value choisie, ou null si annulé
+// uiChoose({title, message, choices:[{label,value,variant,default,disabled}]}) → value choisie, ou null si annulé
 function uiChoose({title, message='', choices, cancelLabel='Annuler'}){
   return openDialog({ title, message, actions:[
-    ...choices.map(c=>({ label:c.label, value:c.value, variant:c.variant, default:c.default })),
+    ...choices.map(c=>({ label:c.label, value:c.value, variant:c.variant, default:c.default, disabled:c.disabled })),
     { label:cancelLabel, value:null, cancel:true },
   ]});
 }
@@ -325,6 +327,9 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_BOOKS = 20000, MAX_LISTS = 500, MAX_READINGS = 2000, MAX_BOOKIDS = 20000, MAX_SMART = 100;
 const MAX_STUDY_ITEMS = 300, MAX_STUDY_CARDS = 1000;
+// Marqueurs de suppression conservés au plus (les plus anciens cèdent) : ~70 octets chacun, ils
+// voyagent dans chaque sauvegarde du compte et comptent dans sa limite de taille.
+const MAX_DELETED_MARKS = 3000;
 const SMART_STATUS = ['all','read','reading','wishlist','abandoned','fav','loan'];
 const SORT_KEYS = ['added','read','rating','title','author','year'];
 function isValidDate(d){ return typeof d==='string' && DATE_RE.test(d) && !Number.isNaN(new Date(d+'T12:00:00').getTime()); }
@@ -483,6 +488,41 @@ function normalizeBook(b){
   };
   return carryUnknown(b, out, 40000); // préserve les champs d’une version plus récente
 }
+/* ---- Marqueurs de suppression (meta.deletedBooks) ----
+   Sans eux, un appareil resté hors ligne réinjectait à la fusion un livre supprimé ailleurs : la
+   fusion est une union. Chaque suppression EXPLICITE (fiche, sélection, « Effacer et importer »,
+   « Annuler » d’un ajout) laisse { [id]: {rev, fp} } : rev = révision de base + 1 (ordre et purge),
+   fp = empreinte du livre au moment de la suppression. À la fusion — et seulement là — un livre dont
+   l’id est marqué disparaît si son empreinte est la même ; modifié après ailleurs, il est GARDÉ,
+   étiqueté CONFLICT_TAG. Import, restauration et chargement ne posent ni n’appliquent jamais rien. */
+function normalizeDeletedBooks(raw){
+  const src = (raw && typeof raw==='object' && !Array.isArray(raw)) ? raw : {};
+  const entries = [];
+  for(const id of Object.keys(src)){
+    const m = src[id];
+    if(id==='__proto__' || !ID_RE.test(id) || !m || typeof m!=='object') continue;
+    const rev = Number.isFinite(+m.rev) ? Math.round(+m.rev) : 0;
+    if(rev<1 || typeof m.fp!=='string' || !m.fp || m.fp.length>32) continue;
+    entries.push([id, { rev, fp:m.fp }]);
+  }
+  if(entries.length>MAX_DELETED_MARKS){ entries.sort((a,b)=>b[1].rev-a[1].rev); entries.length = MAX_DELETED_MARKS; }
+  return Object.fromEntries(entries);
+}
+// Lecture sûre : un id comme « constructor » ne doit pas remonter le prototype. Object.hasOwn n’existe
+// qu’à partir de Safari 15.4 : appelé dès load(), il aurait laissé l’app blanche sur un iPhone plus ancien.
+function hasOwn(o, k){ return Object.prototype.hasOwnProperty.call(o, k); }
+function deletionMark(deleted, id){ return (deleted && hasOwn(deleted, id)) ? deleted[id] : null; }
+// Union de deux jeux de marqueurs : pour un même id, la suppression la plus récente (rev) l’emporte ;
+// à rev égale, l’empreinte départage — un ordre total, pour que l’union ne dépende pas du sens de
+// la fusion (commutative et associative : deux appareils convergent quel que soit l’ordre des envois).
+function mergeDeletedBooks(a, b){
+  const out = normalizeDeletedBooks(a);
+  for(const [id, m] of Object.entries(normalizeDeletedBooks(b))){
+    const cur = deletionMark(out, id);
+    if(!cur || m.rev>cur.rev || (m.rev===cur.rev && m.fp>cur.fp)) out[id] = m;
+  }
+  return normalizeDeletedBooks(out);
+}
 function normalizeData(d){
   const out = {
     books: (Array.isArray(d.books) ? d.books : [])
@@ -508,7 +548,11 @@ function normalizeData(d){
       // Sauvegarde compte : à quel compte cette biblio locale appartient, et sur quelle révision
       // serveur elle est basée (préservés au rechargement pour éviter perte/fuite entre comptes).
       ownerId: (d.meta && typeof d.meta.ownerId==='string') ? d.meta.ownerId.slice(0,64) : null,
+      // Pseudo du compte propriétaire : seul indice, à la reconnexion, qu’un compte a été supprimé
+      // puis recréé sous le même pseudo (voir loadAccountLibrary) — le serveur ne sait pas le dire.
+      ownerName: (d.meta && typeof d.meta.ownerName==='string') ? d.meta.ownerName.slice(0,20) : null,
       libRev: (d.meta && Number.isFinite(+d.meta.libRev)) ? Math.max(0, Math.round(+d.meta.libRev)) : 0,
+      deletedBooks: normalizeDeletedBooks(d.meta && d.meta.deletedBooks),
       mergeConflicts: (d.meta && Number.isFinite(+d.meta.mergeConflicts)) ? Math.max(0, Math.round(+d.meta.mergeConflicts)) : 0,
       // Objectif posé par la bibliothèque d’exemple : préservé au rechargement pour savoir
       // qu’il doit repartir avec les exemples (jamais renvoyé au serveur, meta locale).
@@ -564,7 +608,51 @@ function normalizeData(d){
   // purge des notes de série orphelines (plus aucun tome correspondant)
   const okSeries = new Set(out.books.map(seriesKey).filter(Boolean));
   for(const k of Object.keys(out.series)) if(!okSeries.has(k)) delete out.series[k];
+  // Un livre et son marqueur de suppression ne coexistent jamais : ici c’est le marqueur qui cède —
+  // les marqueurs ne s’appliquent qu’à la fusion, un état chargé ne perd aucun livre en silence.
+  for(const b of out.books) if(hasOwn(out.meta.deletedBooks, b.id)) delete out.meta.deletedBooks[b.id];
+  // Les clés de meta inconnues transitent aussi : sans cela, un client en retard effaçait à chaque
+  // envoi une clé ajoutée par une version plus récente (les marqueurs, par exemple).
+  carryUnknown(d.meta, out.meta, 40000);
   return carryUnknown(d, out, 200000); // préserve les sections d’état d’une version plus récente
+}
+// Pose un marqueur pour chaque livre supprimé EXPLICITEMENT (jamais pour un import ou une
+// restauration : ce n’est pas une suppression, la prochaine fusion ramène ce qui manque).
+function markBooksDeleted(books){
+  state.meta = state.meta || {};
+  const deleted = normalizeDeletedBooks(state.meta.deletedBooks);
+  const rev = Math.max(1, (+state.meta.libRev||0)+1);
+  for(const b of books){
+    if(!b || isDemoBook(b) || b.id==='__proto__' || !ID_RE.test(String(b.id||''))) continue;
+    const cur = deletionMark(deleted, b.id);
+    deleted[b.id] = { rev: Math.max(cur ? cur.rev : 0, rev), fp: bookFingerprint(b) };
+  }
+  state.meta.deletedBooks = normalizeDeletedBooks(deleted);
+}
+// Un livre que l’on remet en rayon alors que son id est marqué (« Annuler », CSV réimporté avec ses
+// « Tome ID », sauvegarde restaurée) devient un NOUVEL exemplaire : l’ancien id reste supprimé, y
+// compris si sa suppression revient plus tard d’un autre appareil — sinon la fusion suivante
+// l’effacerait à nouveau. Les listes et les références d’écran suivent le nouvel id.
+function restoreBookIdentity(b, lists=state.lists, deleted=state.meta && state.meta.deletedBooks){
+  if(!b || !deletionMark(deleted, b.id)) return;
+  const old = b.id; b.id = uid();
+  for(const l of (lists||[])) l.bookIds = (l.bookIds||[]).map(id=>id===old ? b.id : id);
+  if(ui.detailId===old) ui.detailId = b.id;
+  if(ui.editId===old) ui.editId = b.id;
+  if(ui.selection.has(old)){ ui.selection.delete(old); ui.selection.add(b.id); }
+  ui.addedRead = ui.addedRead.map(id=>id===old ? b.id : id);
+}
+// Remplace l’état local par une sauvegarde (import JSON, restauration) SANS poser de marqueur. Le
+// compte de destination et sa révision restent ceux de l’appareil — jamais ceux du fichier, qui
+// peut venir d’un autre compte ou d’une autre époque ; les marqueurs des deux côtés sont réunis, et
+// un livre du fichier supprimé depuis reçoit un nouvel id (voir restoreBookIdentity).
+function replaceLocalLibrary(clean){
+  const meta = state.meta || {};
+  clean.meta.ownerId = meta.ownerId || null;
+  clean.meta.libRev = (+meta.libRev) || 0;
+  clean.meta.deletedBooks = mergeDeletedBooks(meta.deletedBooks, clean.meta.deletedBooks);
+  for(const b of clean.books) restoreBookIdentity(b, clean.lists, clean.meta.deletedBooks);
+  replaceState(clean);
 }
 function load(){
   let notice = null, corrupted = false;
@@ -1791,7 +1879,7 @@ function renderLibrary(){
       state.books.unshift(b); save();                          // seed la biblio (+ sync compte si connecté)
       btn.classList.add('done'); added++;
       const doneBtn = $('#ob-done'); doneBtn.hidden = false; $('#ob-n').textContent = '('+added+')';
-      toast(`« ${p.title} » ajouté ✓`, {label:'Annuler', onAction:()=>{ const i=state.books.indexOf(b); if(i>=0){ state.books.splice(i,1); save(); } btn.classList.remove('done'); added=Math.max(0,added-1); if(!added){doneBtn.hidden=true;} else {$('#ob-n').textContent='('+added+')';} }});
+      toast(`« ${p.title} » ajouté ✓`, {label:'Annuler', onAction:()=>{ const i=state.books.indexOf(b); if(i>=0){ markBooksDeleted([b]); state.books.splice(i,1); save(); } btn.classList.remove('done'); added=Math.max(0,added-1); if(!added){doneBtn.hidden=true;} else {$('#ob-n').textContent='('+added+')';} }});
     });
     return;
   }
@@ -2575,11 +2663,12 @@ async function bulkDelete(){
   if(!await uiConfirm({ title:`Supprimer ${plur(books.length,'titre')} ?`, message:'Ils seront retirés de ta bibliothèque et de tes listes. Tu pourras annuler juste après.', okLabel:'Supprimer', danger:true })) return;
   const snaps = books.map(b=>({ b, idx:state.books.indexOf(b), memberOf:state.lists.filter(l=>l.bookIds.includes(b.id)).map(l=>l.id) })).sort((a,c)=>a.idx-c.idx);
   const del = new Set(books.map(b=>b.id));
+  markBooksDeleted(books);                                     // suppression explicite : les autres appareils ne les ramèneront pas
   state.books = state.books.filter(b=>!del.has(b.id));
   state.lists.forEach(l=> l.bookIds = l.bookIds.filter(id=>!del.has(id)));
   clearSelection(); save(); render();
   toast(`${plur(snaps.length,'titre supprimé','titres supprimés')}`, {label:'Annuler', onAction:()=>{
-    snaps.forEach(s=>{ state.books.splice(Math.min(s.idx, state.books.length), 0, s.b); s.memberOf.forEach(id=>{ const l = state.lists.find(x=>x.id===id); if(l && !l.bookIds.includes(s.b.id)) l.bookIds.push(s.b.id); }); });
+    snaps.forEach(s=>{ restoreBookIdentity(s.b); state.books.splice(Math.min(s.idx, state.books.length), 0, s.b); s.memberOf.forEach(id=>{ const l = state.lists.find(x=>x.id===id); if(l && !l.bookIds.includes(s.b.id)) l.bookIds.push(s.b.id); }); });
     save(); render();
   }});
 }
@@ -3154,7 +3243,7 @@ $('#search-results').addEventListener('click', async e => {
   if(editBtn){ editBtn.dataset.open = b.id; editBtn.textContent = 'Ouvrir'; editBtn.title = 'Ouvrir la fiche'; }
   toast(`Ajouté · ${STATUS_LABEL[b.status].toLowerCase()} ✓`, { label:'Annuler', onAction:()=>{
     const i = state.books.indexOf(b);
-    if(i >= 0){ state.books.splice(i,1); invalidateCache(); save(); scheduleRender(); }
+    if(i >= 0){ markBooksDeleted([b]); state.books.splice(i,1); invalidateCache(); save(); scheduleRender(); }
     ui.addedInSession = Math.max(0, ui.addedInSession - 1);
     ui.addedRead = ui.addedRead.filter(id => id !== b.id);
     if(row) row.classList.remove('added');
@@ -4245,10 +4334,12 @@ $('#detail-body').addEventListener('click', e => {
   if(e.target.closest('#d-delete')){
     const idx = state.books.indexOf(b);
     const memberOf = state.lists.filter(l=>l.bookIds.includes(b.id)).map(l=>l.id);
+    markBooksDeleted([b]);                                     // suppression explicite : les autres appareils ne le ramèneront pas
     state.books = state.books.filter(x=>x.id!==b.id);
     state.lists.forEach(l=> l.bookIds = l.bookIds.filter(x=>x!==b.id));
     save(); closeOverlays(); render();
     toast('Supprimé', {label:'Annuler', onAction:()=>{
+      restoreBookIdentity(b);                                  // nouvel exemplaire : l’ancien id reste supprimé partout
       state.books.splice(Math.min(idx, state.books.length), 0, b);
       memberOf.forEach(id=>{ const l = state.lists.find(x=>x.id===id); if(l && !l.bookIds.includes(b.id)) l.bookIds.push(b.id); });
       save(); render();
@@ -5313,8 +5404,14 @@ async function importCSV(text){
     const prev = JSON.stringify(state);
     let backedUp=false; try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp=true; }catch(_){}
     if(!backedUp && state.books.length) downloadJSON(prev, `tome-sauvegarde-avant-import-${today()}.json`);
+    // Effacement explicite, doublement confirmé : marqué, sinon un autre appareil ramènerait tout.
+    markBooksDeleted(state.books);
     state.books = []; state.lists = []; state.goals = {}; state.series = {}; state.smartCollections = [];
   }
+  // Le CSV de Tome réutilise ses « Tome ID » : un livre dont l’id vient d’être marqué (ou l’avait été
+  // avant) reçoit un nouvel id, sinon il coexisterait avec son marqueur et la fusion suivante
+  // l’effacerait — bibliothèque vide au chargement d’après, partout.
+  for(const p of parsed) restoreBookIdentity(p.book, []);
   const seen = new Set(state.books.map(titleKey));
   for(const {book, isbn} of parsed){
     const tk = titleKey(book);
@@ -5383,7 +5480,7 @@ $('#import-file').addEventListener('change', e => {
         downloadJSON(prev, `tome-sauvegarde-avant-import-${today()}.json`);
         toast('Stockage plein : ancienne bibliothèque téléchargée en secours');
       }
-      state.books = clean.books; state.lists = clean.lists; state.goals = clean.goals; state.meta = clean.meta; state.series = clean.series||{}; state.smartCollections = clean.smartCollections||[];
+      replaceLocalLibrary(clean);   // sans marqueur : un import n’est pas une suppression, la fusion ramène le reste
       if(save()){ render(); toast('Import réussi ✓'); }
       else { render(); toast('Importé mais non sauvegardé (stockage plein) — exporte pour sécuriser'); }
     }catch(err){
@@ -5393,34 +5490,55 @@ $('#import-file').addEventListener('change', e => {
   reader.onerror = ()=>importFail('Ce fichier n’a pas pu être lu.', '#import-file');
   reader.readAsText(f);
 });
-// Sauvegardes restaurables : avant-import (-backup), données corrompues (-corrupt), et les copies
-// de secours faites avant une réconciliation avec le compte (-preacct / -conflit / -autre).
+// Sauvegardes restaurables : avant-import (-backup), données corrompues (-corrupt), les copies de
+// secours faites avant une réconciliation avec le compte (-preacct / -conflit), et les bibliothèques
+// mises de côté (-autre : ancien emplacement unique ; -autre:<compte> : une copie par compte).
 const RESTORE_KEYS = [
   { k:'-backup',  label:"Sauvegarde d’avant-import" },
   { k:'-preacct', label:"Version locale d’avant la synchro du compte" },
   { k:'-conflit', label:"Version locale d’avant une fusion multi-appareils" },
-  { k:'-autre',   label:"Bibliothèque locale d’un autre compte, mise de côté" },
+  { k:'-autre',   label:"Bibliothèque mise de côté" },
 ];
-function hasRecoverable(){ return RESTORE_KEYS.some(r=>localStorage.getItem(LS_KEY+r.k)) || !!localStorage.getItem(LS_KEY+'-corrupt'); }
+function restoreKeys(){ return [...RESTORE_KEYS, ...asideCopies().map(c=>({ k:c.key.slice(LS_KEY.length), label:'Bibliothèque mise de côté' }))]; }
+function hasRecoverable(){ return restoreKeys().some(r=>localStorage.getItem(LS_KEY+r.k)) || !!localStorage.getItem(LS_KEY+'-corrupt'); }
+// Une copie ne se restaure que si elle est à personne ou au compte connecté (hors session : à
+// personne seulement). Sur un appareil partagé, toutes les copies sont en clair : sans cette règle,
+// la bibliothèque privée de A passait sur le compte de B en deux clics.
+function restorableBy(owner, me){ return !owner || (!!me && owner===me); }
 $('#btn-restore').addEventListener('click', async ()=>{
-  const avail = RESTORE_KEYS.map(r=>({ ...r, raw:localStorage.getItem(LS_KEY+r.k) })).filter(r=>r.raw);
+  const me = social.me ? social.me.id : '';
+  const copies = restoreKeys().map(r=>{
+    const raw = localStorage.getItem(LS_KEY+r.k); if(!raw) return null;
+    let n = null, owner = null;
+    try{ const d = JSON.parse(raw); n = (d.books||[]).length; owner = (d.meta && typeof d.meta.ownerId==='string') ? d.meta.ownerId : null; }catch(_){ }
+    return { ...r, raw, n, mine: restorableBy(owner, me) };
+  }).filter(Boolean);
+  const avail = copies.filter(c=>c.mine), foreign = copies.filter(c=>!c.mine);
   const corrupt = localStorage.getItem(LS_KEY+'-corrupt');
   if(!avail.length && corrupt){
     downloadJSON(corrupt, `tome-donnees-brutes-${today()}.json`);
     toast('Copie brute téléchargée — à réparer à la main puis réimporter'); return;
   }
-  if(!avail.length){ toast('Aucune sauvegarde disponible'); return; }
-  // choisir laquelle restaurer (avec le nombre d’ouvrages pour se repérer)
+  if(!avail.length){
+    if(foreign.length) await openDialog({ title:'Aucune sauvegarde à toi ici', message:`${foreign.length>1 ? 'Les copies présentes appartiennent' : 'La copie présente appartient'} à un autre compte — connecte-toi avec ce compte pour ${foreign.length>1 ? 'les' : 'la'} récupérer.`, actions:[{ label:'Fermer', value:null, cancel:true, default:true }] });
+    else toast('Aucune sauvegarde disponible');
+    return;
+  }
+  // choisir laquelle restaurer (avec le nombre d’ouvrages pour se repérer) ; les copies d’un autre
+  // compte restent visibles mais inertes — on sait qu’elles existent, on ne les prend pas
   let chosen = avail[0];
-  if(avail.length > 1){
-    const choices = avail.map(r=>{ let n=null; try{ n=(JSON.parse(r.raw).books||[]).length; }catch(_){} return { label:`${r.label} — ${n==null ? '? ouvrage' : plur(n,'ouvrage')}`, value:r.k }; });
-    const pick = await uiChoose({ title:'Quelle sauvegarde restaurer ?', choices });
+  if(copies.length > 1){
+    const choices = [
+      ...avail.map(r=>({ label:`${r.label} — ${r.n==null ? '? ouvrage' : plur(r.n,'ouvrage')}`, value:r.k })),
+      ...foreign.map(r=>({ label:`${r.label} — appartient à un autre compte`, value:r.k, disabled:true })),
+    ];
+    const pick = await uiChoose({ title:'Quelle sauvegarde restaurer ?', message: foreign.length ? 'Une copie d’un autre compte se récupère en se connectant avec ce compte.' : '', choices });
     if(!pick) return; chosen = avail.find(r=>r.k===pick);
   }
   try{
     const clean = normalizeData(JSON.parse(chosen.raw));
     if(!await uiConfirm({ title:'Restaurer cette sauvegarde ?', message:`${chosen.label} : ${plur(clean.books.length,'ouvrage')}, ${plur(clean.lists.length,'liste')}. Tes données actuelles seront remplacées (elles resteront sauvegardées côté serveur si tu es connecté).`, okLabel:'Restaurer', danger:true })) return;
-    replaceState(clean); libPersist(); render(); if(social.me) scheduleLibPush();
+    replaceLocalLibrary(clean); libPersist(); render(); if(social.me) scheduleLibPush();   // sans marqueur, comme l’import
     const dw = $('#data-warning'); if(dw) dw.hidden = true; // l’alerte « données illisibles » n’a plus lieu d’être
     toast('Sauvegarde restaurée ✓');
   }catch(_){ toast('Sauvegarde illisible'); }
@@ -6543,6 +6661,9 @@ function applyExternalState(json){
   try{ replaceState(JSON.parse(json)); render(); }catch(_){ }
 }
 window.addEventListener('storage', e => {
+  // Le jeton de session a changé dans un autre onglet (connexion, déconnexion, autre compte) :
+  // traité AVANT tout le reste, sinon cet onglet continuerait d’envoyer vers l’ancien compte.
+  if(e.key === SOC_TOKEN){ sessionChangedElsewhere(e.newValue); return; }
   if(e.key !== LS_KEY || e.newValue == null) return;
   if($$('.overlay.open').length){
     if(!_externalState) toast('Modifié dans une autre fenêtre', { label:'Recharger', ms:10000, onAction:()=>location.reload() });
@@ -6610,12 +6731,17 @@ function loadPendingInvite(){
 function clearPendingInvite(){ try{ localStorage.removeItem(PENDING_INVITE); }catch(_){ } }
 const social = { me:null, tab:'feed', view:null, profile:null, profileFrom:'friends', sessionError:'', libStatus:'', sessionExpired:false };
 function socToken(){ try{ return localStorage.getItem(SOC_TOKEN)||''; }catch(_){ return ''; } }
+// Jeton avec lequel l’identité AFFICHÉE (social.me) a été authentifiée. Le jeton de localStorage
+// peut être remplacé par un autre onglet : les envois de bibliothèque comparent les deux pour
+// qu’une réponse tardive du compte A ne soit jamais appliquée au compte B.
+let _socUserToken = '';
 // Session expirée (401 alors qu’un jeton existait) : sans un mot d’explication, la sauvegarde sur
 // le compte s’arrête en silence et l’utilisateur continue de croire sa bibliothèque synchronisée.
 // On nettoie l’état, on le dit une fois, et on garde le motif pour l’écran de connexion.
 function flagSessionExpired(){
   const premier = !social.sessionExpired;                 // un seul toast, même si plusieurs appels échouent
   social.sessionExpired = true;
+  resetLibrarySync(); _socUserToken = '';                // plus rien ne doit partir sous cette session
   social.me = null; social.view = null;
   try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
   setLibStatus(''); setFriendsBadge(0); syncMeButton();
@@ -6632,8 +6758,11 @@ function netMsg(e){
   return (e && e.message) || 'Envoi impossible';
 }
 async function api(path, opts={}){
+  // sessionToken : jeton d’une session PRÉCISE (envois liés à la bibliothèque d’un compte) ; par
+  // défaut, le jeton courant de localStorage.
+  const { sessionToken, ...requestOpts } = opts; opts = requestOpts;
   const headers = Object.assign({}, opts.headers);
-  const tk = socToken();
+  const tk = sessionToken===undefined ? socToken() : sessionToken;
   if(tk) headers['Authorization'] = 'Bearer '+tk;
   if(opts.body){ headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(opts.body); }
   let res;
@@ -6641,7 +6770,10 @@ async function api(path, opts={}){
   catch(e){ throw new Error('offline'); }
   let data = {};
   try{ data = await res.json(); }catch(_){}
-  if(res.status===401 && social.me) flagSessionExpired(); // session expirée en cours d’usage → retour propre à l’écran de connexion
+  // Session expirée en cours d’usage → retour propre à l’écran de connexion. Seulement si le jeton
+  // refusé est ENCORE le jeton courant : un 401 tardif du compte A (déconnecté entre-temps sur cet
+  // appareil) ne doit pas déconnecter le compte B qui vient d’ouvrir sa session.
+  if(res.status===401 && social.me && tk===socToken()) flagSessionExpired();
   if(!res.ok){ const e = new Error(data.error || (res.status>=500 ? 'Tome a un souci de son côté' : 'Requête refusée ('+res.status+')')); e.status = res.status; throw e; }
   return data;
 }
@@ -6722,23 +6854,82 @@ function setFriendsBadge(n){
 // le badge de l’onglet Amis = demandes reçues + notifications non lues (tout ce qui est « nouveau »)
 function refreshSocBadge(){ setFriendsBadge((social.pendingRequests||0) + (social.unreadNotifs||0)); }
 async function socRefresh(){
-  if(!socToken()){ social.me=null; social.sessionError=''; social.pendingRequests=0; social.unreadNotifs=0; setFriendsBadge(0); syncMeButton(); return; }
+  const tk = socToken();
+  if(!tk){ social.me=null; _socUserToken=''; social.sessionError=''; social.pendingRequests=0; social.unreadNotifs=0; setFriendsBadge(0); syncMeButton(); return; }
   try{ const d = await api('/api/me');
+       // Le jeton a changé pendant l’appel (connexion ou déconnexion dans un autre onglet) : cette
+       // réponse décrit une session qui n’est plus la nôtre — on l’ignore, le nouvel appel suivra.
+       if(tk!==socToken()) return;
        if(social.todayFeedUser && social.todayFeedUser!==d.user.id){ social.todayFeed=null; social.todayFeedAt=0; social.todayFeedError=''; }
-       social.me = d.user; social.todayFeedUser=d.user.id; social.sessionError=''; social.tosOutdated = !!d.tosOutdated;
+       social.me = d.user; _socUserToken = tk; social.todayFeedUser=d.user.id; social.sessionError=''; social.tosOutdated = !!d.tosOutdated;
        social.hasRecovery = !!d.hasRecovery;
        social.publicProfile = !!d.publicProfile;
        social.pendingRequests = d.pendingRequests||0; social.unreadNotifs = d.unreadNotifs||0; refreshSocBadge(); syncMeButton();
        if((social.tosOutdated || social.unreadNotifs) && ui.view==='friends') renderFriends();
        if(ui.view==='today') renderToday(); }
   // 401 au démarrage : le jeton stocké ne vaut plus rien (déconnexion à distance, jeton révoqué)
-  catch(e){ social.sessionError=e.message; if(/401|Non authentifié/.test(e.message)){ social.sessionError=''; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; flagSessionExpired(); } if(ui.view==='today') renderTodaySocial(); }
+  catch(e){ if(tk!==socToken()) return;   // même règle : une erreur d’un jeton remplacé ne nous concerne plus
+    social.sessionError=e.message; if(/401|Non authentifié/.test(e.message)){ social.sessionError=''; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; flagSessionExpired(); } if(ui.view==='today') renderTodaySocial(); }
+}
+// Le jeton de session a changé dans un AUTRE onglet (même appareil). Retiré : cet onglet est de
+// fait déconnecté (le serveur a révoqué ce jeton) — on le dit, et ce qui n’était pas encore parti
+// reste sur l’appareil (renvoyé à la prochaine connexion de ce compte). Remplacé : on repart de
+// zéro pour la nouvelle session, sans jamais confondre ses envois avec ceux de l’ancienne.
+function sessionChangedElsewhere(newToken){
+  const pending = _libDirty || !!_libPushing;
+  resetLibrarySync(); _socUserToken = '';
+  if(!newToken){
+    if(!social.me) return;                                 // cet onglet n’était pas connecté : rien à défaire
+    social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError='';
+    social.sessionExpired=false;                           // une déconnexion voulue, pas une session perdue
+    setLibStatus(''); setFriendsBadge(0); syncMeButton(); render();
+    toast(pending ? 'Déconnecté depuis un autre onglet — tes dernières modifications restent sur cet appareil seulement' : 'Déconnecté depuis un autre onglet', {ms:6000});
+    return;
+  }
+  social.me=null; social.view=null; social.libRev=0; social.sessionExpired=false; setLibStatus('');
+  socRefresh().then(()=>{ if(social.me && !social.tosOutdated) syncLibraryOnLogin().then(ok=>{ if(ok) pushShelf(); }); render(); });
 }
 
 /* =============== Bibliothèque sur le compte (sauvegarde serveur façon Letterboxd) =============== */
 // Le local reste la copie de travail (rapide, hors-ligne) ; le serveur est la source de vérité
 // synchronisée entre appareils. Concurrence optimiste (rev) : jamais d’écrasement silencieux.
 let _libPushTimer = 0, _libPushing = false, _libDirty = false, _libRetryMs = 2000;
+// Garde de session. Une « session » = {id du compte, jeton} figés au moment où l’on commence à
+// charger la bibliothèque de ce compte. _libSession : la session en cours de chargement ;
+// _libReadySession : celle dont la bibliothèque a été chargée (ou adoptée) — c’est la SEULE
+// condition pour écrire vers le compte. Sur un appareil partagé, sans cette garde, un envoi
+// débounced ou une réponse tardive du compte A pouvait s’appliquer au compte B.
+let _libSession = null, _libReadySession = null, _libSyncPromise = null;
+let _libRetryTimer = 0, _libRetryDelay = 15000;
+function accountSession(){ return { id: social.me ? social.me.id : '', token: _socUserToken }; }
+// La session est encore celle affichée ET celle de localStorage (un autre onglet peut l’avoir changée).
+function currentAccount(s){ return !!(s && s.id && s.token && social.me && social.me.id===s.id && _socUserToken===s.token && socToken()===s.token); }
+function currentLibrarySession(s){ return !!s && s===_libSession && currentAccount(s); }
+// Vrai seulement quand la bibliothèque du compte courant a été chargée ou adoptée : avant, rien
+// ne part (sauvegarde, étagère, titre du rappel). recommendBook n’en dépend pas, à dessein.
+function libraryReady(){ return !!(_libReadySession && currentLibrarySession(_libReadySession) && !social.tosOutdated && state.meta && state.meta.ownerId===social.me.id); }
+// Oublie la session de bibliothèque (déconnexion, changement de compte, session expirée) : les
+// minuteries et files d’envoi sont vidées — l’état local, lui, reste tel quel.
+function resetLibrarySync(){
+  _libSession = _libReadySession = null;
+  clearTimeout(_libPushTimer); clearTimeout(_shelfTimer); clearTimeout(_libRetryTimer);
+  _libPushTimer = _shelfTimer = _libRetryTimer = 0;
+  _libPushing = _shelfPushing = false; _libDirty = _shelfDirty = false;
+}
+// Nouvelle tentative de chargement après un échec, avec attente croissante (15 s, 30 s, 60 s…
+// 5 min au plus) : relancer toutes les 15 s épuiserait le quota de lecture du serveur (240/h) et
+// transformerait une panne en boucle de 429. Hors ligne, rien n’est programmé : l’événement
+// « online » relance. Un refus définitif (4xx autre que 429, bibliothèque serveur illisible) n’est
+// pas réessayé — cela ne changerait rien.
+function retryLibrarySync(session, err){
+  if(!currentLibrarySession(session)) return;
+  clearTimeout(_libRetryTimer); _libRetryTimer = 0;
+  if(err && err.message==='Bibliothèque invalide') return;
+  if(err && err.status && err.status<500 && err.status!==429) return;
+  if(!navigator.onLine) return;
+  const delay = _libRetryDelay; _libRetryDelay = Math.min(_libRetryDelay*2, 300000);
+  _libRetryTimer = setTimeout(()=>{ _libRetryTimer = 0; if(currentLibrarySession(session)) syncLibraryOnLogin().then(ok=>{ if(ok) pushShelf(); }); }, delay);
+}
 // Deux registres pour le même état : le libellé COURT s’affiche dans l’en-tête (il doit tenir sur
 // un téléphone), l’explication LONGUE sert d’infobulle et de texte du toast quand l’état est
 // actionnable. Jusqu’ici rien n’était rendu du tout : #lib-status n’existait pas dans le HTML.
@@ -6778,17 +6969,64 @@ function replaceState(raw){ const n = normalizeData(raw||{}); for(const k of Obj
 function backupLocal(suffix){ try{ localStorage.setItem(LS_KEY+suffix, localStorage.getItem(LS_KEY)||''); return true; }catch(_){ return false; } }
 // Filet ceinture-bretelles avant un EFFACEMENT total : si la copie localStorage échoue alors qu’il
 // existe de vraies données, on télécharge l’état courant pour qu’aucun effacement ne soit définitif.
-function backupBeforeWipe(suffix){
-  if(backupLocal(suffix)) return;
-  if((state.books||[]).some(b=>!(b.tags||[]).includes('exemple'))){
+function wipeFallback(){
+  if((state.books||[]).some(b=>!isDemoBook(b))){
     try{ downloadJSON(state, `tome-sauvegarde-${today()}.json`); toast('Stockage plein : ancienne bibliothèque téléchargée en secours', {ms:7000}); }catch(_){ }
   }
 }
+function backupBeforeWipe(suffix){ if(!backupLocal(suffix)) wipeFallback(); }
+/* ---- Bibliothèques mises de côté : une copie PAR COMPTE (LS_KEY-autre:<compte>) ----
+   L’ancien emplacement unique « -autre » se faisait écraser : A partait avec des modifications non
+   envoyées, B passait, A revenait → la copie de A était remplacée par celle de B, ses modifications
+   perdues. Ici chaque compte a la sienne : fusionnée d’office à sa prochaine connexion sur cet
+   appareil (loadAccountLibrary), purgée au premier envoi réussi (pushLibrary). Au plus MAX_ASIDE
+   comptes et ~LS_BUDGET de stockage local en tout — les copies les plus anciennes cèdent. */
+const ASIDE_PREFIX = LS_KEY+'-autre:', ASIDE_INDEX = LS_KEY+'-autre-index', MAX_ASIDE = 3, LS_BUDGET = 4*1024*1024;
+function asideKey(id){ return ASIDE_PREFIX+id; }
+// L’index note la date de chaque mise de côté (localStorage n’en garde aucune) : il sert à savoir
+// laquelle est la plus ancienne. Une copie absente de l’index est réputée la plus ancienne.
+function asideIndex(){ try{ const d = JSON.parse(localStorage.getItem(ASIDE_INDEX)||'{}'); return (d && typeof d==='object' && !Array.isArray(d)) ? d : {}; }catch(_){ return {}; } }
+function saveAsideIndex(idx){ try{ if(Object.keys(idx).length) localStorage.setItem(ASIDE_INDEX, JSON.stringify(idx)); else localStorage.removeItem(ASIDE_INDEX); }catch(_){ } }
+// Copies présentes, de la plus récente à la plus ancienne — lues dans le stockage lui-même, pas
+// dans l’index (une écriture peut avoir échoué après l’avoir mis à jour).
+function asideCopies(){
+  const idx = asideIndex(), out = [];
+  try{ for(let i=0;i<localStorage.length;i++){ const k = localStorage.key(i); if(k && k.startsWith(ASIDE_PREFIX)){ const id = k.slice(ASIDE_PREFIX.length); out.push({ id, key:k, at:+idx[id]||0 }); } } }catch(_){ }
+  return out.sort((a,b)=>b.at-a.at);
+}
+// Poids du stockage local : deux octets par caractère (UTF-16), comme le compte le navigateur.
+function lsBytes(){ let n = 0; try{ for(let i=0;i<localStorage.length;i++){ const k = localStorage.key(i); n += (k.length + (localStorage.getItem(k)||'').length)*2; } }catch(_){ } return n; }
+function readAside(id){ try{ const d = JSON.parse(localStorage.getItem(asideKey(id))||'null'); return (d && typeof d==='object' && Array.isArray(d.books)) ? d : null; }catch(_){ return null; } }
+function dropAside(id){
+  try{ localStorage.removeItem(asideKey(id)); }catch(_){ }
+  const idx = asideIndex(); if(hasOwn(idx, id)){ delete idx[id]; saveAsideIndex(idx); }
+}
+// Met de côté la bibliothèque de l’appareil pour le compte `id`. Renvoie false si rien n’a pu être
+// écrit (stockage plein malgré les purges) : l’appelant propose alors un téléchargement.
+function setAsideFor(id){
+  let raw = ''; try{ raw = localStorage.getItem(LS_KEY)||''; }catch(_){ }
+  if(!raw || _saveBroken) raw = JSON.stringify(state);          // la dernière écriture a échoué : l’écran est la vérité
+  const key = asideKey(id), idx = asideIndex();
+  let cur = ''; try{ cur = localStorage.getItem(key)||''; }catch(_){ }
+  const others = asideCopies().filter(c=>c.id!==id);            // du plus récent au plus ancien
+  const need = ()=> lsBytes() - (cur.length ? (key.length+cur.length)*2 : 0) + (key.length+raw.length)*2;
+  while(others.length && (others.length>=MAX_ASIDE || need()>LS_BUDGET)){ const old = others.pop(); try{ localStorage.removeItem(old.key); }catch(_){ } delete idx[old.id]; }
+  try{ localStorage.setItem(key, raw); idx[id] = Date.now(); saveAsideIndex(idx); return true; }
+  catch(_){ saveAsideIndex(idx); return false; }
+}
+function setAsideBeforeWipe(id){ if(!setAsideFor(id)) wipeFallback(); }
+// Compte supprimé : sa copie mise de côté, s’il en reste une ici, redevient à personne — donc
+// restaurable — au lieu de rester à jamais « d’un autre compte » qui n’existe plus.
+function disownAside(id){
+  const d = readAside(id); if(!d) return;
+  d.meta = Object.assign({}, d.meta, { ownerId:null, ownerName:null, libRev:0, deletedBooks:{} });
+  try{ localStorage.setItem(asideKey(id), JSON.stringify(d)); }catch(_){ }
+}
 // rattache la biblio locale au compte courant + à une révision serveur (persisté → survit au reload)
-function libTag(rev){ state.meta = state.meta || {}; if(social.me) state.meta.ownerId = social.me.id; if(rev!=null){ state.meta.libRev = rev; social.libRev = rev; } }
+function libTag(rev){ state.meta = state.meta || {}; if(social.me){ state.meta.ownerId = social.me.id; state.meta.ownerName = social.me.username || null; } if(rev!=null){ state.meta.libRev = rev; social.libRev = rev; } }
 function libPersist(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){ } }
 function scheduleLibPush(delay=1400){
-  if(!social.me || social.tosOutdated) return;
+  if(!libraryReady()) return;
   _libDirty = true; clearTimeout(_libPushTimer); _libPushTimer = 0;
   if(!navigator.onLine){ setLibStatus('offline'); return; }
   _libPushTimer = setTimeout(()=>{ _libPushTimer=0; pushLibrary(); }, delay);
@@ -6796,45 +7034,59 @@ function scheduleLibPush(delay=1400){
 }
 // état à sauvegarder sur le compte : identique à state, sans les livres de démonstration
 function libraryPayload(){
+  // Invariant défensif avant tout envoi : aucun livre présent ne porte de marqueur de suppression
+  // (sinon un autre appareil l’effacerait à sa fusion) — le marqueur cède, jamais le livre.
+  const deleted = state.meta && state.meta.deletedBooks;
+  if(deleted) for(const b of state.books) if(hasOwn(deleted, b.id)) delete deleted[b.id];
   if(!state.books.some(isDemoBook)) return state;
   const books = state.books.filter(b=>!isDemoBook(b));
   const ids = new Set(books.map(b=>b.id));
   return { ...state, books, lists:(state.lists||[]).map(l=>({ ...l, bookIds:(l.bookIds||[]).filter(id=>ids.has(id)) })) };
 }
 async function pushLibrary(opts){
-  if(!social.me || social.tosOutdated) return;
-  if(_libPushing){ _libDirty = true; return; }               // une seule requête à la fois
-  _libPushing = true; _libDirty = false; clearTimeout(_libPushTimer); _libPushTimer = 0; setLibStatus('saving');
+  if(!libraryReady()) return false;
+  const session = _libReadySession;
+  if(_libPushing){ _libDirty = true; return false; }         // une seule requête à la fois
+  // _libPushing porte la session : si elle est abandonnée pendant l’envoi (déconnexion, autre
+  // compte), le finally de cet envoi ne touche plus à l’état de la suivante.
+  _libPushing = session; _libDirty = false; clearTimeout(_libPushTimer); _libPushTimer = 0; setLibStatus('saving');
   try{
     const body = JSON.stringify({ data: JSON.stringify(libraryPayload()), baseRev: social.libRev||0 });
     // keepalive : les navigateurs plafonnent le corps à ~64 Ko — au-delà, la requête échoue
     // silencieusement ; on retombe alors sur un fetch normal (best-effort à la fermeture).
     const keep = !!(opts&&opts.keepalive) && body.length < 60000;
     const res = await fetch(API_BASE+'/api/library', { method:'POST', keepalive: keep,
-      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+socToken() },
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+session.token },
       body });
+    if(!currentLibrarySession(session)) return false;        // compte quitté pendant l’envoi : réponse sans objet
     if(res.status===409){                                     // un autre appareil a écrit entre-temps
       const d = await res.json();
+      if(!libraryReady()) return false;
       backupLocal('-conflit');
       const merged = mergeLibraries(state, JSON.parse(d.data));
-      const conflicts = merged.meta.mergeConflicts||0;
+      const report = mergeReport(merged);
       replaceState(merged); state.meta.mergeConflicts=0;
       libTag(d.rev); libPersist(); scheduleRender();
       setLibStatus('conflict');
-      toast(conflicts ? `Fusion faite ✓ — ${plur(conflicts,'livre existe','livres existent')} en deux versions, marquées « ${CONFLICT_TAG} »` : 'Bibliothèque fusionnée avec un autre appareil ✓');
+      toast(report || 'Bibliothèque fusionnée avec un autre appareil ✓');
       scheduleLibPush();                                      // re-pousse la fusion
-    } else if(res.ok){ const d = await res.json(); _libRetryMs=2000; libTag(d.rev); libPersist(); setLibStatus('saved'); }
-    else if(res.status===401){ flagSessionExpired(); }
+    } else if(res.ok){ const d = await res.json(); if(!libraryReady()) return false; _libRetryMs=2000; libTag(d.rev); libPersist(); setLibStatus('saved');
+      dropAside(session.id);                                  // le compte a tout : la copie mise de côté (fusionnée à la connexion) n’a plus d’objet
+      return true; }
+    else if(res.status===401){ flagSessionExpired(); }       // le jeton est bien le courant (vérifié juste au-dessus)
     else if(res.status===428){ social.tosOutdated=true; setLibStatus(''); if(ui.view==='friends') renderFriends(); }
     // 413 : la bibliothèque dépasse la limite du serveur — réessayer n’y changera rien, il faut exporter
     else if(res.status===413){ setLibStatus('tooLarge'); }
     else if(res.status===429 || res.status>=500){ setLibStatus('error'); _libDirty=true; _libRetryMs=Math.min(_libRetryMs*2,120000); }
     else { setLibStatus('error'); }
-  }catch(e){ setLibStatus('offline'); _libDirty = true; _libRetryMs=Math.min(_libRetryMs*2,120000); }
+  }catch(e){ if(!currentLibrarySession(session)) return false; setLibStatus('offline'); _libDirty = true; _libRetryMs=Math.min(_libRetryMs*2,120000); }
   finally{
-    _libPushing = false;
-    if(_libDirty && navigator.onLine && !_libPushTimer && social.me && !social.tosOutdated) scheduleLibPush(_libRetryMs);
+    if(_libPushing===session){
+      _libPushing = false;
+      if(_libDirty && navigator.onLine && !_libPushTimer && libraryReady()) scheduleLibPush(_libRetryMs);
+    }
   }
+  return false;
 }
 // Vide la file d’envoi avant une action qui coupe la sauvegarde (déconnexion). pushLibrary rend la
 // main tout de suite si une requête est déjà en vol : on l’attend (15 s au plus, on ne bloque pas
@@ -6844,10 +7096,12 @@ async function flushLibrary(){
   for(let i=0; _libPushing && i<60; i++) await new Promise(r=>setTimeout(r, 250));
   if(_libDirty) await pushLibrary();
 }
-// Adopte la bibliothèque du serveur (cas : appareil vierge, ou biblio d’un AUTRE compte à remplacer).
+// Adopte la bibliothèque du serveur (cas : appareil vierge, ou écran vidé après la mise de côté
+// de la bibliothèque d’un AUTRE compte). La copie « -preacct » n’a de sens que s’il y a quelque
+// chose à garder : un état vide ne doit pas écraser une copie de secours encore utile.
 function adoptServerLibrary(d){
   if(!d || !d.data) return;
-  backupBeforeWipe('-preacct');
+  if((state.books||[]).some(b=>!isDemoBook(b))) backupBeforeWipe('-preacct');
   try{ replaceState(JSON.parse(d.data)); libTag(d.rev); libPersist(); scheduleRender(); }
   catch(e){ setLibStatus('error'); }
 }
@@ -6858,22 +7112,63 @@ function libMergeKey(b){ return (String(b.title||'').toLowerCase()+'|'+((b.autho
 const CONFLICT_TAG = 'à réconcilier';
 const CONFLICT_TAGS = [CONFLICT_TAG, 'conflit-sync'];
 const hasConflictTag = b => (b.tags||[]).some(t=>CONFLICT_TAGS.includes(t));
+const withConflictTag = b => { b.tags = [...new Set([...(b.tags||[]), CONFLICT_TAG])].slice(0,20); return b; };
+// Contenu d’un livre sans son identité (id, date d’ajout) ni l’étiquette de conflit : deux copies
+// qui ne diffèrent que par là sont le même livre — sinon la copie étiquetée par une fusion et la
+// copie encore vierge de l’autre appareil se dédoubleraient à la fusion suivante.
+function bookComparable(b){
+  const x = normalizeBook(b);
+  delete x.id; delete x.addedAt;
+  x.tags = (x.tags||[]).filter(t=>!CONFLICT_TAGS.includes(t));
+  return JSON.stringify(x);
+}
+// Empreinte courte (deux hachages 32 bits indépendants, base 36) : ce qu’un marqueur de suppression
+// mémorise du livre supprimé, pour reconnaître plus tard une copie restée identique ailleurs.
+function bookFingerprint(b){
+  const s = bookComparable(b);
+  let h = 0x811c9dc5; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193)>>>0; }
+  return shelfHash(s)+'.'+h.toString(36);
+}
+// Phrase du toast après une fusion (409 ou connexion) : conflits de versions et livres gardés malgré
+// une suppression ailleurs. Retire le compteur transitoire mergeKept AVANT que l’état ne soit adopté.
+function mergeReport(merged){
+  const conflicts = merged.meta.mergeConflicts||0, kept = merged.meta.mergeKept||0;
+  delete merged.meta.mergeKept;
+  const parts = [];
+  if(conflicts) parts.push(`${plur(conflicts,'livre existe','livres existent')} en deux versions, marquées « ${CONFLICT_TAG} »`);
+  if(kept) parts.push(`${plur(kept,'livre modifié','livres modifiés')} ailleurs après ${kept>1?'leur':'sa'} suppression, gardé${kept>1?'s':''} « ${CONFLICT_TAG} »`);
+  return parts.length ? 'Fusion faite ✓ — '+parts.join(' ; ') : '';
+}
 function mergeLibraries(localSt, serverRaw){
   const out = normalizeData(serverRaw);
+  // Marqueurs de suppression : union des deux côtés, puis application — ici et nulle part ailleurs.
+  // Côté serveur, un livre marqué disparaît s’il est resté tel qu’au moment de la suppression ;
+  // modifié après (autre appareil), il est gardé sous un nouvel id, étiqueté : jamais de perte muette.
+  const deleted = mergeDeletedBooks(out.meta.deletedBooks, localSt.meta && localSt.meta.deletedBooks);
+  out.meta.deletedBooks = deleted;
+  let kept = 0;
+  const serverRemap = new Map(), dropped = new Set();
+  out.books = out.books.filter(b=>{
+    const mark = deletionMark(deleted, b.id);
+    if(!mark) return true;
+    if(mark.fp===bookFingerprint(b)){ dropped.add(b.id); return false; }
+    const old = b.id; b.id = uid(); serverRemap.set(old, b.id); withConflictTag(b); kept++;
+    return true;
+  });
+  if(serverRemap.size || dropped.size) for(const l of out.lists) l.bookIds = l.bookIds.filter(id=>!dropped.has(id)).map(id=>serverRemap.get(id)||id);
   const ids = new Set(out.books.map(b=>b.id)), keys = new Set(out.books.map(libMergeKey));
   const booksById = new Map(out.books.map(b=>[b.id,b])), booksByKey = new Map(out.books.map(b=>[libMergeKey(b),b]));
   const localIdMap = new Map();
   let conflicts = 0;
-  const comparable = b => {
-    const x = normalizeBook(b);
-    delete x.id; delete x.addedAt;
-    return JSON.stringify(x);
-  };
   for(const b of (localSt.books||[])){
     if((b.tags||[]).includes('exemple')) continue;                 // ne pas réinjecter la démo
+    // Même règle côté local : supprimé ailleurs et inchangé ici → la suppression l’emporte ;
+    // modifié ici → il continue comme n’importe quel livre, sous un nouvel id et étiqueté.
+    const mark = deletionMark(deleted, b.id);
+    if(mark && mark.fp===bookFingerprint(b)) continue;
     const key=libMergeKey(b), existing=booksById.get(b.id)||booksByKey.get(key);
     if(existing){
-      if(comparable(b)===comparable(existing)){
+      if(bookComparable(b)===bookComparable(existing)){
         localIdMap.set(b.id, existing.id);
         continue;
       }
@@ -6881,13 +7176,15 @@ function mergeLibraries(localSt, serverRaw){
       // On conserve donc les DEUX livres : la copie locale est clairement marquée et reçoit un nouvel
       // id uniquement en cas de collision. L’utilisateur peut ensuite réconcilier les versions.
       const localCopy = normalizeBook(b);
-      if(ids.has(localCopy.id)) localCopy.id = uid();
-      localCopy.tags = [...new Set([...(localCopy.tags||[]), CONFLICT_TAG])].slice(0,20);
+      if(ids.has(localCopy.id) || mark) localCopy.id = uid();
+      withConflictTag(localCopy);
       out.books.push(localCopy); ids.add(localCopy.id); keys.add(libMergeKey(localCopy));
       booksById.set(localCopy.id, localCopy); localIdMap.set(b.id, localCopy.id); conflicts++;
       continue;
     }
-    const nb = normalizeBook(b); out.books.push(nb); ids.add(nb.id); keys.add(libMergeKey(nb)); booksById.set(nb.id,nb); booksByKey.set(libMergeKey(nb),nb);
+    const nb = normalizeBook(b);
+    if(mark){ nb.id = uid(); withConflictTag(nb); kept++; }
+    out.books.push(nb); ids.add(nb.id); keys.add(libMergeKey(nb)); booksById.set(nb.id,nb); booksByKey.set(libMergeKey(nb),nb);
     localIdMap.set(b.id, nb.id);
   }
   const byId = new Map(out.lists.map(l=>[l.id,l]));
@@ -6931,46 +7228,111 @@ function mergeLibraries(localSt, serverRaw){
   // compteur d’export : garder la date la plus récente
   if(localSt.meta && localSt.meta.lastExport && (!out.meta.lastExport || localSt.meta.lastExport > out.meta.lastExport)) out.meta.lastExport = localSt.meta.lastExport;
   out.meta.mergeConflicts = conflicts;
+  out.meta.mergeKept = kept;                                     // transitoire, lu et retiré par mergeReport
   return out;
 }
 // À la connexion : réconcilie la biblio locale avec celle du compte, SANS perte ni fuite entre comptes.
-async function syncLibraryOnLogin(){
-  if(!social.me || social.tosOutdated) return;
-  const myId = social.me.id;
-  const localOwner = (state.meta && state.meta.ownerId) || '';
-  const localRev = (state.meta && +state.meta.libRev) || 0;
-  const localMine = !localOwner || localOwner===myId;              // anonyme (jamais rattachée) ou à moi
-  const localHasReal = (state.books||[]).some(b=>!(b.tags||[]).includes('exemple'));
-  let d;
-  try{ d = await api('/api/library'); }
-  catch(e){ setLibStatus('offline'); return; }                    // hors-ligne : on garde le local
-  if(!localMine){
-    // la biblio locale appartient à QUELQU’UN D’AUTRE (appareil partagé) → ne JAMAIS la mêler à ce compte
-    backupBeforeWipe('-autre');
-    if(d.exists) adoptServerLibrary(d);
-    else { replaceState({}); libTag(0); libPersist(); scheduleRender(); }
-    return;
+// Renvoie vrai quand la bibliothèque du compte est prête (libraryReady) — avant, rien ne part.
+function syncLibraryOnLogin(){
+  // Un chargement déjà en cours pour ce compte (démarrage + retour du réseau, par exemple) : on
+  // s’y joint au lieu de le recommencer et de gaspiller une lecture du quota.
+  if(_libSyncPromise && _libSession && currentLibrarySession(_libSession)) return _libSyncPromise;
+  const p = loadAccountLibrary();
+  _libSyncPromise = p;
+  const done = ()=>{ if(_libSyncPromise===p) _libSyncPromise = null; };
+  p.then(done, done);
+  return p;
+}
+async function loadAccountLibrary(){
+  if(!social.me || social.tosOutdated) return false;
+  const session = accountSession();
+  if(!currentAccount(session)) return false;
+  if(!_libSession || _libSession.id!==session.id) _libRetryDelay = 15000;   // l’attente croissante est par compte
+  resetLibrarySync();
+  _libSession = session;
+  const myId = session.id;
+  try{
+    let localOwner = (state.meta && state.meta.ownerId) || '';
+    let wiped = false;
+    // Pas d'heuristique « même pseudo ⇒ compte recréé » : un pseudo libéré par la suppression d'un
+    // compte peut être repris par quelqu'un d'autre ; sur un appareil partagé, rattacher la
+    // bibliothèque de l'ancien titulaire à ce nouveau compte serait une fuite. Une bibliothèque
+    // d'un autre identifiant est donc toujours mise de côté (décision du propriétaire, 9/09).
+    if(localOwner && localOwner!==myId){
+      // La biblio locale appartient à QUELQU’UN D’AUTRE (appareil partagé) : mise de côté et écran
+      // vidé AVANT d’interroger le serveur — ainsi ce compte ne voit jamais l’autre bibliothèque,
+      // même si la requête échoue (hors ligne, panne). Avant, l’échec la laissait affichée.
+      let persisted = null; try{ persisted = JSON.parse(localStorage.getItem(LS_KEY)||'null'); }catch(_){ }
+      const persistedOwner = (persisted && persisted.meta && persisted.meta.ownerId) || '';
+      if(persistedOwner===myId){ replaceState(persisted); _externalState = null; }   // un autre onglet a déjà fait ce ménage : on prend sa version
+      else { setAsideBeforeWipe(localOwner); replaceState({}); libTag(0); libPersist(); wiped = true; }
+      scheduleRender();
+    }
+    // Copie mise de côté pour CE compte (déconnexion avec « Retirer », ou passage d’un autre compte
+    // sur l’appareil) : fusionnée dans l’état courant AVANT toute lecture du serveur — hors ligne
+    // compris —, elle porte peut-être des modifications que le compte n’a jamais reçues. Purgée au
+    // premier envoi réussi ; d’ici là, la refusionner ne change rien (union).
+    const aside = readAside(myId);
+    if(aside){
+      const merged = mergeLibraries(normalizeData(aside), state);
+      const report = mergeReport(merged), rev = (state.meta && +state.meta.libRev) || 0;   // la révision reste celle de l’appareil
+      replaceState(merged); state.meta.mergeConflicts = 0; libTag(rev); libPersist(); scheduleRender();
+      if(report) toast(report);
+      else if((aside.books||[]).some(b=>!isDemoBook(b))) toast('Ta bibliothèque mise de côté sur cet appareil est de retour ✓');
+    }
+    let d;
+    try{ d = await api('/api/library', { sessionToken: session.token }); }
+    catch(e){
+      if(!currentLibrarySession(session)) return false;
+      if(e.status===428){ social.tosOutdated=true; setLibStatus(''); if(ui.view==='friends') renderFriends(); return false; }
+      setLibStatus(e.message==='offline' ? 'offline' : 'error'); retryLibrarySync(session, e);
+      return false;
+    }
+    if(!currentLibrarySession(session)) return false;        // compte quitté pendant la requête
+    let server = null;
+    if(d.exists){
+      try{ server = JSON.parse(d.data); }catch(_){ }
+      if(!server || typeof server!=='object' || !Array.isArray(server.books)) throw new Error('Bibliothèque invalide');
+    }
+    // (re)lus APRÈS la requête : l’utilisateur a pu ajouter un livre pendant qu’elle était en vol
+    const localRev = (state.meta && +state.meta.libRev) || 0;
+    const localHasReal = (state.books||[]).some(b=>!isDemoBook(b));
+    _libRetryDelay = 15000;
+    if(!d.exists){
+      // compte sans biblio → migrer la biblio locale (à moi/anonyme). Un écran tout juste vidé n’a
+      // rien à enregistrer : pas d’envoi à vide.
+      libTag(0); _libReadySession = session;
+      if(!wiped || localHasReal) await pushLibrary();
+      if(localHasReal) toast('Bibliothèque enregistrée sur ton compte ✓');
+      return libraryReady();
+    }
+    if(wiped && !localHasReal){
+      // écran vidé et rien ajouté depuis : la bibliothèque du compte, telle quelle
+      adoptServerLibrary(d); _libReadySession = session;
+      return libraryReady();
+    }
+    if(localRev === d.rev){
+      // le local est basé sur la version serveur courante → il peut porter des édits non poussés → LE LOCAL GAGNE
+      libTag(d.rev); _libReadySession = session; await pushLibrary();
+      return libraryReady();
+    }
+    // divergence (autre appareil a avancé) ou 1re fois sur ce compte → FUSION sans perte + secours
+    // (un local sans livre n’a rien à mettre à l’abri : il n’écrase pas une copie encore utile)
+    if(!wiped && localHasReal) backupLocal('-preacct');
+    const merged = mergeLibraries(state, server);
+    const report = mergeReport(merged);
+    replaceState(merged); state.meta.mergeConflicts=0;
+    libTag(d.rev); libPersist(); scheduleRender();
+    _libReadySession = session;
+    await pushLibrary();
+    if(report) toast(report);
+    else if(localHasReal) toast('Bibliothèques synchronisées ✓');
+    return libraryReady();
+  }catch(e){
+    // bibliothèque serveur illisible, ou quota local plein : état d’erreur définitif, le local reste le filet
+    if(currentLibrarySession(session)){ _libReadySession = null; setLibStatus('error'); retryLibrarySync(session, e); }
+    return false;
   }
-  if(!d.exists){
-    // compte sans biblio → migrer la biblio locale (à moi/anonyme)
-    libTag(0); await pushLibrary();
-    if(localHasReal) toast('Bibliothèque enregistrée sur ton compte ✓');
-    return;
-  }
-  if(localRev === d.rev){
-    // le local est basé sur la version serveur courante → il peut porter des édits non poussés → LE LOCAL GAGNE
-    libTag(d.rev); await pushLibrary();
-    return;
-  }
-  // divergence (autre appareil a avancé) ou 1re fois sur ce compte → FUSION sans perte + secours
-  backupLocal('-preacct');
-  const merged = mergeLibraries(state, JSON.parse(d.data));
-  const conflicts = merged.meta.mergeConflicts||0;
-  replaceState(merged); state.meta.mergeConflicts=0;
-  libTag(d.rev); libPersist(); scheduleRender();
-  await pushLibrary();
-  if(conflicts) toast(`Fusion faite ✓ — ${plur(conflicts,'livre existe','livres existent')} en deux versions, marquées « ${CONFLICT_TAG} »`);
-  else if(localHasReal) toast('Bibliothèques synchronisées ✓');
 }
 // Flush best-effort quand l’onglet se ferme/masque : pousse une sauvegarde en attente (keepalive
 // survit à la fermeture) — évite de perdre une modif faite juste avant de quitter.
@@ -6991,28 +7353,33 @@ function shelfHash(s){ let h = 5381; for(let i=0;i<s.length;i++) h = ((h<<5)+h+s
 function shelfTag(mode, payload){ return (social.me?social.me.id:'')+':'+mode+':'+payload.length+':'+shelfHash(JSON.stringify(payload)); }
 function rememberShelfTag(tag){ try{ localStorage.setItem(SHELF_TAG_KEY, tag); }catch(_){ } }
 function scheduleShelfPush(delay=25000){
-  if(!social.me || social.tosOutdated || (social.me.shareMode||'none')==='none') return;
+  if(!libraryReady() || (social.me.shareMode||'none')==='none') return;
   _shelfDirty = true; clearTimeout(_shelfTimer); _shelfTimer=0;
   if(!navigator.onLine) return;
   _shelfTimer = setTimeout(()=>{ _shelfTimer=0; pushShelf(); }, delay);
 }
 async function pushShelf(){
-  if(!social.me || social.tosOutdated) return;
+  if(!libraryReady()) return;                                // l’étagère est dérivée de la bibliothèque : pas avant qu’elle soit celle du compte
+  const session = _libReadySession;
   if(_shelfPushing){ _shelfDirty = true; return; }
   const mode = social.me.shareMode||'none'; if(mode==='none') return;
   const payload = shelfPayload(mode); const tag = shelfTag(mode, payload);
   let prev = ''; try{ prev = localStorage.getItem(SHELF_TAG_KEY)||''; }catch(_){ }
   if(tag===prev){ _shelfDirty = false; return; }
-  _shelfPushing = true; _shelfDirty = false;
-  try{ await api('/api/sync', {method:'POST', body:{shareMode:mode, books:payload}}); rememberShelfTag(tag); _shelfRetryMs=5000; }
+  _shelfPushing = session; _shelfDirty = false;
+  try{ await api('/api/sync', {sessionToken:session.token, method:'POST', body:{shareMode:mode, books:payload}}); if(!libraryReady() || session!==_libReadySession) return; rememberShelfTag(tag); _shelfRetryMs=5000; }
   catch(e){
+    if(!currentLibrarySession(session)) return;
     _shelfDirty=true;
     if(e.message!=='offline' && e.status && e.status<500 && e.status!==429) _shelfDirty=false;
     else _shelfRetryMs=Math.min(_shelfRetryMs*2,120000);
   }
-  finally{ _shelfPushing = false; if(_shelfDirty && navigator.onLine && !_shelfTimer) scheduleShelfPush(_shelfRetryMs); }
+  finally{ if(_shelfPushing===session){ _shelfPushing = false; if(_shelfDirty && navigator.onLine && !_shelfTimer) scheduleShelfPush(_shelfRetryMs); } }
 }
 window.addEventListener('online', ()=>{
+  // Connecté mais bibliothèque du compte jamais chargée (la requête a échoué hors ligne) : on la
+  // recharge d’abord — rien ne part vers le compte avant.
+  if(social.me && !social.tosOutdated && !libraryReady()){ syncLibraryOnLogin().then(ok=>{ if(ok) pushShelf(); }); return; }
   if(_libDirty) scheduleLibPush(0);
   if(_shelfDirty) scheduleShelfPush(0);
 });
@@ -7287,7 +7654,10 @@ async function renderAccount(){
       await showRecoveryCode(d.recoveryCode); renderAccount(); }
     catch(err){ toast(netMsg(err)); b.disabled=false; } };
   $('#acc-export').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
-    try{ const d = await api('/api/account/export'); const full={...d, localLibrary:state.books};
+    try{ const d = await api('/api/account/export'); const full={...d};
+      // « Mes données » ne joint la bibliothèque locale que si c’est bien celle de CE compte,
+      // chargée : sur un appareil partagé, celle d’un autre compte n’a rien à faire dans ce fichier.
+      if(libraryReady()) full.localLibrary = state.books;
       const blob=new Blob([JSON.stringify(full,null,2)],{type:'application/json'}); const a=document.createElement('a');
       a.href=URL.createObjectURL(blob); a.download='tome-mes-donnees-'+social.me.username+'.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
       toast('Données exportées ✓'); }
@@ -7298,16 +7668,30 @@ async function renderAccount(){
   $('#soc-logout').onclick = socLogout;   // hors du délégué de #friends-body : le bouton n’y vit plus
   $('#acc-logoutall').onclick = async ()=>{
     if(!await uiConfirm({title:'Se déconnecter partout ?', message:'Toutes tes sessions seront fermées, y compris ici.', okLabel:'Déconnecter', danger:true})) return;
+    const session = accountSession();
     let ok = true;
     try{ await api('/api/account/logout-all', {method:'POST'}); }catch(_){ ok = false; }
+    if(!currentAccount(session)) return;                     // un autre onglet a changé de session entre-temps : ne pas effacer SON jeton
+    resetLibrarySync(); _socUserToken='';
     try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render();
     toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici — les autres appareils n’ont pas pu être joints'); };
   $('#acc-delete').onclick = async ()=>{
     if(!await uiConfirm({title:'Supprimer ton compte ?', message:'Action IRRÉVERSIBLE. Ton profil, tes amis, ta bibliothèque privée sauvegardée et ton étagère partagée seront effacés du serveur. Ta bibliothèque locale reste sur cet appareil.', okLabel:'Continuer', danger:true})) return;
     const pw = await uiPrompt({title:'Confirme avec ton mot de passe', message:'Tape ton mot de passe pour supprimer définitivement le compte.', type:'password', okLabel:'Supprimer'});
     if(pw==null) return;
+    const session = accountSession();
     try{ await api('/api/account/delete', {method:'POST', body:{password:pw}});
-      try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render(); toast('Compte supprimé.'); }
+      if(!currentAccount(session)) return;
+      resetLibrarySync(); _socUserToken='';
+      // Le compte n’existe plus : la bibliothèque locale redevient « à personne » (sinon une
+      // future inscription la prendrait pour celle d’un autre compte et la mettrait de côté), sans
+      // révision ni marqueurs de suppression — ils ne parlaient qu’à ce compte. Une copie mise de
+      // côté pour lui, s’il en reste une ici, redevient restaurable de la même façon.
+      const mine = !!(state.meta && state.meta.ownerId===session.id);
+      if(mine){ state.meta.ownerId = null; state.meta.ownerName = null; state.meta.libRev = 0; state.meta.deletedBooks = {}; social.libRev = 0; libPersist(); }
+      disownAside(session.id);
+      try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render();
+      toast(mine && state.books.some(b=>!isDemoBook(b)) ? 'Compte supprimé — ta bibliothèque reste sur cet appareil, sans compte' : 'Compte supprimé.'); }
     catch(err){ toast(netMsg(err)); } };
   // liste des bloqués
   try{
@@ -7544,7 +7928,7 @@ function renderAuth(box, mode, errMsg=''){
       // qu'il y a des lectures à montrer. Un formulaire plus court, une décision mieux informée.
       const body = mode==='login' ? {username, password} : {username, password, displayName, consent:true, shareMode:'none'};
       const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
-      localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tosOutdated = mode!=='signup'; social.tab='feed'; social.view=null;
+      resetLibrarySync(); localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; _socUserToken = d.token; social.tosOutdated = mode!=='signup'; social.tab='feed'; social.view=null;
       social.sessionExpired = false;   // la session est neuve : plus rien à expliquer au prochain passage
       try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d’accueil
       await socRefresh(); // récupère aussi tosOutdated AVANT toute sauvegarde privée
@@ -7613,7 +7997,7 @@ function renderRecover(box, errMsg=''){
     $('#rec-submit').textContent = '…'; $('#rec-submit').disabled = true;
     try{
       const d = await api('/api/recover', {method:'POST', body:{username, code, newPassword}});
-      localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; social.tosOutdated = true; social.tab='feed'; social.view=null;
+      resetLibrarySync(); localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; _socUserToken = d.token; social.tosOutdated = true; social.tab='feed'; social.view=null;
       social.sessionExpired = false;
       await socRefresh();
       if(!social.tosOutdated) syncLibraryOnLogin().then(()=>pushShelf());
@@ -7669,12 +8053,13 @@ async function recommendBook(id){
 // Le rappel de lecture cite la lecture en cours : le serveur ne connaît pas la bibliothèque
 // privée, on lui envoie le titre quand il change (best-effort, silencieux).
 function refreshReminderTitle(){
-  if(!social.me || social.me.reminderHour==null) return;
+  if(!libraryReady() || social.me.reminderHour==null) return;   // le titre vient de la bibliothèque : seulement celle du compte
+  const session = _libReadySession;
   const reading = state.books.find(x=>x.status==='reading' && !isDemoBook(x));
   const title = reading ? fullTitle(reading).slice(0,120) : '';
   if(title === (social.me.reminderTitle||'')) return;
-  api('/api/account/reminder', { method:'POST', body:{ hour:social.me.reminderHour, tz:new Date().getTimezoneOffset(), title } })
-    .then(()=>{ social.me.reminderTitle = title; }).catch(()=>{});
+  api('/api/account/reminder', { sessionToken:session.token, method:'POST', body:{ hour:social.me.reminderHour, tz:new Date().getTimezoneOffset(), title } })
+    .then(()=>{ if(currentLibrarySession(session)) social.me.reminderTitle = title; }).catch(()=>{});
 }
 
 /* ---- Signalement de contenu (canal « notice and action ») ---- */
@@ -7838,7 +8223,7 @@ function addSharedBook(r, fromUser){
   // sous le doigt. Les autres vues sont reconstruites à la prochaine bascule d’onglet.
   if(ui.view!=='friends') scheduleRender();
   toast(`« ${r.title} » ajouté à ta pile ✓`, {label:'Annuler', onAction:()=>{
-    const i = state.books.indexOf(b); if(i>=0){ state.books.splice(i,1); save(); if(ui.view!=='friends') scheduleRender(); }
+    const i = state.books.indexOf(b); if(i>=0){ markBooksDeleted([b]); state.books.splice(i,1); save(); if(ui.view!=='friends') scheduleRender(); }
   }});
 }
 // --- fil de discussion sous une entrée ---
@@ -8043,12 +8428,21 @@ async function renderMyShare(){
   // l’onglet peut avoir changé pendant l’appel réseau : on ne touche au DOM que s’il est encore là
   const setStatus = t => { const s = $('#share-status'); if(s) s.textContent = t; };
   async function applyShare(chosen){
+    // Partager, c’est envoyer des livres : pas avant que la bibliothèque de CE compte soit chargée
+    // (appareil partagé, serveur injoignable). Se cacher (« Rien ») reste toujours possible.
+    if(chosen!=='none' && !libraryReady()){
+      setStatus('Attends le chargement de la bibliothèque de ce compte avant de partager.');
+      const back = radios.find(r=>r.value===(social.me.shareMode||'none')); if(back) back.checked = true;
+      return;
+    }
+    const session = accountSession();
     const fs = $('#share-mode'); if(fs) fs.disabled = true;
     setStatus('Enregistrement…');
     // le mode « notes seules » ne DOIT PAS envoyer les critiques (confidentialité garantie côté client)
     const payload = chosen==='none' ? [] : shelfPayload(chosen);
     try{
-      const d = await api('/api/sync', {method:'POST', body:{shareMode:chosen, books:payload}});
+      const d = await api('/api/sync', {sessionToken:session.token, method:'POST', body:{shareMode:chosen, books:payload}});
+      if(!currentAccount(session)) return;                 // session changée pendant l’appel : l’écran n’est plus le sien
       social.me.shareMode = d.shareMode;
       rememberShelfTag(shelfTag(d.shareMode, payload));   // l’auto-synchro sait que c’est à jour
       // Dire qui voit quoi, pas l’état d’un transfert : c’est la seule question que l’on se pose ici.
@@ -8254,17 +8648,33 @@ function askUnfriend(uname){
 // parti (note prise il y a deux secondes, envoi en vol) ne partirait plus jamais. On vide la file
 // d’abord, et on ne part en silence que si le serveur a bien tout pris.
 async function socLogout(){
-  if(!await uiConfirm({title:'Se déconnecter ?', message:'Ta bibliothèque reste sur cet appareil.', okLabel:'Se déconnecter'})) return;
+  const hasReal = (state.books||[]).some(b=>!isDemoBook(b));
+  if(!await uiConfirm({title:'Se déconnecter ?', message: hasReal ? 'Tu choisiras ensuite si ta bibliothèque reste visible sur cet appareil.' : 'Ta bibliothèque reste sur cet appareil.', okLabel:'Se déconnecter'})) return;
   if(_libDirty || _libPushing){
     toast('Envoi des dernières modifications…', {ms:15000});
     await flushLibrary();
-    if(_libDirty && !await uiConfirm({title:'Modifications non envoyées', message:'Pas de connexion. Te déconnecter quand même ? Elles resteront sur cet appareil seulement.', okLabel:'Quand même', danger:true})) return;
+    if(_libDirty && !await uiConfirm({title:'Modifications non envoyées', message:'Pas de connexion. Te déconnecter quand même ? Elles resteront sur cet appareil seulement.', okLabel:'Quand même', danger:true})) return;
   }
+  // Appareil partagé : déconnecté, la bibliothèque restait lisible et modifiable par le suivant, sans
+  // mot de passe — et ses retouches repartaient sur le compte à la reconnexion. On propose de la
+  // mettre de côté (copie propre à ce compte, fusionnée d’office à sa prochaine connexion ici) :
+  // un choix, jamais imposé. Rien à retirer s’il n’y a que les exemples.
+  let retirer = false;
+  if(hasReal){
+    const saved = libraryReady() && !_libDirty;
+    retirer = await uiConfirm({ title:'Retirer ma bibliothèque de cet appareil ?',
+      message:(saved ? 'Elle est enregistrée sur ton compte et reviendra à ta prochaine connexion ici. ' : 'Elle sera gardée de côté sur cet appareil, avec tes modifications non envoyées, et reviendra à ta prochaine connexion ici. ')
+        + 'Si tu la laisses, elle reste lisible et modifiable sans mot de passe par quiconque ouvre Tome sur cet appareil.',
+      okLabel:'Retirer', cancelLabel:'La laisser' });
+  }
+  const owner = (state.meta && state.meta.ownerId) || social.me.id;   // à qui appartient ce qu’on met de côté (lu avant de fermer la session)
   try{ await api('/api/logout', {method:'POST'}); }catch(_){}
+  resetLibrarySync(); _socUserToken='';   // APRÈS le flush : ce qui restait en file a eu sa chance de partir
   try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
-  social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError=''; setLibStatus(''); // la biblio locale reste sur l’appareil
+  social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError=''; setLibStatus('');
   social.sessionExpired=false;   // partir de son plein gré n’est pas une session perdue : pas de message d’expiration
   setFriendsBadge(0);
+  if(retirer){ setAsideBeforeWipe(owner); replaceState({}); libPersist(); clearSelection(); toast('Bibliothèque retirée de cet appareil — elle reviendra à ta prochaine connexion ici', {ms:6000}); }
   render();   // Mon compte repasse au formulaire de connexion, l’avatar de l’en-tête à la silhouette
 }
 // écouteur délégué unique pour toute la vue Amis
@@ -8554,6 +8964,27 @@ if(location.search.includes('selftest')){
   assert('merge : marque la copie locale conflictuelle', _m.books.some(b=>b.title==='Dune' && hasConflictTag(b) && b.study.summary==='Récent'));
   const _same=mergeLibraries({books:[{id:'local',title:'Neuromancien',authors:['William Gibson']}]},{books:[{id:'server',title:'Neuromancien',authors:['William Gibson']}]});
   assert('merge : déduplique deux versions identiques', _same.books.filter(b=>b.title==='Neuromancien').length===1);
+  // F42b : marqueurs de suppression — la suppression l’emporte sur une copie inchangée, jamais sur une copie modifiée
+  const _x = {id:'x1', title:'Le Rivage des Syrtes', authors:['Julien Gracq'], review:'', tags:[]};
+  const _mk = {deletedBooks:{x1:{rev:2, fp:bookFingerprint(_x)}}};
+  const _d1 = mergeLibraries({books:[], meta:_mk}, {books:[_x, {id:'y1', title:'Autre'}], lists:[{id:'L', name:'L', bookIds:['x1','y1']}]});
+  assert('marqueur : la copie serveur inchangée disparaît (avec ses références)', !_d1.books.some(b=>b.id==='x1') && eq(_d1.lists[0].bookIds, ['y1']) && _d1.meta.deletedBooks.x1.rev===2);
+  const _d2 = mergeLibraries({books:[], meta:_mk}, {books:[{..._x, review:'Écrite ailleurs après la suppression'}]});
+  assert('marqueur : la copie serveur modifiée est gardée, ré-identifiée et étiquetée', _d2.books.length===1 && _d2.books[0].id!=='x1' && hasConflictTag(_d2.books[0]) && _d2.meta.mergeKept===1 && mergeReport(_d2).includes('modifié ailleurs'));
+  const _d3 = mergeLibraries({books:[_x]}, {books:[], meta:_mk});
+  assert('marqueur : la copie locale inchangée disparaît', _d3.books.length===0 && _d3.meta.mergeKept===0);
+  const _d4 = mergeLibraries({books:[{..._x, rating:5}]}, {books:[], meta:_mk});
+  assert('marqueur : la copie locale modifiée est gardée, ré-identifiée et étiquetée', _d4.books.length===1 && _d4.books[0].id!=='x1' && hasConflictTag(_d4.books[0]) && _d4.meta.mergeKept===1);
+  assert('comparable : l’étiquette de conflit ne fait pas deux versions', bookComparable(_x)===bookComparable({..._x, tags:[CONFLICT_TAG]}) && bookFingerprint(_x)!==bookFingerprint({..._x, rating:5}));
+  const _nd = normalizeData({books:[_x], meta:{deletedBooks:{x1:{rev:1, fp:'a.b'}, bad:{rev:0, fp:'z'}, z9:{rev:3, fp:'q.r'}, nope:'3'}, futur:{k:1}}});
+  assert('marqueur : un livre présent fait céder son marqueur, les entrées invalides tombent, meta inconnue transite', _nd.books.length===1 && !_nd.meta.deletedBooks.x1 && !_nd.meta.deletedBooks.bad && !_nd.meta.deletedBooks.nope && _nd.meta.deletedBooks.z9.rev===3 && eq(_nd.meta.futur,{k:1}));
+  const _big = {}; for(let i=0;i<MAX_DELETED_MARKS+5;i++) _big['m'+i] = {rev:i+1, fp:'f.p'};
+  const _cap = normalizeDeletedBooks(_big);
+  assert('marqueur : plafond, les plus anciens cèdent', Object.keys(_cap).length===MAX_DELETED_MARKS && !_cap.m0 && !_cap.m4 && !!_cap.m5 && !!_cap['m'+(MAX_DELETED_MARKS+4)]);
+  assert('marqueur : union, la suppression la plus récente gagne', mergeDeletedBooks({a:{rev:1, fp:'x.1'}}, {a:{rev:4, fp:'x.4'}, b:{rev:2, fp:'y.2'}}).a.fp==='x.4' && mergeDeletedBooks({a:{rev:5, fp:'x.5'}}, {a:{rev:4, fp:'x.4'}}).a.fp==='x.5');
+  // F42c : une copie de secours ne se restaure que si elle est à personne ou au compte connecté
+  assert('restauration : à personne → toujours ; à moi → connecté seulement ; à un autre → jamais', restorableBy(null,'') && restorableBy(null,'A') && restorableBy('A','A') && !restorableBy('A','') && !restorableBy('A','B'));
+  assert('mise de côté : clé par compte, ownerName transite par normalizeData', asideKey('A')===LS_KEY+'-autre:A' && normalizeData({meta:{ownerName:'lucas_bd'}}).meta.ownerName==='lucas_bd' && normalizeData({meta:{ownerName:42}}).meta.ownerName===null);
   // v10 : fiches d’étude et répétition espacée
   const _st=normalizeStudy({objective:' comprendre ',ideas:['Idée A',''],questions:[{question:'Pourquoi ?',answer:'Parce que'}],cards:[{front:'Recto',back:'Verso',due:'invalide'}]});
   assert('study : normalise les champs et listes', _st.objective==='comprendre' && _st.ideas.length===1 && _st.questions[0].answer==='Parce que');
