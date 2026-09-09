@@ -131,7 +131,7 @@
       <p class="lp-colo-sub">Un compte gratuit, ta première fiche en trente secondes — et ce journal sera à toi pour longtemps.</p>
       <button class="btn primary lp-big" data-lp="signup">Créer mon compte</button>
     </div>
-    <footer class="lp-foot"><span>Tome</span> · <a href="/confidentialite">Confidentialité</a> · <a href="/cgu">CGU</a> · fait avec ❤ pour les lecteurs</footer>
+    <footer class="lp-foot"><span>Tome</span> · <a href="/confidentialite">Confidentialité</a> · <a href="/cgu">CGU</a> · <button type="button" class="linkish" data-lp="feedback">Donner mon avis</button> · fait avec ❤ pour les lecteurs</footer>
   </div>
 </div>
 
@@ -330,6 +330,14 @@
         <button class="btn" id="btn-install" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:15px;height:15px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4 19h16"/></svg> Installer Tome</button>
         <input type="file" id="import-file" accept=".json" hidden aria-label="Fichier d’import JSON">
         <input type="file" id="import-csv-file" accept=".csv,text/csv" hidden aria-label="Fichier CSV">
+      </div>
+    </div>
+    <div class="panel" id="feedback-panel">
+      <h4>Un avis, un souci ?</h4>
+      <p class="sub">Tome est fait par une personne, pour quelques lecteurs : ce que tu en dis compte vraiment.</p>
+      <div class="row" style="gap:8px; flex-wrap:wrap">
+        <button type="button" class="btn" id="btn-feedback">Donner mon avis</button>
+        <a class="btn" id="btn-contact" href="#">Écrire à Lucas</a>
       </div>
     </div>
     <div class="panel" id="display-panel">

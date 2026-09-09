@@ -720,6 +720,35 @@ const AMAZON_TAG = '';
    Colle ici ton lien Ko-fi ou Liberapay (ex : 'https://ko-fi.com/lucastome') : le bouton
    « Soutenir Tome » apparaîtra dans Mon compte. Vide = aucun bouton nulle part. */
 const SUPPORT_URL = '';
+// Adresse de contact : la même que celle publiée dans LEGAL_TEXT (« Contact : … ») — rien de
+// nouveau n'est exposé ; si elle change, changer les deux.
+const CONTACT_EMAIL = 'lucas.marroig@essec.edu';
+function contactHref(sujet){
+  // Le corps ne contient que ce qui aide à comprendre un souci : version et appareil, jamais de données de lecture.
+  const corps = `\n\n—\nTome ${location.host} · ${navigator.userAgent.replace(/\).*$/, ')')}`;
+  return `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
+}
+// Avis depuis l'app : même canal que les signalements (table reports, type « avis »), lisible par
+// `npm run reports` côté serveur — pas d'adresse à saisir, pas de service tiers, anonyme si l'on veut.
+async function sendFeedback(){
+  const txt = await openDialog({
+    title:'Ton avis sur Tome',
+    message:'Ce qui te manque, ce qui coince, ce que tu aimes : tout est bon à prendre. Ton message part au responsable du site, avec l\u2019écran d\u2019où tu écris — rien d\u2019autre.',
+    input:{ multiline:true, placeholder:'Je trouve que\u2026' },
+    actions:[{label:'Annuler', value:null, cancel:true},{label:'Envoyer', returnsInput:true, default:true}],
+  });
+  if(txt==null) return;
+  const reason = String(txt).trim();
+  if(reason.length<5){ toast('Écris au moins quelques mots.'); return; }
+  try{
+    await api('/api/report', { method:'POST', body:{ targetType:'avis', targetKey:'app:'+(ui.view||'?'), reason } });
+    toast('Merci, ton avis est bien arrivé.');
+  }catch(e){
+    // hors ligne ou serveur indisponible : ne pas perdre le texte, proposer le mail
+    const ok = await uiConfirm({ title:'Envoi impossible pour l\u2019instant', message:'Tu peux l\u2019envoyer par mail à la place, ton texte sera repris dans le message.', okLabel:'Ouvrir mon mail', cancelLabel:'Plus tard' });
+    if(ok) location.href = contactHref('Tome — avis') + encodeURIComponent('\n' + reason);
+  }
+}
 /* ---- Google Books ----
    Plus de clé ici : depuis F04, la recherche passe par /api/books (proxy du Worker), qui porte
    la clé éventuelle et met les réponses en cache 24 h à la bordure. Le navigateur ne contacte
@@ -6647,6 +6676,7 @@ function syncMeButton(){
   const lbl = social.me ? `Mon compte (${social.me.displayName})` : 'Mon compte';
   b.setAttribute('aria-label', lbl); b.title = lbl;
 }
+$('#btn-feedback').addEventListener('click', sendFeedback);
 $('#btn-me').addEventListener('click', ()=>selectView('account', {focus:true}));
 // clé stable d’un livre côté social — DOIT rester identique entre la synchro (shareableBooks)
 // et les lectures croisées (« chez tes amis »), sinon les correspondances se perdent
@@ -7079,6 +7109,7 @@ function renderAccountView(){
   else if(social.sessionExpired) renderAuth(box, 'login', 'Ta session a expiré — reconnecte-toi pour retrouver ton compte et la sauvegarde de ta bibliothèque.');
   else renderAuth(box, 'login');
   refreshDataPanel();
+  const mail = $('#btn-contact'); if(mail) mail.href = contactHref('Tome — question');
   syncThemeSeg();
 }
 async function renderNotifications(){
@@ -8401,6 +8432,7 @@ $('#welcome').addEventListener('click', e=>{
   // « Importer ma bibliothèque » : même chemin que data-today-import — le sélecteur de fichier
   // s’ouvre dans la foulée du clic (geste utilisateur conservé), sinon le navigateur le bloquerait.
   if(a==='import'){ selectView('account'); $('#btn-import-csv').click(); return; }
+  if(a==='feedback'){ sendFeedback(); return; }
   // « Essayer d’abord » sur une bibliothèque vide : on sème la démo pour montrer l’app
   // habitée plutôt qu’un écran nu (le bandeau « Tout effacer » permet de repartir à zéro).
   if(a==='try' && !state.books.length) startDemo();
