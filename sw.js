@@ -1,7 +1,7 @@
 /* Service worker de Tome — cache l'app pour l'usage hors ligne.
    Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
    qui affiche le bandeau « Nouvelle version — Recharger ». */
-const CACHE = 'tome-v19';
+const CACHE = 'tome-v20';
 const CACHE_PREFIX = 'tome-';
 // Cache SÉPARÉ des couvertures : il doit SURVIVRE aux déploiements (voir le filtre d'activate),
 // sinon la grille repart grise à chaque nouvelle version.
