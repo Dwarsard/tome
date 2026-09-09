@@ -1,18 +1,18 @@
 /* Service worker de Tome — cache l'app pour l'usage hors ligne.
    Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
    qui affiche le bandeau « Nouvelle version — Recharger ». */
-const CACHE = 'tome-v18';
+const CACHE = 'tome-v19';
 const CACHE_PREFIX = 'tome-';
 // Cache SÉPARÉ des couvertures : il doit SURVIVRE aux déploiements (voir le filtre d'activate),
 // sinon la grille repart grise à chaque nouvelle version.
 const COVERS = 'tome-covers-v1';
 // Hôtes de couverture mis en cache. À garder aligné sur SHAREABLE_COVER (app.js) :
-//   /^https:\/\/(covers\.openlibrary\.org\/b\/(id|isbn|olid)\/…-[SML]\.jpg|books\.google(usercontent)?\.com\/books\/)/
+//   covers.openlibrary.org, books.google.com / googleusercontent.com, et couvertures openapi.bnf.fr
 // c'est la seule constante qui pose crossorigin="anonymous" sur l'image, donc la seule qui garantit
 // des réponses CORS. Une réponse opaque (sans CORS) serait illisible ET comptée ~7 Mo au quota :
 // on ne stocke que du 'cors' (contrôlé plus bas), mais si les deux listes divergent, tout ce qui
 // vient d'ici sans crossorigin repartira au réseau au lieu d'être mis en cache.
-const COVER_HOSTS = /^(?:covers\.openlibrary\.org|books\.google\.com|books\.googleusercontent\.com)$/;
+const COVER_HOSTS = /^(?:covers\.openlibrary\.org|books\.google\.com|books\.googleusercontent\.com|openapi\.bnf\.fr)$/;
 // ~400 couvertures ≈ 10 Mo (25 Ko l'unité en moyenne) : largement au-dessus d'une bibliothèque
 // courante, largement sous le quota d'origine. Au-delà on purge les plus anciennes.
 const COVER_MAX = 400;

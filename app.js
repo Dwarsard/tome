@@ -861,10 +861,10 @@ function bindStarSlider(root, selector, onCommit){
     if(h && h.dataset.dragged){ delete h.dataset.dragged; e.stopPropagation(); e.preventDefault(); }
   }, true);
 }
-// Couvertures du catalogue (Google Books / Open Library) chargées en anonyme : coupe l’envoi des
+// Couvertures Google Books / Open Library chargées en anonyme : coupe l’envoi des
 // cookies tiers (join du compte Google ↔ liste de lecture). Réservé au catalogue, qui supporte CORS ;
 // une couverture perso hébergée ailleurs reste sans crossorigin pour ne pas casser son affichage.
-function xorigin(u){ return SHAREABLE_COVER.test(u||'') ? ' crossorigin="anonymous"' : ''; }
+function xorigin(u){ return CACHEABLE_COVER.test(u||'') ? ' crossorigin="anonymous"' : ''; }
 function coverHTML(b, mini=false){
   // draggable=false : sur Chrome Android, un défilement amorcé sur une couverture partait en
   // glisser-déposer d’image et avalait le geste — l’appui long de sélection compris.
@@ -2020,12 +2020,12 @@ function ideasGroupsHTML(groups){
 }
 // Deux phrases à l'écran, le détail (ce qui part, où, pourquoi) sur demande : le pavé de 330
 // caractères n'était lu par personne, et l'accord donné sans lecture n'en est pas un.
-const IDEAS_OPTIN_HTML = `<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques idées de lecture d’après tes coups de cœur. Pour ça, Tome interroge Google Books et Open Library — rien d’autre ne quitte ton appareil. <button type="button" class="linkish" data-ideas-how>Comment ça marche ?</button></p>
+const IDEAS_OPTIN_HTML = `<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques idées de lecture d’après tes coups de cœur. Pour ça, Tome interroge la BnF, Google Books et Open Library — rien d’autre ne quitte ton appareil. <button type="button" class="linkish" data-ideas-how>Comment ça marche ?</button></p>
       <div style="display:flex;gap:8px"><button class="btn small primary" data-ideas-optin>Activer</button>
       <button class="btn small" data-ideas-later>Pas maintenant</button></div>`;
 const IDEAS_HOW_TEXT = `Chaque jour, Tome choisit quelques pistes d’après ta bibliothèque : les suites de tes séries, les auteurs que tu as bien notés, tes genres favoris.
 
-Pour trouver ces titres, il envoie le nom d’un auteur, d’une série ou d’un tag que tu aimes à Google Books et Open Library — exactement comme lorsque tu fais une recherche. Ni ta bibliothèque, ni tes notes, ni ton compte ne sont transmis.
+Pour trouver ces titres, il envoie le nom d’un auteur, d’une série ou d’un tag que tu aimes à la BnF, Google Books et Open Library — exactement comme lorsque tu fais une recherche. Ni ta bibliothèque, ni tes notes, ni ton compte ne sont transmis.
 
 Tu peux désactiver les idées du jour à tout moment depuis la Bibliothèque.`;
 let _ideasAskMuted = false; // « Pas maintenant » : on reproposera à la prochaine session, pas avant
@@ -2805,7 +2805,7 @@ $('#journal-body').addEventListener('click', e => {
 });
 
 /* =============== Recherche / ajout =============== */
-const SEARCH_HINT = `<div class="search-hint">Recherche via Google Books et Open Library — couvertures et infos remplies automatiquement.<br>Astuce : « One Piece 42 » préremplit la série et le tome. Introuvable ? « Ajout manuel ».</div>`;
+const SEARCH_HINT = `<div class="search-hint">Recherche via la BnF, Google Books et Open Library — couvertures et infos remplies automatiquement.<br>Astuce : « One Piece 42 » préremplit la série et le tome. Introuvable ? « Ajout manuel ».</div>`;
 // opts.keep : réouverture depuis la pile de modales (retour du formulaire « Détails ») — on garde
 // la requête et les résultats déjà affichés, et on ne redonne pas le focus au champ (le clavier
 // mobile masquerait la liste qu’on vient justement de retrouver).
@@ -2885,7 +2885,7 @@ $('#search-q').addEventListener('keydown', e => {
     if(searchReady(q)){ _lastQ = q; doSearch(q); }
   }
 });
-// Open Library parle MARC (« fre », « ger »…), Google Books et le menu Langue parlent ISO 639-1
+// La BnF et Open Library parlent MARC (« fre », « ger »…), Google Books et le menu Langue parlent ISO 639-1
 // (« fr », « de »…). On ramène tout au même alphabet pour que le tri par langue et le marqueur
 // affiché soient cohérents entre les deux sources. Code inconnu = laissé tel quel, en majuscules.
 const MARC_TO_ISO = { fre:'fr', fra:'fr', eng:'en', ger:'de', deu:'de', spa:'es', ita:'it', jpn:'ja',
@@ -2906,9 +2906,9 @@ function isbnOf(q){
 }
 let _gbQuotaHit = false;   // quota Google épuisé : message honnête plutôt que « une source indisponible »
 let _gbTooFast = false;    // limite de Tome (60 recherches/min) : c'est passager, le message doit le dire
-// La recherche Google passe par /api/books (Worker) : quota propre à Tome + cache de bordure
-// 24 h, donc plus de 429 en pleine journée. Le Worker renvoie le JSON brut de Google, ou
-// {error:'gb-quota'} en 502 quand Google, lui, est à sec.
+let _gbPartial = false;    // Google peut tomber tandis que la BnF continue de répondre
+// La recherche BnF + Google passe par /api/books (Worker) : quota propre à Tome + cache de bordure.
+// Le Worker garde la forme Google historique et ajoute des résultats BnF déjà normalisés.
 async function searchGoogleBooks(q, opts={}){
   const isbn = isbnOf(q);
   const forced = (ui.searchLang && ui.searchLang!=='auto' && ui.searchLang!=='all') ? ui.searchLang : (opts.lang||'');
@@ -2923,7 +2923,7 @@ async function searchGoogleBooks(q, opts={}){
     throw new Error('gb-'+res.status);
   }
   if(data.error){ if(data.error.code===429) _gbQuotaHit = true; throw new Error('gb-'+(data.error.code||'err')); }
-  const items = (data.items||[]).filter(it=>it.volumeInfo && it.volumeInfo.title).map(it => {
+  const googleItems = (data.items||[]).filter(it=>it.volumeInfo && it.volumeInfo.title).map(it => {
     const v = it.volumeInfo;
     return {
       title: v.title + (v.subtitle ? ' — '+v.subtitle : ''),
@@ -2935,12 +2935,26 @@ async function searchGoogleBooks(q, opts={}){
       type: guessType((v.categories||[]).join(' '), v.title),
       lang: String(v.language||''),
       description: typeof v.description==='string' ? v.description : '',
+      source:'googlebooks',
     };
   });
+  const bnfItems = (Array.isArray(data.bnfItems) ? data.bnfItems : []).filter(r=>r && typeof r.title==='string' && r.title.trim()).map(r=>({
+    title:String(r.title).trim().slice(0,300),
+    authors:Array.isArray(r.authors) ? r.authors.filter(a=>typeof a==='string' && a.trim()).map(a=>a.trim().slice(0,200)).slice(0,8) : [],
+    year:numIn(r.year,1000,2200), pages:numIn(r.pages,1,100000), cover:cleanCover(r.cover),
+    isbn:String(r.isbn||'').replace(/[^0-9Xx]/g,'').toUpperCase().slice(0,13),
+    type:['livre','bd','manga'].includes(r.type) ? r.type : 'livre', lang:olLang(r.lang),
+    description:typeof r.description==='string' ? r.description.slice(0,5000) : '',
+    series:typeof r.series==='string' ? r.series.slice(0,150) : '', volume:numIn(r.volume,1,9999), source:'bnf',
+  }));
+  if(data.tomeSources && data.tomeSources.google!=='ok'){
+    _gbPartial=true;
+    if(data.tomeSources.google==='gb-quota') _gbQuotaHit=true;
+  }
   // Recherche PAR ISBN : c'est l'édition qu'on a en main. Google renvoie parfois une autre
   // édition (traduction, poche) dont l'ISBN n'est pas celui scanné — on réimpose le nôtre.
-  if(isbn) items.forEach(r=>{ r.isbn = isbn; });
-  return items;
+  if(isbn) [...bnfItems, ...googleItems].forEach(r=>{ r.isbn = isbn; });
+  return [...bnfItems, ...googleItems];
 }
 async function searchOpenLibrary(q, opts={}){
   const isbn = isbnOf(q);
@@ -2978,6 +2992,7 @@ async function doSearch(q){
   // Une seule phrase est annoncée au lecteur d'écran (#search-live), pas les 20 lignes de la liste.
   const live = $('#search-live');
   const dire = t => { if(live) live.textContent = t; };
+  _gbQuotaHit=false; _gbTooFast=false; _gbPartial=false;
   dire('Recherche…');
   box.innerHTML = Array(4).fill('<div class="sr sk"><div class="mini"></div><div class="sri"><b></b><span></span></div></div>').join('');
   // Une frappe rapide lançait jusqu'à deux requêtes par lettre et laissait courir les anciennes :
@@ -2990,22 +3005,37 @@ async function doSearch(q){
   // annulation volontaire : ne rien peindre (une recherche plus récente s'en charge)
   if(settled.some(s => s.status==='rejected' && s.reason && s.reason.name==='AbortError')) return;
   const [gb, ol] = settled.map(s => s.status==='fulfilled' ? s.value : null);
-  const failed = settled.some(s => s.status==='rejected');
+  const failed = settled.some(s => s.status==='rejected') || _gbPartial;
   if(gb===null && ol===null){
     box.innerHTML = `<div class="search-hint">Recherche indisponible (hors ligne ?). Tu peux toujours passer par « Ajout manuel ».</div>`;
     dire('Recherche indisponible');
     return;
   }
-  const items = [], seen = new Set();
+  const items = [], byIsbn = new Map(), byTitle = new Map();
   for(const r of [...(gb||[]), ...(ol||[])]){
-    const key = (r.title+'|'+(r.authors[0]||'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
-    if(seen.has(key)) continue;
-    seen.add(key); items.push(r);
+    const isbn=String(r.isbn||'').replace(/[^0-9Xx]/g,'').toUpperCase();
+    const titleKey=(r.title+'|'+(r.authors[0]||'')).toLowerCase().replace(/[^a-z0-9à-ÿ]/g,'');
+    // Deux ISBN différents sont deux éditions différentes. Le titre sert de repli seulement
+    // lorsqu'une source ne fournit pas d'ISBN.
+    let i;
+    if(isbn && byIsbn.has(isbn)) i=byIsbn.get(isbn);
+    else if(!isbn && byTitle.has(titleKey)) i=byTitle.get(titleKey);
+    else if(isbn && byTitle.has(titleKey) && !items[byTitle.get(titleKey)].isbn) i=byTitle.get(titleKey);
+    if(i===undefined){
+      i=items.length; items.push(r);
+      if(isbn) byIsbn.set(isbn,i);
+      byTitle.set(titleKey,i);
+      continue;
+    }
+    const keep=items[i];
+    for(const k of ['cover','description','series','volume','pages','year','lang','isbn']) if(!keep[k] && r[k]) keep[k]=r[k];
+    if((!keep.authors || !keep.authors.length) && r.authors) keep.authors=r.authors;
+    if(isbn) byIsbn.set(isbn,i);
   }
   if(!items.length){
     box.innerHTML = `<div class="search-hint">${failed
-      ? (_gbTooFast ? 'Trop de recherches d’affilée : Google Books se repose une minute. Open Library répond seule, et elle n’a rien trouvé.'
-        : _gbQuotaHit ? 'Google Books a atteint sa limite du jour : seule Open Library répond, et elle n’a rien trouvé. Essaie l’ISBN, une autre langue (menu Langue), ou « Ajout manuel ».'
+      ? (_gbTooFast ? 'Trop de recherches d’affilée : réessaie dans une minute ou passe par « Ajout manuel ».'
+        : _gbQuotaHit ? 'Google Books a atteint sa limite du jour ; la BnF et Open Library n’ont rien trouvé. Essaie l’ISBN, une autre langue (menu Langue), ou « Ajout manuel ».'
                       : 'Une des sources est indisponible et l’autre n’a rien trouvé — réessaie dans une minute ou passe par « Ajout manuel ».')
       : 'Aucun résultat. Essaie une autre orthographe ou une autre langue (menu Langue), ou passe par « Ajout manuel ».'}</div>`;
     dire('Aucun résultat');
@@ -3018,8 +3048,8 @@ async function doSearch(q){
   window._searchItems = items;
   const note = (failed && (_gbQuotaHit || _gbTooFast))
     ? `<div class="search-hint" style="margin-bottom:8px">${_gbTooFast
-        ? 'Trop de recherches d’affilée — résultats Open Library seulement, le temps que Google Books se repose (une minute).'
-        : 'Google Books a atteint sa limite du jour — résultats Open Library seulement (moins de couvertures).'}</div>` : '';
+        ? 'Trop de recherches d’affilée — résultats déjà chargés seulement, puis réessaie dans une minute.'
+        : 'Google Books a atteint sa limite du jour — résultats BnF et Open Library seulement.'}</div>` : '';
   // Doublons : on ajoutait deux fois le même livre sans rien voir. La bibliothèque est indexée
   // par (titre, premier auteur) — la même clé que les recommandations — et la ligne concernée
   // propose d’ouvrir la fiche existante au lieu d’un second exemplaire.
@@ -3040,8 +3070,8 @@ async function doSearch(q){
       <button type="button" class="btn small primary add" data-i="${i}" aria-label="Ajouter comme ${esc(STATUS_LABEL[ui.defaultStatus].toLowerCase())}">${esc(addLbl())}</button>`}
     </div>`; }).join('');
   dire(`${plur(items.length,'résultat')} pour « ${q} »`
-    + ((failed && _gbTooFast) ? ' — Open Library seulement, trop de recherches d’affilée.'
-     : (failed && _gbQuotaHit) ? ' — Open Library seulement, Google Books a atteint sa limite du jour.' : ''));
+    + ((failed && _gbTooFast) ? ' — trop de recherches d’affilée.'
+     : (failed && _gbQuotaHit) ? ' — BnF et Open Library seulement, Google Books a atteint sa limite du jour.' : ''));
 }
 function parseTome(title){
   let m = title.match(/^(.*?)[\s,–—:-]*(?:tome|t\.|vol(?:ume)?\.?|#)\s*(\d{1,4})\b/i);
@@ -3064,7 +3094,7 @@ $('#search-results').addEventListener('click', async e => {
     title:r.title, authors:r.authors||[], type:r.type||'livre',
     year:r.year||null, pages:r.pages||null, cover:cleanCover(r.cover||''), isbn:r.isbn||'',
     synopsis:cleanSynopsis(r.description||''), status:ui.defaultStatus,
-    series:pt.series||'', volume:pt.volume ?? null,
+    series:r.series||pt.series||'', volume:r.volume ?? pt.volume ?? null,
   };
   if(edit){
     // « Détails » : passer par le formulaire complet. Pas de closeOverlays : openOverlay gère la
@@ -6624,7 +6654,8 @@ function shelfKey(b){ return (b.title+'|'+((b.authors||[])[0]||'')+'|'+(b.volume
 // sous-ensemble partageable de la bibliothèque
 // Miroir client de cleanSharedCover (worker) : sert uniquement à prévenir l’utilisateur ;
 // le serveur reste seul juge de ce qu’il accepte.
-const SHAREABLE_COVER = /^https:\/\/(covers\.openlibrary\.org\/b\/(id|isbn|olid)\/[A-Za-z0-9]+-[SML]\.jpg|books\.google(usercontent)?\.com\/books\/)/;
+const CACHEABLE_COVER = /^(?:https:\/\/(?:covers\.openlibrary\.org\/b\/(?:id|isbn|olid)\/[A-Za-z0-9]+-[SML]\.jpg|books\.google(?:usercontent)?\.com\/books\/)|https:\/\/openapi\.bnf\.fr\/couverture\/image\/image\/recupererImage\?ISBN=[0-9Xx-]+&couverture=1)/;
+const SHAREABLE_COVER = /^(?:https:\/\/(?:covers\.openlibrary\.org\/b\/(?:id|isbn|olid)\/[A-Za-z0-9]+-[SML]\.jpg|books\.google(?:usercontent)?\.com\/books\/)|https:\/\/openapi\.bnf\.fr\/couverture\/image\/image\/recupererImage\?ISBN=[0-9Xx-]+&couverture=1)/;
 // La bibliothèque de démonstration (tag 'exemple') est un bac à sable LOCAL : elle ne doit
 // jamais être partagée ni sauvegardée sur un compte — sinon les critiques d’exemple sortent
 // signées du nom de l’utilisateur sur sa page publique et chez ses amis.
@@ -7641,7 +7672,7 @@ Base légale : ton consentement (recueilli à l’inscription).
 Âge minimum : Tome s’adresse aux 15 ans et plus (âge du consentement numérique en France) ; en dessous, l’inscription nécessite l’accord d’un parent ou tuteur.
 Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi uniquement. Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Le partage social est réglé sur « Rien » par défaut. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis › Partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n’envoie jamais rien. Exception si tu l’actives toi-même : « Ma page publique » (Amis › Partage) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
 Pages publiques des livres : Tome tient un catalogue commun des livres partagés (titre, auteurs, couverture, résumé — des données de livre, jamais de personne). La page publique d’un livre affiche une note moyenne ANONYME calculée uniquement sur les membres ayant publié leur page, et seulement à partir de 3 notes (jamais une personne devinable) ; elle affiche les critiques signées de leur pseudo des seuls membres à page publique réglés sur « Tout ». Rendre ta page privée retire immédiatement tes notes et critiques de ces pages.
-Services tiers : Tome n’installe aucun traceur. Ta recherche de livres transite par le serveur de Tome, qui interroge Google Books à ta place : le texte cherché sert à construire cet appel puis disparaît — il n’est ni journalisé, ni conservé, ni rattaché à un compte, et Google ne voit ni ton adresse IP ni ton navigateur. La réponse (des données de livre, jamais de personne) est mise en cache 24 heures pour tout le monde. En revanche, pour interroger Open Library et pour afficher les couvertures, ton navigateur contacte directement openlibrary.org, covers.openlibrary.org et books.google.com — qui reçoivent alors ta requête ou l’identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n’a lieu que quand tu la déclenches ; les « Idées du jour » ne s’activent qu’avec ton accord explicite.
+Services tiers : Tome n’installe aucun traceur. Ta recherche de livres transite par le serveur de Tome, qui interroge le catalogue de la BnF et Google Books à ta place : le texte cherché sert à construire ces appels puis disparaît — il n’est ni journalisé, ni conservé, ni rattaché à un compte, et ces services ne voient ni ton adresse IP ni ton navigateur. La réponse (des données de livre, jamais de personne) est mise en cache 24 heures pour tout le monde. En revanche, pour interroger Open Library et pour afficher les couvertures, ton navigateur contacte directement openlibrary.org, covers.openlibrary.org, books.google.com ou openapi.bnf.fr — qui reçoivent alors ta requête ou l’identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n’a lieu que quand tu la déclenches ; les « Idées du jour » ne s’activent qu’avec ton accord explicite.
 Cookies et traceurs : Tome n’utilise aucun cookie publicitaire ni de mesure d’audience — uniquement le stockage strictement nécessaire au service (ta bibliothèque sur ton appareil, ta session). Ces usages sont exemptés de consentement, c’est pourquoi il n’y a pas de bannière cookies.
 Hébergement et transferts : Cloudflare, Inc. (101 Townsend St, San Francisco, États-Unis) ; la base de données est hébergée en Europe de l’Ouest. Les flux transitant hors de l’UE sont encadrés par les garanties reconnues (certification Data Privacy Framework et clauses contractuelles types).
 Liens d’achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d’affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d’Amazon qui s’appliquent.
