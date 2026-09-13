@@ -4,6 +4,30 @@ const LS_KEY = 'tome-v1';
 const LEGACY_KEYS = ['signet-v1'];
 const THEME_KEY = 'tome-theme';
 const UI_KEY = 'tome-ui';
+// Stockage du site refusé par le navigateur (Chrome « Bloquer tous les cookies », Safari ou
+// Firefox en mode strict, certaines vues intégrées) : le simple accès à localStorage lève une
+// SecurityError. load() le lisait sans filet au premier niveau, donc tout le script s’arrêtait :
+// page blanche. On pose à la place un stockage en mémoire de même surface — l’app fonctionne
+// le temps de la visite (et un compte connecté sauvegarde sur le serveur), un bandeau prévient
+// que rien ne restera sur l’appareil. Seule une LECTURE qui échoue compte : un setItem qui lève
+// peut n’être qu’un stockage plein, que save() gère déjà sans perdre l’accès aux données.
+const STORAGE_BLOCKED = (()=>{
+  try{ window.localStorage.getItem(LS_KEY); return false; }
+  catch(_){
+    const memStorage = () => { const mem = new Map(); return {
+      getItem: k => mem.has(String(k)) ? mem.get(String(k)) : null,
+      setItem: (k, v) => { mem.set(String(k), String(v)); },
+      removeItem: k => { mem.delete(String(k)); },
+      clear: () => { mem.clear(); },
+      key: i => [...mem.keys()][i] ?? null,
+      get length(){ return mem.size; },
+    }; };
+    try{ Object.defineProperty(window, 'localStorage', { value: memStorage(), configurable:true, writable:true }); }catch(_){ }
+    try{ window.sessionStorage.getItem('x'); }
+    catch(_){ try{ Object.defineProperty(window, 'sessionStorage', { value: memStorage(), configurable:true, writable:true }); }catch(_){ } }
+    return true;
+  }
+})();
 const TYPE_LABEL = {livre:'Livre', bd:'BD', manga:'Manga'};
 const STATUS_LABEL = {wishlist:'À lire', reading:'En cours', read:'Lu', abandoned:'Abandonné'};
 const MOODS = ['entraînant','sombre','drôle','émouvant','réconfortant','tendu','réflexif','mélancolique','angoissant','inspirant','poétique','haletant'];
@@ -729,6 +753,21 @@ function save(skipCount){
   }
 }
 $('#save-warning-export').addEventListener('click', ()=>$('#btn-export').click());
+// Stockage refusé (voir STORAGE_BLOCKED) : même bandeau que « stockage plein », autre message, et
+// il se ferme — la personne a fait ce choix exprès, on la prévient une fois sans la harceler.
+// save() réussit en mémoire et appelle setSaveBroken(false), qui ne touche au bandeau que si
+// _saveBroken change : il reste donc affiché jusqu’au ✕.
+if(STORAGE_BLOCKED){
+  const bar = $('#save-warning'), msg = bar && bar.querySelector('span');
+  if(msg){
+    msg.textContent = 'Ton navigateur bloque le stockage de ce site : rien ne restera sur cet appareil après la fermeture. Connecte-toi ou exporte ta bibliothèque avant de partir.';
+    const x = document.createElement('button');
+    x.type = 'button'; x.className = 'x'; x.textContent = '✕'; x.setAttribute('aria-label', 'Fermer l’alerte');
+    x.addEventListener('click', ()=>{ bar.hidden = true; });
+    bar.appendChild(x);
+    bar.hidden = false;
+  }
+}
 
 const ui = {
   view:'today', status:'all', types:new Set(), q:'', tag:'', sort:'added', groupSeries:true, libLayout:'grid',
@@ -1685,6 +1724,7 @@ function markRead(b, opts){
   const msg = relecture ? (quand ? 'Relecture datée d’aujourd’hui ✓ — ajoutée au journal' : 'Relecture enregistrée ✓ — nouvelle date au journal')
     : (gi && gi.done <= gi.goal) ? `Lu${quand} ✓ — inscrit au journal · ${fmtRatio(gi.done, gi.goal)} de ton objectif ${y}`
     : `Marqué lu${quand} — ajouté au journal ✓`;
+  if(opts && opts.quiet) return;   // appel programmatique (selftest) : l’état change, rien à annoncer
   if(quand){
     toast(msg, {label:'Autre date', ms:8000, onAction: async ()=>{
       const v = await uiPrompt({title:'Date de fin de lecture', message:`Quand as-tu terminé « ${fullTitle(b)} » ?`, value:today(), type:'date', okLabel:'Enregistrer'});
@@ -1843,7 +1883,7 @@ function renderLibrary(){
   const grid = $('#lib-grid'), emptyBox = $('#lib-empty');
   renderRecapTeaser();
   if(!state.books.length){
-    grid.innerHTML = ''; $('#lib-count').textContent = ''; $('#lib-count').dataset.base = '';
+    grid.innerHTML = ''; setLibCount('', ''); $('#lib-count').dataset.base = '';
     emptyBox.innerHTML = `<div class="onboard">
       <div class="ob-head">
         <div class="big orn" aria-hidden="true">❦</div>
@@ -1913,8 +1953,8 @@ function renderLibrary(){
   // Un statut filtré se lit aussi ici : sur téléphone la puce active peut être sortie du ruban, et
   // après un saut depuis Aujourd’hui on doit pouvoir revenir à tout d’un geste.
   const STATUS_FILTER_LBL = {read:'Lus', reading:'En cours', wishlist:'À lire', abandoned:'Abandonnés', fav:'Favoris', loan:'Prêtés'};
-  $('#lib-count').innerHTML = `<span class="lc-txt">${esc(countTxt + (_coverProgress ? ` · ${_coverProgress}` : ''))}</span>` +
-    (ui.status!=='all' ? ` · Filtre : ${esc(STATUS_FILTER_LBL[ui.status]||ui.status)} · <button type="button" class="linkish" id="lib-showall">Tout afficher</button>` : '');
+  setLibCount(countTxt + (_coverProgress ? ` · ${_coverProgress}` : ''),
+    ui.status!=='all' ? ` · Filtre : ${esc(STATUS_FILTER_LBL[ui.status]||ui.status)} · <button type="button" class="linkish" id="lib-showall">Tout afficher</button>` : '');
   if(!arr.length){
     emptyBox.innerHTML = `<div class="empty"><div class="big orn" aria-hidden="true">❦</div>
       <h3>Rien sur cette étagère</h3><p>Ces filtres ne laissent passer aucun titre. Élargis, ou range-les.</p>
@@ -4241,7 +4281,7 @@ $('#detail-body').addEventListener('click', e => {
     const q = (b.quotes||[]).find(x=>x.id===qd.dataset.qdel);
     b.quotes = (b.quotes||[]).filter(x=>x.id!==qd.dataset.qdel);
     save(); openDetail(b.id); scheduleRender();
-    if(q) toast('Passage supprimé', {label:'Annuler', onAction:()=>{ b.quotes.push(q); save(); if(ui.detailId===b.id) openDetail(b.id); scheduleRender(); }});
+    if(q) toast('Passage supprimé', {label:'Annuler', onAction:()=>{ b.quotes.push(q); save(); if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id); scheduleRender(); }});
     return;
   }
   if(e.target.closest('#d-loan-out')){
@@ -4264,7 +4304,7 @@ $('#detail-body').addEventListener('click', e => {
     })();
     return;
   }
-  if(e.target.closest('#d-loan-back')){ const loan=b.loan; b.loan=null; save(); openDetail(b.id); scheduleRender(); toast('Retour enregistré ✓', {label:'Annuler', onAction:()=>{b.loan=loan; save(); if(ui.detailId===b.id) openDetail(b.id); scheduleRender();}}); return; }
+  if(e.target.closest('#d-loan-back')){ const loan=b.loan; b.loan=null; save(); openDetail(b.id); scheduleRender(); toast('Retour enregistré ✓', {label:'Annuler', onAction:()=>{b.loan=loan; save(); if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id); scheduleRender();}}); return; }
   if(e.target.closest('#d-add-reading')){
     const d = $('#d-newdate').value;
     if(!isValidDate(d)) return;
@@ -4282,7 +4322,7 @@ $('#detail-body').addEventListener('click', e => {
     const r = (b.readings||[]).find(x=>x.id===del.dataset.rid);
     b.readings = (b.readings||[]).filter(x=>x.id!==del.dataset.rid);
     save(); openDetail(b.id); scheduleRender();
-    if(r) toast('Date supprimée', {label:'Annuler', onAction:()=>{ b.readings.push(r); save(); if(ui.detailId===b.id) openDetail(b.id); scheduleRender(); }});
+    if(r) toast('Date supprimée', {label:'Annuler', onAction:()=>{ b.readings.push(r); save(); if(ui.detailId===b.id && $('#ov-detail').classList.contains('open')) openDetail(b.id); scheduleRender(); }});
     return;
   }
   const unl = e.target.closest('[data-unlist]');
@@ -5300,8 +5340,17 @@ function setCoverProgress(txt){
   const base = el.dataset.base || '';
   const full = base + (txt ? (base ? ' · ' : '') + txt : '');
   // .lc-txt porte le décompte seul ; le lien « Tout afficher » qui le suit doit survivre à la mise à jour
-  const span = el.querySelector('.lc-txt');
-  if(span) span.textContent = full; else el.textContent = full;
+  setLibCount(full);
+}
+// #lib-count = deux enfants fixes d’index.html : .lc-txt (role=status, le décompte) et .lc-filter
+// (filtre actif + « Tout afficher »). Les écrire séparément garde la région annoncée stable :
+// un lecteur d’écran n’entend que « 12 ouvrages », et seulement quand le texte change vraiment
+// (renderLibrary repasse souvent avec le même décompte). filterHTML omis = filtre inchangé.
+function setLibCount(txt, filterHTML){
+  const el = $('#lib-count'); if(!el) return;
+  const span = el.querySelector('.lc-txt'), filt = el.querySelector('.lc-filter');
+  if(span){ if(span.textContent !== txt) span.textContent = txt; } else el.textContent = txt;
+  if(filt && filterHTML !== undefined && filt.innerHTML !== filterHTML) filt.innerHTML = filterHTML;
 }
 function queueCovers(pairs){
   pairs = pairs.filter(p=>p.isbn);
@@ -7399,9 +7448,11 @@ function renderFriends(){
   const box = $('#friends-body');
   // Ancien sous-onglet « Compte » (état hérité d’un chemin non migré) : il vit dans sa propre vue.
   if(social.tab==='account'){ social.tab='feed'; selectView('account'); return; }
-  // Le titre de la vue suit l’état : « Amis » n’a de sens qu’une fois connecté ; avant, c’est
-  // son compte que l’utilisateur vient créer ou retrouver.
-  const h = $('#view-friends h2.section'); if(h) h.textContent = social.me ? 'Amis' : 'Mon compte';
+  // L’onglet s’appelle « Amis » dans tous les cas. Hors session, il s’intitulait « Mon compte » et
+  // proposait l’inscription pendant que la vraie vue Mon compte (bouton avatar) proposait la
+  // connexion : deux portes du même nom vers la même chose. Ici on explique ce que les amis
+  // apportent, et le formulaire suit (renderAuth).
+  const h = $('#view-friends h2.section'); if(h) h.textContent = 'Amis';
   // Une session expirée s’explique : sans ça, le formulaire de connexion ressemble à une
   // déconnexion inexpliquée — et on proposerait de s’inscrire à quelqu’un qui a déjà un compte.
   if(!social.me){
@@ -7881,10 +7932,16 @@ function renderAuth(box, mode, errMsg=''){
   // renderAuth peut être appelé directement (page d’accueil, « Inviter un ami ») sans passer par
   // renderFriends : le titre est donc aussi posé ici — seulement dans Amis, la vue Mon compte
   // garde le sien
-  const h = $('#view-friends h2.section'); if(h && box.closest('#view-friends')) h.textContent = social.me ? 'Amis' : 'Mon compte';
+  const inFriends = !!box.closest('#view-friends');
+  const h = $('#view-friends h2.section'); if(h && inFriends) h.textContent = 'Amis';
+  // Dans Amis, le formulaire seul ne dit pas pourquoi on le remplit : une phrase sur ce que le
+  // compte ouvre ici. Pas quand une invitation (déjà expliquée) ou une erreur occupe la place.
+  const gate = inFriends && !social.invite && !errMsg
+    ? `<p class="friends-gate">Suis ce que lisent tes amis, recommande-leur un livre, compare vos goûts. Il faut pour ça un compte, gratuit et sans email.</p>`
+    : '';
   dropOtherAuthForm(box);
   box.innerHTML = `
-    ${social.invite ? `<div class="invite-banner"><b>@${esc(social.invite)}</b> t’invite sur Tome — connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : ''}
+    ${social.invite ? `<div class="invite-banner"><b>@${esc(social.invite)}</b> t’invite sur Tome — connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : gate}
     <div class="auth-card">
       <h3>${mode==='login'?'Se connecter':'Créer un compte'}</h3>
       <p class="sub">${mode==='login'
@@ -9012,7 +9069,7 @@ if(location.search.includes('selftest')){
   const _nb = normalizeBook({title:'Début', startedAt:'2026-03-03', currentPct:'35', readings:[{date:'2026-03-18', start:'2026-03-03'},{date:'2026-04-01', start:'2026-05-01'}]});
   assert('F40 : normalizeBook garde startedAt, currentPct et readings[].start (jamais après la fin)', _nb.startedAt==='2026-03-03' && _nb.currentPct===35 && _nb.readings[0].start==='2026-03-03' && _nb.readings[1].start===null);
   assert('F40 : du 3 au 18 mars = 15 jours', daysBetween('2026-03-03','2026-03-18')===15 && readingDaysText({start:'2026-03-03', date:'2026-03-18'})==='· '+plur(15,'jour')); // plur pose l’insécable (F29)
-  const _mr = {id:'mr', title:'Fin', status:'reading', startedAt:'2026-09-01', readings:[], progressLog:[]}; markRead(_mr);
+  const _mr = {id:'mr', title:'Fin', status:'reading', startedAt:'2026-09-01', readings:[], progressLog:[]}; markRead(_mr, {quiet:true});
   assert('F40 : markRead reporte la date de début sur la lecture et la consomme', _mr.status==='read' && _mr.readings[0].start==='2026-09-01' && _mr.startedAt===null);
   const _sess = sessionEntries([{id:'x', pages:300, readings:[{date:'2026-02-10'}], progressLog:[{date:'2026-02-01',page:20},{date:'2026-02-01',page:60},{date:'2026-02-05',page:0},{date:'2026-02-10',page:300}]}]);
   assert('F40 : une session par jour (dernière page), sans remise à zéro ni jour de fin', _sess.length===1 && _sess[0].page===60 && _sess[0].date==='2026-02-01');

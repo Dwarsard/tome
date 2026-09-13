@@ -53,6 +53,12 @@
   --rule:#141311;
 }
 *{box-sizing:border-box; margin:0; padding:0}
+/* L'attribut hidden gagne toujours. Sans ça, toute règle display:flex/inline-flex d'une classe
+   l'écrase (styles auteur > UA) : c'était le quatrième cas (.btn, .fab, .bulkbar…) et il en
+   restait deux — les bandeaux vides #now-reading/#discover laissaient ~45 px de blanc en tête
+   de la bibliothèque, et « Installer » s'affichait sur l'accueil même dans l'app installée.
+   Les règles [hidden]/:not([hidden]) plus bas restent valables, elles deviennent redondantes. */
+[hidden]{display:none !important}
 html{scrollbar-color:var(--surface2) var(--bg)}
 .sr-only{position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important}
 .skip-link{position:fixed; z-index:1000; top:10px; left:10px; transform:translateY(-180%); padding:9px 14px; border-radius:var(--r-sm); background:var(--surface); color:var(--text); border:2px solid var(--green); font-weight:700; text-decoration:none; box-shadow:var(--sh-2)}
@@ -389,8 +395,8 @@ body.selecting .card .qk{display:none}
 #data-warning{position:fixed; left:14px; right:14px; margin-inline:auto; width:fit-content; bottom:calc(20px + env(safe-area-inset-bottom)); z-index:219; align-items:center; gap:12px; background:var(--surface2); border:1px solid color-mix(in srgb, var(--orange) 55%, var(--border)); border-radius:var(--r-md); padding:10px 16px; box-shadow:var(--shadow); font-size:var(--fs-base); max-width:calc(100vw - 28px)}
 #data-warning:not([hidden]){display:flex}
 #data-warning span{color:var(--text)}
-#data-warning .x{color:var(--muted); font-size:var(--fs-lg); line-height:1; padding:4px 8px; border-radius:6px; min-height:24px; margin-left:auto}
-#data-warning .x:hover{color:var(--text); background:var(--surface)}
+#data-warning .x, #save-warning .x{color:var(--muted); font-size:var(--fs-lg); line-height:1; padding:4px 8px; border-radius:6px; min-height:24px; margin-left:auto}
+#data-warning .x:hover, #save-warning .x:hover{color:var(--text); background:var(--surface)}
 /* Badge hors-ligne et état de la sauvegarde sur le compte : même gabarit dans l'en-tête */
 #offline-badge,#lib-status{font-size:var(--fs-sm); font-weight:700; align-self:center; white-space:nowrap}
 #offline-badge{color:var(--orange)}
@@ -989,6 +995,8 @@ body.selecting .row-stars, body.selecting .lrow .rmenu{pointer-events:none; opac
 /* FAB mobile */
 .fab{display:none}
 /* ---------- Amis ---------- */
+/* Hors session : ce que le compte ouvre dans Amis, au-dessus du formulaire, sur la même colonne */
+.friends-gate{max-width:400px; margin:12px auto 0; font-family:var(--font-serif); font-size:var(--fs-lg); line-height:1.5; color:var(--muted)}
 .auth-card{max-width:400px; margin:20px auto; background:var(--bg2); border:1px solid var(--border); border-radius:var(--r-md); padding:22px}
 .auth-card h3{font-size:var(--fs-xl); margin-bottom:4px}
 .auth-card p.sub{font-size:var(--fs-base); color:var(--muted); margin-bottom:16px}

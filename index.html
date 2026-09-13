@@ -230,7 +230,9 @@
     <div class="loan-alert" id="loan-alert" role="status" hidden></div>
     <div class="study-alert" id="study-alert" role="status" hidden></div>
     <div class="now-strip" id="now-reading" hidden></div>
-    <div class="count-note" id="lib-count" role="status"></div>
+    <!-- Seul le décompte est annoncé (role=status) : le filtre actif et son bouton « Tout afficher »
+         vivent à côté, sinon chaque changement de filtre relisait le libellé du bouton. -->
+    <div class="count-note" id="lib-count"><span class="lc-txt" role="status"></span><span class="lc-filter"></span></div>
     <!-- Aide clavier lue par les lecteurs d’écran : seule la carte (son bouton-cible) est dans l’ordre
          de tabulation, les actions rapides passent par ces touches (voir keydown de #lib-grid). -->
     <p class="sr-only" id="lib-keys-help">Sur une carte : flèches pour se déplacer, Entrée pour ouvrir, L pour marquer comme lu, F pour mettre en favori, Espace pour sélectionner.</p>
