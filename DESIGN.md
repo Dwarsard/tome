@@ -21,10 +21,13 @@ Tome tutoie, parle à une personne et non à « l'utilisateur », et dit quoi fa
 - **Épicène sans point médian** : jamais « auteur·e », « prévenu·e », « seul(e) », « le/la ». On tourne la phrase autrement — « Auteurs et autrices », « Recevoir une alerte », « visible de toi uniquement », « Plume de l'année », « Cette personne », « Sois la première personne à répondre ». Le point médian casse la lecture à voix haute et les lecteurs d'écran.
 - **Pluriels par `plur(n, 'livre')`** (ou `plur(n, 'livre existe', 'livres existent')` quand le verbe s'accorde) : plus de « titre(s) » ni de `${n>1?'s':''}` en clair. `fmtPct(42)` → « 42 % », `fmtRatio(3, 10)` → « 3 / 10 », `fmtDec(3.5)` → « 3,5 » — espaces insécables comprises.
 - **Typographie française dans le code aussi** : espace insécable (U+00A0) avant `? ! :` et à l'intérieur des guillemets « », apostrophe typographique ’, jamais de « 42% » collé. `frTypo()` s'occupe des textes saisis ; les chaînes de l'interface s'écrivent directement avec les bons caractères (le selftest le vérifie sur `SEARCH_HINT`).
-- **Une seule voix pour le réseau** : toute erreur d'`api()` passe par `netMsg(e)` — « Pas de connexion — réessaie quand le réseau sera revenu. », « Trop de demandes d'un coup — attends une minute. », « Tome a un souci de son côté, réessaie dans un instant. » Pas de « Serveur injoignable » ni de « Erreur 503 ».
+- **Une seule voix pour le réseau** : toute erreur d'`api()` passe par `netMsg(e)` — « Pas de connexion. Réessaie quand le réseau sera revenu. », « Trop de demandes d'un coup. Attends une minute. », « Tome a un souci de son côté, réessaie dans un instant. » Pas de « Serveur injoignable » ni de « Erreur 503 ».
 - **Libellés qui disent l'action, pas la technique** : « Ajout manuel » plutôt que « Manuel », « Scanner », « Compléter… » plutôt que « Détails », « Mémoriser » plutôt que « ＋ Filtre », « Importer depuis Goodreads, StoryGraph ou Babelio » plutôt que « Importer un CSV », « Texte (.md) » plutôt que « Markdown », « Suppression du compte » plutôt que « Zone danger », « à réconcilier » plutôt que « conflit-sync ».
 - **Le geste réellement disponible** : sur écran tactile (`pointer:coarse`), pas de « Appuie sur Espace » ni de « clique ici » — « Touche la carte », une flèche →.
 - **Bandeaux courts** : deux phrases à l'écran, le détail derrière un « Comment ça marche ? » qui ouvre une modale.
+- **Pas de tiret cadratin dans un texte d'interface** (lot 7, 20/09/2026) : c'est devenu la signature des textes générés, et l'app en comptait près de 150. Une consigne s'écrit en deux phrases (« Pas de connexion. Réessaie… »), une explication prend un deux-points, une incise une virgule ou des parenthèses, une donnée un point médian (« Dune, Frank Herbert · Tome »). Le seul tiret qui reste est la valeur vide des tuiles (« — »). Un titre de série s'écrit « Série, tome 3 : Titre », un sous-titre « Titre : sous-titre », comme sur une notice.
+- **Pas de rythme ternaire ni de slogan** : « sans pub, sans spoilers, sans classement », « ton avis, à ta façon », « Commence ta bibliothèque aujourd'hui » sont des phrases de gabarit. On écrit ce qui est vrai et précis (« Pas de pub, pas d'email à donner »), ou une question qu'on poserait à un ami (« Tu en es où de « Dune » ? », « Par quel livre tu commences ? »).
+- **Capitales espacées : trois endroits, pas un de plus.** Le titre courant (`.today-run`), les jours du journal (`.entry .day span`) et le nom d'auteur des couvertures typographiques (`.ph .ph-a`). Titres de vue en Alegreya italique, intertitres et libellés en Alegreya Sans en bas de casse. Jamais de petite ligne en capitales couleur d'accent posée au-dessus d'un grand titre.
 
 ## Checklist avant chaque release (le rituel)
 
@@ -33,7 +36,11 @@ La structure trahit plus que la teinte. Vérifier qu'aucune nouvelle surface n'i
 - [ ] hero centré avec badge-pilule au-dessus du titre
 - [ ] rangée de 3 cartes « features » à icône
 - [ ] étapes numérotées 01 / 02 / 03
-- [ ] étiquettes TOUT-EN-CAPITALES hors petites capitales de métadonnées
+- [ ] étiquettes TOUT-EN-CAPITALES (seules exceptions : titre courant, jours du journal, auteur des couvertures typographiques)
+- [ ] sur-titre au-dessus d'un grand titre, mot du titre en couleur d'accent, ligne d'arguments à points médians
+- [ ] tiret cadratin dans un texte d'interface (`grep "—" app.js index.html` : il ne doit rester que les valeurs vides et les expressions régulières)
+- [ ] en-tête ou barre translucide avec flou (du papier, pas du verre), dégradé décoratif, ligne qui se soulève au survol
+- [ ] **une entrée dans le Journal des versions** (`CHANGELOG` dans `app.js`) pour toute mise en ligne qui change quelque chose pour le lecteur : datée, factuelle, sans embellir
 - [ ] emoji utilisé comme icône (SVG au trait uniquement)
 - [ ] fondu-au-scroll uniforme, lueur néon, ✨
 - [ ] dégradé bleu→violet, crème+terracotta mou (le rouge est SANG, pas terracotta)

@@ -693,7 +693,7 @@ function load(){
       // ne pas écraser une copie corrompue déjà conservée (garde la 1re, la plus ancienne)
       try{ if(!localStorage.getItem(key+'-corrupt')) localStorage.setItem(key+'-corrupt', raw); }catch(_){}
       corrupted = true;
-      notice = 'Données illisibles — copie de secours conservée. Va dans Mon compte › Mes données pour la récupérer.';
+      notice = 'Données illisibles : copie de secours conservée. Va dans Mon compte › Mes données pour la récupérer.';
     }
   }
   return {data:{books:[], lists:[], goals:{}, meta:{changes:0, lastExport:null}, series:{}, smartCollections:[]}, migrated:false, notice, corrupted};
@@ -732,7 +732,7 @@ function save(skipCount){
       const n = state.meta.changes; let essais = 3;
       const rappel = ()=>{
         if($('#toast').classList.contains('show')){ if(--essais > 0) setTimeout(rappel, 3000); return; } // un autre retour est à l’écran : on repasse
-        toast(`${n} modifications depuis ton dernier export — pense à sauvegarder`, { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
+        toast(`${n} modifications depuis ton dernier export, pense à sauvegarder`, { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
       };
       setTimeout(rappel, 2500);
     }
@@ -745,9 +745,9 @@ function save(skipCount){
     // connecté perd ses deux filets d’un coup et croit à tort être sauvé « sur son compte ».
     if(typeof scheduleLibPush==='function' && typeof social!=='undefined' && social.me){
       scheduleLibPush();
-      toast('Stockage plein — sauvegardé sur ton compte, mais pense à exporter', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
+      toast('Stockage plein : sauvegardé sur ton compte, mais pense à exporter', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
     }else{
-      toast('Sauvegarde impossible — stockage plein', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
+      toast('Sauvegarde impossible : stockage plein', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
     }
     return false;
   }
@@ -834,8 +834,8 @@ function authorsStr(b){ return (b.authors||[]).join(', '); }
 function hasTomeInTitle(t){ return /\b(tome|vol(?:ume)?\.?|t\.)\s*\d/i.test(t); }
 function fullTitle(b){
   let t = b.title;
-  if(b.series && b.volume!=null) t = `${b.series}, tome ${b.volume}` + (b.title && b.title.toLowerCase()!==b.series.toLowerCase() && !hasTomeInTitle(b.title) ? ` — ${b.title}` : '');
-  else if(b.volume!=null && !hasTomeInTitle(b.title)) t = `${b.title} — tome ${b.volume}`;
+  if(b.series && b.volume!=null) t = `${b.series}, tome ${b.volume}` + (b.title && b.title.toLowerCase()!==b.series.toLowerCase() && !hasTomeInTitle(b.title) ? ` : ${b.title}` : '');
+  else if(b.volume!=null && !hasTomeInTitle(b.title)) t = `${b.title}, tome ${b.volume}`;
   return t;
 }
 /* ---- Affiliation Amazon (liens d’achat / Kindle) ----
@@ -860,7 +860,7 @@ function contactHref(sujet){
 async function sendFeedback(){
   const txt = await openDialog({
     title:'Ton avis sur Tome',
-    message:'Ce qui te manque, ce qui coince, ce que tu aimes : tout est bon à prendre. Ton message part au responsable du site, avec l\u2019écran d\u2019où tu écris — rien d\u2019autre.',
+    message:'Ce qui te manque, ce qui coince, ce que tu aimes : tout est bon à prendre. Ton message part au responsable du site, avec l\u2019écran d\u2019où tu écris. Rien d\u2019autre.',
     input:{ multiline:true, placeholder:'Je trouve que\u2026' },
     actions:[{label:'Annuler', value:null, cancel:true},{label:'Envoyer', returnsInput:true, default:true}],
   });
@@ -873,7 +873,7 @@ async function sendFeedback(){
   }catch(e){
     // hors ligne ou serveur indisponible : ne pas perdre le texte, proposer le mail
     const ok = await uiConfirm({ title:'Envoi impossible pour l\u2019instant', message:'Tu peux l\u2019envoyer par mail à la place, ton texte sera repris dans le message.', okLabel:'Ouvrir mon mail', cancelLabel:'Plus tard' });
-    if(ok) location.href = contactHref('Tome — avis') + encodeURIComponent('\n' + reason);
+    if(ok) location.href = contactHref('Avis sur Tome') + encodeURIComponent('\n' + reason);
   }
 }
 /* ---- Google Books ----
@@ -1363,7 +1363,7 @@ function renderToday(){
   // Tant que la bibliothèque n’est QUE de la démo, l’écran d’accueil le dit : « La Horde du
   // Contrevent, page 210 » ne doit pas se lire comme la lecture en cours de l’utilisateur.
   const demoOnly = state.books.some(isDemoBook) && !state.books.some(b=>!isDemoBook(b));
-  $('#today-subtitle').textContent = `${demoOnly?'Bibliothèque d’exemple — ':''}${todayGreeting()}${firstName?' '+firstName:''}. ${reading?'Quelques pages suffisent pour garder le fil.':'Quelle histoire vas-tu faire entrer dans ta journée ?'}`;
+  $('#today-subtitle').textContent = `${demoOnly?'Bibliothèque d’exemple. ':''}${todayGreeting()}${firstName?' '+firstName:''}. ${reading?`Tu en es où de « ${fullTitle(reading)} » ?`:'Pas de lecture en cours. Tu ouvres quoi ensuite ?'}`;
   // Une « série » d’un seul jour n’en est pas une : on ne l’affiche qu’à partir de deux jours
   // (même seuil que la pill du header, updateStreakPill).
   const sk=streaks(), streak=$('#today-streak');
@@ -1410,7 +1410,7 @@ $('#today-body').addEventListener('click', async e=>{
   const step=e.target.closest('[data-today-step]'); if(step){ const b=state.books.find(x=>x.id===step.dataset.book); if(b) setProgress(b,(b.currentPage||0)+Number(step.dataset.todayStep)); return; }
   const exact=e.target.closest('[data-today-exact]'); if(exact){
     const b=state.books.find(x=>x.id===exact.dataset.todayExact); if(!b) return;
-    const v=await uiPrompt({title:`Progression — ${fullTitle(b)}`,message:b.pages?`Entre une page entre 0 et ${b.pages}.`:'Entre la page où tu t’es arrêté.',value:String(b.currentPage||''),placeholder:'Page',type:'number',okLabel:'Enregistrer'});
+    const v=await uiPrompt({title:`Progression de « ${fullTitle(b)} »`,message:b.pages?`Entre une page entre 0 et ${b.pages}.`:'Entre la page où tu t’es arrêté.',value:String(b.currentPage||''),placeholder:'Page',type:'number',okLabel:'Enregistrer'});
     if(v!==null && v!==''){ const n=Number(v); if(Number.isFinite(n) && n>=0) setProgress(b,n); else toast('Entre un numéro de page valide'); } return;
   }
   const finish=e.target.closest('[data-today-finish]'); if(finish){ const b=state.books.find(x=>x.id===finish.dataset.todayFinish); if(b){ markRead(b); save(); render(); } return; }
@@ -1721,9 +1721,9 @@ function markRead(b, opts){
   const gi = goalInfo(y);
   // Une date a été inventée : le dire (« aujourd’hui »), sinon le journal se remplit en douce.
   const quand = (opts && opts.undo==='date' && newId) ? ' aujourd’hui' : '';
-  const msg = relecture ? (quand ? 'Relecture datée d’aujourd’hui ✓ — ajoutée au journal' : 'Relecture enregistrée ✓ — nouvelle date au journal')
-    : (gi && gi.done <= gi.goal) ? `Lu${quand} ✓ — inscrit au journal · ${fmtRatio(gi.done, gi.goal)} de ton objectif ${y}`
-    : `Marqué lu${quand} — ajouté au journal ✓`;
+  const msg = relecture ? (quand ? 'Relecture datée d’aujourd’hui, ajoutée au journal ✓' : 'Relecture enregistrée, nouvelle date au journal ✓')
+    : (gi && gi.done <= gi.goal) ? `Lu${quand}, inscrit au journal ✓ · ${fmtRatio(gi.done, gi.goal)} de ton objectif ${y}`
+    : `Marqué lu${quand}, ajouté au journal ✓`;
   if(opts && opts.quiet) return;   // appel programmatique (selftest) : l’état change, rien à annoncer
   if(quand){
     toast(msg, {label:'Autre date', ms:8000, onAction: async ()=>{
@@ -1749,9 +1749,9 @@ function markRead(b, opts){
 
 // Bibliothèque d’exemple pour le premier lancement (couvertures Open Library, autorisées par la CSP)
 const DEMO_BOOKS = [
-  {title:'Berserk', series:'Berserk', volume:1, seriesTotal:41, type:'manga', authors:['Kentarō Miura'], year:1990, pages:224, status:'read', rating:5, favorite:true, tags:['dark fantasy','coup de cœur'], moods:['sombre','tendu'], pace:'moyen', review:'Un sommet du manga : violence, deuil et démesure.', cover:'https://covers.openlibrary.org/b/isbn/9781593070205-M.jpg', readings:[{date:'2025-03-12', rating:5}]},
-  {title:'Watchmen', type:'bd', authors:['Alan Moore','Dave Gibbons'], year:1987, pages:416, status:'read', rating:5, favorite:true, tags:['comics','classique'], moods:['sombre','réflexif'], review:'La BD qui a fait grandir le medium.', cover:'https://covers.openlibrary.org/b/isbn/9780930289232-M.jpg', readings:[{date:'2026-01-20', rating:5}]},
-  {title:'Dune', type:'livre', authors:['Frank Herbert'], year:1965, pages:688, status:'read', rating:4.5, tags:['SF','classique'], moods:['réflexif','inspirant'], pace:'lent', review:'Politique, écologie, mysticisme — dense et magistral.', cover:'https://covers.openlibrary.org/b/isbn/9780441172719-M.jpg', readings:[{start:'2026-01-20', date:'2026-02-15', rating:4.5}]},
+  {title:'Berserk', series:'Berserk', volume:1, seriesTotal:41, type:'manga', authors:['Kentarō Miura'], year:1990, pages:224, status:'read', rating:5, favorite:true, tags:['dark fantasy','coup de cœur'], moods:['sombre','tendu'], pace:'moyen', review:'Premier tome brutal, presque trop. C’est à partir du troisième que ça devient immense.', cover:'https://covers.openlibrary.org/b/isbn/9781593070205-M.jpg', readings:[{date:'2025-03-12', rating:5}]},
+  {title:'Watchmen', type:'bd', authors:['Alan Moore','Dave Gibbons'], year:1987, pages:416, status:'read', rating:5, favorite:true, tags:['comics','classique'], moods:['sombre','réflexif'], review:'Relu après avoir vu le film. La BD gagne, surtout pour le chapitre sur le Dr Manhattan.', cover:'https://covers.openlibrary.org/b/isbn/9780930289232-M.jpg', readings:[{date:'2026-01-20', rating:5}]},
+  {title:'Dune', type:'livre', authors:['Frank Herbert'], year:1965, pages:688, status:'read', rating:4.5, tags:['SF','classique'], moods:['réflexif','inspirant'], pace:'lent', review:'Les cent premières pages sont arides, ensuite on ne le lâche plus.', cover:'https://covers.openlibrary.org/b/isbn/9780441172719-M.jpg', readings:[{start:'2026-01-20', date:'2026-02-15', rating:4.5}]},
   {title:'Pluto', series:'Pluto', volume:1, seriesTotal:8, type:'manga', authors:['Naoki Urasawa'], year:2003, pages:200, status:'read', rating:5, tags:['SF'], moods:['émouvant','tendu'], cover:'https://covers.openlibrary.org/b/isbn/9781421519180-M.jpg', readings:[{date:'2026-03-30', rating:5}]},
   // Seul exemple « en cours » : daté et jalonné pour que la démo montre le début de lecture et les
   // sessions du Journal (F40) ; Dune, ci-dessus, montre une lecture datée de bout en bout.
@@ -1805,7 +1805,7 @@ function clearDemoGoal(){
 // (page de garde, onboarding vide, page publique d’un livre) et dure assez pour être lu.
 function startDemo(){
   loadDemo();
-  toast('Bac à sable : fouille, note, supprime — « Retirer les exemples » quand tu veux.', { ms:6000 });
+  toast('Bac à sable : fouille, note, supprime. « Retirer les exemples » quand tu veux.', { ms:6000 });
 }
 function renderDemoBanner(){
   let banner = $('#demo-banner');
@@ -1849,7 +1849,7 @@ function renderRecapTeaser(){
       if(e.target.closest('#recap-dismiss')){ try{ localStorage.setItem('tome-recap-teased-'+y,'1'); }catch(_){ } ban.remove(); }
     });
   }
-  ban.innerHTML = `<span><b>Ta rétro ${y} est prête</b> — ton année de lecture en une carte à partager.</span>
+  ban.innerHTML = `<span><b>Ta rétro ${y} est prête</b> : ton année de lecture en une carte à partager.</span>
     <span style="display:flex;gap:8px"><button class="btn small primary" id="recap-open">Voir </button><button class="btn small db-x" id="recap-dismiss" aria-label="Masquer">✕</button></span>`;
 }
 function renderLibrary(){
@@ -1888,7 +1888,7 @@ function renderLibrary(){
       <div class="ob-head">
         <div class="big orn" aria-hidden="true">❦</div>
         <h3>Commence ta bibliothèque</h3>
-        <p>Ajoute des livres, BD ou manga que tu as lus — ta collection, ton journal et tes recommandations démarrent tout de suite.</p>
+        <p>Ajoute des livres, BD ou manga que tu as lus. Ta collection, ton journal et tes recommandations démarrent tout de suite.</p>
         <button class="btn primary lp-big" id="ob-search">${ic('search',16)} Chercher un livre</button>
       </div>
       <div class="ob-or">ou tape parmi ces incontournables :</div>
@@ -2177,12 +2177,12 @@ function ideasGroupsHTML(groups){
 }
 // Deux phrases à l'écran, le détail (ce qui part, où, pourquoi) sur demande : le pavé de 330
 // caractères n'était lu par personne, et l'accord donné sans lecture n'en est pas un.
-const IDEAS_OPTIN_HTML = `<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques idées de lecture d’après tes coups de cœur. Pour ça, Tome interroge la BnF, Google Books et Open Library — rien d’autre ne quitte ton appareil. <button type="button" class="linkish" data-ideas-how>Comment ça marche ?</button></p>
+const IDEAS_OPTIN_HTML = `<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Reçois chaque jour quelques idées de lecture d’après tes coups de cœur. Pour ça, Tome interroge la BnF, Google Books et Open Library. Rien d’autre ne quitte ton appareil. <button type="button" class="linkish" data-ideas-how>Comment ça marche ?</button></p>
       <div style="display:flex;gap:8px"><button class="btn small primary" data-ideas-optin>Activer</button>
       <button class="btn small" data-ideas-later>Pas maintenant</button></div>`;
 const IDEAS_HOW_TEXT = `Chaque jour, Tome choisit quelques pistes d’après ta bibliothèque : les suites de tes séries, les auteurs que tu as bien notés, tes genres favoris.
 
-Pour trouver ces titres, il envoie le nom d’un auteur, d’une série ou d’un tag que tu aimes à la BnF, Google Books et Open Library — exactement comme lorsque tu fais une recherche. Ni ta bibliothèque, ni tes notes, ni ton compte ne sont transmis.
+Pour trouver ces titres, il envoie le nom d’un auteur, d’une série ou d’un tag que tu aimes à la BnF, Google Books et Open Library, exactement comme lorsque tu fais une recherche. Ni ta bibliothèque, ni tes notes, ni ton compte ne sont transmis.
 
 Tu peux désactiver les idées du jour à tout moment depuis la Bibliothèque.`;
 let _ideasAskMuted = false; // « Pas maintenant » : on reproposera à la prochaine session, pas avant
@@ -2864,7 +2864,7 @@ function renderJournal(){
     // Un état vide qui explique sans rien proposer laisse au lecteur le soin de deviner par où
     // commencer : les deux gestes qui remplissent un journal sont ici, à portée de pouce.
     box.innerHTML = `<div class="empty"><div class="big orn" aria-hidden="true">❦</div><h3>Ton journal attend sa première page</h3>
-      <p>Marque un titre comme « Lu » et il viendra s’inscrire ici, mois par mois — relectures comprises. Dans un an, ce sera ta plus belle liste.</p>
+      <p>Marque un titre comme « Lu » et il viendra s’inscrire ici, mois par mois, relectures comprises. Dans un an, ce sera ta plus belle liste.</p>
       <div class="today-actions">
         <button type="button" class="btn primary" id="journal-add-read">Enregistrer une lecture terminée</button>
         <button type="button" class="btn" id="journal-lib">Voir ma bibliothèque</button>
@@ -2963,7 +2963,7 @@ $('#journal-body').addEventListener('click', e => {
 });
 
 /* =============== Recherche / ajout =============== */
-const SEARCH_HINT = `<div class="search-hint">Recherche via la BnF, Google Books et Open Library — couvertures et infos remplies automatiquement.<br>Astuce : « One Piece 42 » préremplit la série et le tome. Introuvable ? « Ajout manuel ».</div>`;
+const SEARCH_HINT = `<div class="search-hint">Recherche via la BnF, Google Books et Open Library : couvertures et infos remplies automatiquement.<br>Astuce : « One Piece 42 » préremplit la série et le tome. Introuvable ? « Ajout manuel ».</div>`;
 // opts.keep : réouverture depuis la pile de modales (retour du formulaire « Détails ») — on garde
 // la requête et les résultats déjà affichés, et on ne redonne pas le focus au champ (le clavier
 // mobile masquerait la liste qu’on vient justement de retrouver).
@@ -3084,7 +3084,7 @@ async function searchGoogleBooks(q, opts={}){
   const googleItems = (data.items||[]).filter(it=>it.volumeInfo && it.volumeInfo.title).map(it => {
     const v = it.volumeInfo;
     return {
-      title: v.title + (v.subtitle ? ' — '+v.subtitle : ''),
+      title: v.title + (v.subtitle ? ' : '+v.subtitle : ''),
       authors: v.authors||[],
       year: +(v.publishedDate||'').slice(0,4) || null,
       pages: numOrNull(v.pageCount),
@@ -3194,7 +3194,7 @@ async function doSearch(q){
     box.innerHTML = `<div class="search-hint">${failed
       ? (_gbTooFast ? 'Trop de recherches d’affilée : réessaie dans une minute ou passe par « Ajout manuel ».'
         : _gbQuotaHit ? 'Google Books a atteint sa limite du jour ; la BnF et Open Library n’ont rien trouvé. Essaie l’ISBN, une autre langue (menu Langue), ou « Ajout manuel ».'
-                      : 'Une des sources est indisponible et l’autre n’a rien trouvé — réessaie dans une minute ou passe par « Ajout manuel ».')
+                      : 'Une des sources est indisponible et l’autre n’a rien trouvé. Réessaie dans une minute ou passe par « Ajout manuel ».')
       : 'Aucun résultat. Essaie une autre orthographe ou une autre langue (menu Langue), ou passe par « Ajout manuel ».'}</div>`;
     dire('Aucun résultat');
     return;
@@ -3206,8 +3206,8 @@ async function doSearch(q){
   window._searchItems = items;
   const note = (failed && (_gbQuotaHit || _gbTooFast))
     ? `<div class="search-hint" style="margin-bottom:8px">${_gbTooFast
-        ? 'Trop de recherches d’affilée — résultats déjà chargés seulement, puis réessaie dans une minute.'
-        : 'Google Books a atteint sa limite du jour — résultats BnF et Open Library seulement.'}</div>` : '';
+        ? 'Trop de recherches d’affilée : résultats déjà chargés seulement, puis réessaie dans une minute.'
+        : 'Google Books a atteint sa limite du jour : résultats BnF et Open Library seulement.'}</div>` : '';
   // Doublons : on ajoutait deux fois le même livre sans rien voir. La bibliothèque est indexée
   // par (titre, premier auteur) — la même clé que les recommandations — et la ligne concernée
   // propose d’ouvrir la fiche existante au lieu d’un second exemplaire.
@@ -3228,8 +3228,8 @@ async function doSearch(q){
       <button type="button" class="btn small primary add" data-i="${i}" aria-label="Ajouter comme ${esc(STATUS_LABEL[ui.defaultStatus].toLowerCase())}">${esc(addLbl())}</button>`}
     </div>`; }).join('');
   dire(`${plur(items.length,'résultat')} pour « ${q} »`
-    + ((failed && _gbTooFast) ? ' — trop de recherches d’affilée.'
-     : (failed && _gbQuotaHit) ? ' — BnF et Open Library seulement, Google Books a atteint sa limite du jour.' : ''));
+    + ((failed && _gbTooFast) ? ' : trop de recherches d’affilée.'
+     : (failed && _gbQuotaHit) ? ' : BnF et Open Library seulement, Google Books a atteint sa limite du jour.' : ''));
 }
 function parseTome(title){
   let m = title.match(/^(.*?)[\s,–—:-]*(?:tome|t\.|vol(?:ume)?\.?|#)\s*(\d{1,4})\b/i);
@@ -3404,7 +3404,7 @@ async function fetchSynopsis(b){
       save();
       toast('Synopsis ajouté ✓');
     }else{
-      toast('Pas de synopsis trouvé — tu peux le coller via ✎ Modifier');
+      toast('Pas de synopsis trouvé. Tu peux le coller via ✎ Modifier');
     }
   }catch(_){ toast('Recherche indisponible'); }
   finally{
@@ -3458,7 +3458,7 @@ async function startScan(){
       // code-barres lu mais pas un ISBN : on guide sans couper le scan (ni répéter le message)
       if(codes.length && Date.now() - badScanAt > 4000){
         badScanAt = Date.now();
-        toast('Ce code n’est pas un ISBN — vise celui qui commence par 978');
+        toast('Ce code n’est pas un ISBN. Vise celui qui commence par 978');
       }
     }catch(_){ }
   }, 350);
@@ -3662,7 +3662,7 @@ function renderStudyAlert(){
   if(!due.length){ box.hidden=true; box.innerHTML=''; return; }
   const books=new Set(due.map(x=>x.bookId)).size;
   box.hidden=false;
-  box.innerHTML=`<span><b>${plur(due.length,'carte')} à réviser</b> dans ${plur(books,'livre')} — une session prend moins de cinq minutes.</span><button class="btn small primary" id="study-alert-open">Commencer</button>`;
+  box.innerHTML=`<span><b>${plur(due.length,'carte')} à réviser</b> dans ${plur(books,'livre')}. Une session prend moins de cinq minutes.</span><button class="btn small primary" id="study-alert-open">Commencer</button>`;
   $('#study-alert-open').onclick=()=>startStudyReview();
 }
 function studySimpleItems(items, kind, empty){
@@ -3733,7 +3733,7 @@ function studyMarkdown(b){
   if(s.questions.length){ lines.push('## Questions de compréhension',''); s.questions.forEach(x=>lines.push(`### ${x.question}`,'',x.answer||'*Réponse à compléter*','')); }
   if(s.chapters.length){ lines.push('## Notes par chapitre',''); s.chapters.forEach(x=>lines.push(`### ${x.title||'Chapitre'}`,'',x.notes||'','')); }
   if(s.cards.length){ lines.push('## Cartes mémoire',''); s.cards.forEach(x=>lines.push(`- **Q :** ${x.front.replace(/\n/g,' ')}`,`  **R :** ${x.back.replace(/\n/g,' ')}`)); lines.push(''); }
-  if((b.quotes||[]).length){ lines.push('## Passages marquants','',...(b.quotes||[]).map(q=>`> ${q.text.replace(/\n/g,' ')}${q.page!=null?` — p. ${q.page}`:''}`),''); }
+  if((b.quotes||[]).length){ lines.push('## Passages marquants','',...(b.quotes||[]).map(q=>`> ${q.text.replace(/\n/g,' ')}${q.page!=null?` (p. ${q.page})`:''}`),''); }
   return lines.filter((x,i,a)=>x!=='' || a[i-1]!=='').join('\n').trim()+'\n';
 }
 function studyFilename(b,ext){ const base=('fiche-'+fullTitle(b)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').slice(0,90).toLowerCase(); return (base||'fiche-tome')+'.'+ext; }
@@ -3748,7 +3748,7 @@ function studyPrintHTML(b){
     ${block('Questions de compréhension',s.questions.map(x=>`<h3>${esc(x.question)}</h3><div>${paras(x.answer)}</div>`).join(''))}
     ${block('Notes par chapitre',s.chapters.map(x=>`<h3>${esc(x.title||'Chapitre')}</h3><div>${paras(x.notes)}</div>`).join(''))}
     ${block('Cartes mémoire',s.cards.map(x=>`<h3>Q · ${esc(x.front)}</h3><div>R · ${paras(x.back)}</div>`).join(''))}
-    ${block('Passages marquants',(b.quotes||[]).map(q=>`<blockquote>${paras(q.text)}${q.page!=null?` — p. ${q.page}`:''}</blockquote>`).join(''))}`;
+    ${block('Passages marquants',(b.quotes||[]).map(q=>`<blockquote>${paras(q.text)}${q.page!=null?` (p. ${q.page})`:''}</blockquote>`).join(''))}`;
 }
 function printStudy(b){
   // l’écouteur AVANT l’impression : window.print() peut bloquer et déclencher afterprint
@@ -3765,7 +3765,7 @@ function startStudyReview(bookId=null, all=false){
   const queue=studyDueCards(bookId,all).slice(0,20);
   if(!queue.length){
     // Des cartes existent mais aucune n’est due : demander d’en créer une serait faux.
-    toast(studyDueCards(bookId,true).length ? 'Aucune carte à réviser aujourd’hui — reviens demain' : 'Crée d’abord une carte mémoire');
+    toast(studyDueCards(bookId,true).length ? 'Aucune carte à réviser aujourd’hui, reviens demain' : 'Crée d’abord une carte mémoire');
     return;
   }
   Object.assign(studySession,{queue,index:0,revealed:false,reviewed:0,bookId});
@@ -4019,7 +4019,7 @@ function openDetail(id, opts={}){
     <div class="dmain">
       <h3 class="dt" id="detail-title">${esc(fullTitle(b))}</h3>
       <div class="da">${esc(authorsStr(b))}</div>
-      ${b.series ? `<div class="dserie">Série : ${esc(b.series)}${b.volume!=null ? ` · tome ${b.volume}` : ''}${(()=>{const t=Math.max(...sBooks.map(x=>x.seriesTotal||0)); return t?`/${t}`:'';})()} — ${plur(sBooks.length,'tome')} dans ta bibliothèque
+      ${b.series ? `<div class="dserie">Série : ${esc(b.series)}${b.volume!=null ? ` · tome ${b.volume}` : ''}${(()=>{const t=Math.max(...sBooks.map(x=>x.seriesTotal||0)); return t?`/${t}`:'';})()}, ${plur(sBooks.length,'tome')} dans ta bibliothèque
         ${sBooks.length>1 ? `<button data-open-series="${esc(b.series)}">voir la série →</button>` : ''}</div>` : ''}
       <div class="dmeta">${esc(meta)}${meta && tagsHtml ? ' · ' : ''}${tagsHtml}</div>
       ${b.synopsis
@@ -4541,7 +4541,7 @@ function renderLists(){
   if(!state.lists.length){
     grid.innerHTML = '';
     emptyBox.innerHTML = `<div class="empty"><div class="big orn" aria-hidden="true">❦</div><h3>Aucune liste</h3>
-      <p>Crée des listes thématiques — « Pépites SF », « Mangas à finir », « À offrir à Noël »… — puis remplis-les depuis la liste elle-même ou depuis la fiche d’un livre.</p></div>`;
+      <p>Crée des listes thématiques (« Pépites SF », « Mangas à finir », « À offrir à Noël »…), puis remplis-les depuis la liste elle-même ou depuis la fiche d’un livre.</p></div>`;
     return;
   }
   emptyBox.innerHTML = '';
@@ -4565,7 +4565,7 @@ function listPickHTML(l){
   const rest = state.books.filter(b=>!l.bookIds.includes(b.id));
   const hits = q ? rest.filter(b=>fold(fullTitle(b)+' '+authorsStr(b)).includes(q)) : rest;
   if(!hits.length){
-    const why = !state.books.length ? 'Ta bibliothèque est encore vide — ajoute d’abord quelques livres.'
+    const why = !state.books.length ? 'Ta bibliothèque est encore vide. Ajoute d’abord quelques livres.'
       : !rest.length ? 'Toute ta bibliothèque est déjà dans cette liste.' : 'Aucun titre ne correspond.';
     return `<p class="l-pick-hint">${why}</p>`;
   }
@@ -4574,7 +4574,7 @@ function listPickHTML(l){
       <div class="sri"><b>${esc(fullTitle(b))}</b><span>${esc(authorsStr(b))}</span></div>
       <button type="button" class="btn small primary add" data-pick="${esc(b.id)}" aria-label="Ajouter ${esc(fullTitle(b))} à la liste">Ajouter</button>
     </div>`).join('')
-    + (hits.length>20 ? `<p class="l-pick-hint">${plur(hits.length-20,'autre titre')} — précise ta recherche.</p>` : '');
+    + (hits.length>20 ? `<p class="l-pick-hint">${plur(hits.length-20,'autre titre')}. Précise ta recherche.</p>` : '');
 }
 // Ajoute un titre depuis le sélecteur et re-rend, sans fermer le panneau ni perdre la saisie.
 // `keep` : 'input' (Entrée dans le champ, on y reste) ou le rang du bouton cliqué (le focus passe
@@ -4605,7 +4605,7 @@ function openList(id){
     </div>
     ${l.desc ? `<p class="list-desc">${esc(l.desc)}</p>` : ''}
     ${pick ? `<div class="l-picker" id="l-picker">
-      ${books.length ? '' : `<p class="l-pick-empty"><span class="orn" aria-hidden="true">❦</span> Liste vide — choisis des titres dans ta bibliothèque.</p>`}
+      ${books.length ? '' : `<p class="l-pick-empty"><span class="orn" aria-hidden="true">❦</span> Liste vide. Choisis des titres dans ta bibliothèque.</p>`}
       <input type="search" id="l-pick-q" value="${esc(ui.listPickQ||'')}" placeholder="Filtrer ma bibliothèque…" aria-label="Chercher un titre à ajouter" autocomplete="off">
       <div id="l-pick-res">${listPickHTML(l)}</div>
     </div>` : ''}
@@ -4634,7 +4634,7 @@ function openSeries(name){
   const maxVol = withVol.length ? Math.max(...withVol.map(b=>b.volume)) : 0;
   const complete = total && maxVol >= total;
   const rec = state.series[name.trim().toLowerCase()] || {rating:null, review:'', favorite:false, moods:[]};
-  $('#list-head').textContent = `${name} — ${read}/${total||books.length} lus`;
+  $('#list-head').textContent = `${name} · ${read}/${total||books.length} lus`;
   $('#list-body').innerHTML = `
     <div class="dblock" style="margin-bottom:16px">
       <label>Ma note de la série</label>
@@ -4801,7 +4801,7 @@ function updateStreakPill(){
   if(cur >= 2){
     el.hidden = false;
     $('#streak-n').textContent = cur;
-    const t = `${cur} jours de lecture d’affilée — continue !`;
+    const t = `${cur} jours de lecture d’affilée, continue !`;
     el.title = t; el.setAttribute('aria-label', t);
   } else el.hidden = true;
 }
@@ -4877,7 +4877,7 @@ function renderStats(){
       ${paceHTML(gi)}
     </div>` : `
     <span class="goal-title">Objectif ${yr}<span class="goal-edit-hint" aria-hidden="true">✎ Modifier</span></span>
-    <span style="display:block;font-size:14px; color:var(--muted)">Aucun objectif défini — active un défi de lectures pour ${yr}.</span>`;
+    <span style="display:block;font-size:14px; color:var(--muted)">Aucun objectif défini. Active un défi de lectures pour ${yr}.</span>`;
   $('#goal-panel').innerHTML = `<button type="button" class="goal-edit" aria-label="Modifier l’objectif de lecture ${yr}">${goalContent}</button>${recapBtn}`;
 
   // Heatmap
@@ -5010,7 +5010,7 @@ function renderHeat(){
     if(d.getDate()===1) months.push({m:d.getMonth(), col:Math.floor(cells.length/7)});
     const lvl = n===0 ? '' : n===1 ? 'l1' : n===2 ? 'l2' : 'l3';
     const label = d.toLocaleDateString('fr-FR', {day:'numeric', month:'short'});
-    const txt = `${label} — ${n ? plur(n,'lecture ou progression','lectures ou progressions') : 'rien'}`;
+    const txt = `${label} : ${n ? plur(n,'lecture ou progression','lectures ou progressions') : 'rien'}`;
     // data-day : sur mobile aucun survol ne révèle le title, un appui affiche donc un toast.
     cells.push(`<i class="${lvl}${key===td?' today':''}" data-day="${key}" title="${txt}"${n?` role="img" aria-label="${txt}"`:''}></i>`);
     d.setDate(d.getDate()+1);
@@ -5027,7 +5027,7 @@ function renderHeat(){
 // Un appui sur une case dit ce qui s’y est passé (le title ne s’affiche pas au doigt).
 $('#heat').addEventListener('click', e => {
   const cell = e.target.closest('[data-day]'); if(!cell) return;
-  toast(cell.title.replace(' — ', ' : '));
+  toast(cell.title);
 });
 $('#heat-years').addEventListener('click', e => {
   const c = e.target.closest('[data-hy]'); if(!c) return;
@@ -5094,7 +5094,7 @@ function showRecap(year){
   ui.listMode = 'recap'; ui.recapYear = year;
   $('#list-head').textContent = `Ta rétro ${r.year} `;
   if(!r.count){
-    $('#list-body').innerHTML = `<p style="color:var(--muted); padding:16px 0; text-align:center">Aucune lecture datée en ${r.year} — reviens quand tu auras noirci quelques pages.</p>`;
+    $('#list-body').innerHTML = `<p style="color:var(--muted); padding:16px 0; text-align:center">Aucune lecture datée en ${r.year}. Reviens quand tu auras noirci quelques pages.</p>`;
   }else{
     const bmax = Math.max(...r.byMonth, 1);
     const monthChart = `<div class="rating-histo" style="margin-bottom:14px">${r.byMonth.map((n,i)=>
@@ -5107,7 +5107,7 @@ function showRecap(year){
         ${r.rereads?`<div class="tile"><b>${r.rereads}</b><span>relecture${r.rereads>1?'s':''}</span></div>`:''}
       </div>
       ${monthChart}
-      ${r.best?`<div class="recap-hi"><div class="rl">Ton coup de cœur</div><b>${esc(fullTitle(r.best))}</b> — ${starsTxt(r.best.rating)}</div>`:''}
+      ${r.best?`<div class="recap-hi"><div class="rl">Ton coup de cœur</div><b>${esc(fullTitle(r.best))}</b> · ${starsTxt(r.best.rating)}</div>`:''}
       ${r.topAuthor?`<div class="recap-hi"><div class="rl">Plume de l’année</div><b>${esc(r.topAuthor[0])}</b> · ${plur(r.topAuthor[1],'titre')}</div>`:''}
       ${r.topTag?`<div class="recap-hi"><div class="rl">Genre phare</div><b>${esc(r.topTag[0])}</b> · ${plur(r.topTag[1],'titre')}</div>`:''}
       ${r.topSeries&&r.topSeries.n>1?`<div class="recap-hi"><div class="rl">Ta plus longue saga</div><b>${esc(r.topSeries.name)}</b> · ${r.topSeries.n} tomes</div>`:''}
@@ -5170,7 +5170,7 @@ $('#btn-export').addEventListener('click', ()=>{
 });
 $('#btn-export-csv').addEventListener('click', ()=>{
   downloadBlob(buildTomeCSV(state.books), 'text/csv;charset=utf-8', `tome-livres-${today()}.csv`);
-  toast(`${plur(state.books.length,'livre exporté','livres exportés')} en CSV — le JSON reste la sauvegarde complète`);
+  toast(`${plur(state.books.length,'livre exporté','livres exportés')} en CSV. Le JSON reste la sauvegarde complète`);
 });
 /* =============== Import CSV (Tome / Goodreads / StoryGraph) =============== */
 // Parseur CSV maison, tolérant RFC-4180 (guillemets, virgules et retours-ligne dans les champs, BOM)
@@ -5433,13 +5433,13 @@ async function importCSV(text){
   const apercu = `${plur(parsed.length,'livre')} : ${by.read} lu${by.read>1?'s':''}, ${by.reading} en cours, ${by.wishlist} à lire${by.abandoned?`, ${plur(by.abandoned,'abandonné')}`:''}.`
     + (dup ? `\n${plur(dup,'titre déjà présent','titres déjà présents')} (ignoré${dup>1?'s':''} à la fusion).` : '')
     + `\nEx. : ${sample}`
-    + (suspect ? '\n\nAttention : aucun statut « lu » détecté — vérifie l’export.' : '');
+    + (suspect ? '\n\nAttention : aucun statut « lu » détecté, vérifie l’export.' : '');
   // « Tout remplacer » n’a de sens que s’il y a quelque chose à remplacer
   const choices = [{ label:'Fusionner', value:'merge', variant:'primary', default:true }];
   if(state.books.length) choices.push({ label:'Tout remplacer', value:'replace', variant:'danger' });
   const choice = await uiChoose({
     title: `Import ${sourceLabel}`,
-    message: `${apercu}${source==='tome'?'\n\nLe CSV contient les ouvrages, pas les listes ni les objectifs. Le JSON reste le format de sauvegarde complète.':''}${source==='babelio'?'\n\nBabelio n’exporte ni les dates de lecture, ni les critiques, ni les étagères : tes livres lus arrivent sans date, les couvertures seront récupérées par ISBN.':''}${state.books.length?'\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d’abord ta bibliothèque actuelle — une sauvegarde de secours est conservée (restaurable dans Stats).':''}`,
+    message: `${apercu}${source==='tome'?'\n\nLe CSV contient les ouvrages, pas les listes ni les objectifs. Le JSON reste le format de sauvegarde complète.':''}${source==='babelio'?'\n\nBabelio n’exporte ni les dates de lecture, ni les critiques, ni les étagères : tes livres lus arrivent sans date, les couvertures seront récupérées par ISBN.':''}${state.books.length?'\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d’abord ta bibliothèque actuelle. Une sauvegarde de secours est conservée (restaurable dans Stats).':''}`,
     choices,
   });
   if(choice===null) return; // Annuler / Échap / clic hors modale = AUCUNE écriture
@@ -5520,7 +5520,7 @@ $('#import-file').addEventListener('change', e => {
       const d = JSON.parse(head);
       const clean = normalizeData(d);
       if(!clean.books.length && !clean.lists.length) throw new Error('vide');
-      if(!await uiConfirm({ title:'Importer cette sauvegarde ?', message:`${plur(clean.books.length,'ouvrage')} et ${plur(clean.lists.length,'liste')}. Cela remplace tes données actuelles — une sauvegarde de secours est conservée (restaurable dans Stats).`, okLabel:'Importer et remplacer', danger:true })) return;
+      if(!await uiConfirm({ title:'Importer cette sauvegarde ?', message:`${plur(clean.books.length,'ouvrage')} et ${plur(clean.lists.length,'liste')}. Cela remplace tes données actuelles. Une sauvegarde de secours est conservée (restaurable dans Stats).`, okLabel:'Importer et remplacer', danger:true })) return;
       // sauvegarde de secours AVANT tout écrasement ; si le stockage est plein, on télécharge l’ancien état
       const prev = JSON.stringify(state);
       let backedUp = false;
@@ -5531,7 +5531,7 @@ $('#import-file').addEventListener('change', e => {
       }
       replaceLocalLibrary(clean);   // sans marqueur : un import n’est pas une suppression, la fusion ramène le reste
       if(save()){ render(); toast('Import réussi ✓'); }
-      else { render(); toast('Importé mais non sauvegardé (stockage plein) — exporte pour sécuriser'); }
+      else { render(); toast('Importé mais non sauvegardé (stockage plein). Exporte pour sécuriser'); }
     }catch(err){
       importFail(err && err.message==='vide' ? 'Cette sauvegarde est vide : aucun livre ni liste à importer.' : 'Ce fichier n’est pas une sauvegarde Tome (.json).', '#import-file');
     }
@@ -5566,10 +5566,10 @@ $('#btn-restore').addEventListener('click', async ()=>{
   const corrupt = localStorage.getItem(LS_KEY+'-corrupt');
   if(!avail.length && corrupt){
     downloadJSON(corrupt, `tome-donnees-brutes-${today()}.json`);
-    toast('Copie brute téléchargée — à réparer à la main puis réimporter'); return;
+    toast('Copie brute téléchargée : à réparer à la main puis réimporter'); return;
   }
   if(!avail.length){
-    if(foreign.length) await openDialog({ title:'Aucune sauvegarde à toi ici', message:`${foreign.length>1 ? 'Les copies présentes appartiennent' : 'La copie présente appartient'} à un autre compte — connecte-toi avec ce compte pour ${foreign.length>1 ? 'les' : 'la'} récupérer.`, actions:[{ label:'Fermer', value:null, cancel:true, default:true }] });
+    if(foreign.length) await openDialog({ title:'Aucune sauvegarde à toi ici', message:`${foreign.length>1 ? 'Les copies présentes appartiennent' : 'La copie présente appartient'} à un autre compte. Connecte-toi avec ce compte pour ${foreign.length>1 ? 'les' : 'la'} récupérer.`, actions:[{ label:'Fermer', value:null, cancel:true, default:true }] });
     else toast('Aucune sauvegarde disponible');
     return;
   }
@@ -5578,8 +5578,8 @@ $('#btn-restore').addEventListener('click', async ()=>{
   let chosen = avail[0];
   if(copies.length > 1){
     const choices = [
-      ...avail.map(r=>({ label:`${r.label} — ${r.n==null ? '? ouvrage' : plur(r.n,'ouvrage')}`, value:r.k })),
-      ...foreign.map(r=>({ label:`${r.label} — appartient à un autre compte`, value:r.k, disabled:true })),
+      ...avail.map(r=>({ label:`${r.label} · ${r.n==null ? '? ouvrage' : plur(r.n,'ouvrage')}`, value:r.k })),
+      ...foreign.map(r=>({ label:`${r.label} (appartient à un autre compte)`, value:r.k, disabled:true })),
     ];
     const pick = await uiChoose({ title:'Quelle sauvegarde restaurer ?', message: foreign.length ? 'Une copie d’un autre compte se récupère en se connectant avec ce compte.' : '', choices });
     if(!pick) return; chosen = avail.find(r=>r.k===pick);
@@ -5615,7 +5615,7 @@ async function pushState(){
 async function enablePush(){
   if(!pushSupported()){ toast('Ton navigateur ne gère pas les notifications'); return false; }
   const perm = await Notification.requestPermission();
-  if(perm!=='granted'){ toast(perm==='denied' ? 'Notifications refusées — à réautoriser dans les réglages du navigateur' : 'Notifications non activées'); return false; }
+  if(perm!=='granted'){ toast(perm==='denied' ? 'Notifications refusées : à réautoriser dans les réglages du navigateur' : 'Notifications non activées'); return false; }
   const reg = await navigator.serviceWorker.ready;
   const { key } = await api('/api/push/key');
   if(!key){ toast('Notifications indisponibles pour le moment'); return false; }
@@ -5674,7 +5674,7 @@ async function showPublicProfile(uname){
       .sort((a,b)=>(b.rating-a.rating) || ((b.review?1:0)-(a.review?1:0))).slice(0,4);
   const horsFav = new Set([coeur, ...favoris]);
   const reste = shelf.filter(b=>!horsFav.has(b));
-  document.title = `${u.displayName} — Tome`;
+  document.title = `${u.displayName} · Tome`;
   body.innerHTML = `
     <header class="pp-head">
       <div class="pp-avatar">${avatarHTML(u.displayName)}</div>
@@ -5784,7 +5784,7 @@ async function showPublicBook(slug){
   const mine = state.books.find(x=>shelfKey(x)===b.key) || null;
   const meta = [b.type==='bd' ? 'BD' : b.type==='manga' ? 'Manga' : 'Livre', b.series ? `${b.series}${b.volume!=null ? ' · tome '+b.volume : ''}` : '', b.year || '', b.pages ? `${b.pages} pages` : ''].filter(Boolean).join(' · ');
   const stars = st.avg!=null ? `<b>${fmtDec(st.avg)} ★</b><span>note moyenne · ${st.rated} avis</span>` : `<b>${st.readers||0}</b><span>lecteur${(st.readers||0)>1?'s':''} public${(st.readers||0)>1?'s':''}</span>`;
-  document.title = `${b.title}${b.authors ? ' — ' + b.authors : ''} · Tome`;
+  document.title = `${b.title}${b.authors ? ', ' + b.authors : ''} · Tome`;
   // Ouverte depuis la fiche (« Page du livre ») : le livre est forcément dans la bibliothèque
   // locale — on propose d’y revenir, jamais de créer un compte ni de repartir de zéro.
   const cta = (_pubReturn!=null && mine)
@@ -5800,7 +5800,7 @@ async function showPublicBook(slug){
         <div class="pp-fav-kicker">${meta || 'Livre'}</div>
         <h1 class="pp-name">${esc(b.title)}</h1>
         ${b.authors ? `<div class="pp-user">${esc(b.authors)}</div>` : ''}
-        <div class="pp-stats"><div class="pp-stat">${stars}</div>${st.avg==null && st.readers ? `<div class="pp-stat"><b>${st.rated||0}</b><span>note${(st.rated||0)>1?'s':''} — moyenne dès 3</span></div>` : ''}</div>
+        <div class="pp-stats"><div class="pp-stat">${stars}</div>${st.avg==null && st.readers ? `<div class="pp-stat"><b>${st.rated||0}</b><span>note${(st.rated||0)>1?'s':''}, moyenne dès 3</span></div>` : ''}</div>
         <div class="pb-actions">${cta}<button class="btn" data-pb-share>Partager la page</button></div>
       </div>
     </header>
@@ -5899,7 +5899,7 @@ function renderQuickRate(){
       ${when ? `<div class="qr-when">lu le ${fmtDate(when)}</div>` : ''}
       <div class="star-input qr-stars" id="qr-stars" tabindex="0" role="slider" aria-label="Ma note"
            aria-valuemin="0" aria-valuemax="5" aria-valuenow="${r}" aria-valuetext="${ratingText(r)}">${starInputHTML(r)}</div>
-      <div class="qr-hint">${r ? `Déjà notée ${starsTxt(r)} — modifie la note ou passe au titre suivant` : qrHintTxt()}</div>
+      <div class="qr-hint">${r ? `Déjà notée ${starsTxt(r)}. Modifie la note ou passe au titre suivant` : qrHintTxt()}</div>
       <div class="qr-actions">
         ${qrPrevBtn()}
         <button class="btn" id="qr-skip">Passer</button>
@@ -5953,7 +5953,7 @@ $('#rate-body').addEventListener('click', e=>{
 function qrCommit(b, v){
   qrRate(b, v);
   $('#qr-stars').innerHTML = starInputHTML(b.rating);          // feedback avant d’enchaîner
-  $('#rate-body').querySelector('.qr-hint').textContent = `${starsTxt(b.rating)} — enregistré ✓`;
+  $('#rate-body').querySelector('.qr-hint').textContent = `${starsTxt(b.rating)}, enregistré ✓`;
   _qrFeedback = setTimeout(()=>{ qrAdvance(); scheduleRender(); }, 420);
 }
 bindStarSlider($('#rate-body'), '#qr-stars', (host, v) => {
@@ -6177,7 +6177,7 @@ async function shareCard(b){
     try{
       const cv = drawCard(b, img);
       const slug = (b.title||'carte').toLowerCase().replace(/[^a-z0-9à-ÿ]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,40)||'carte';
-      presentCard(cv, `tome-${slug}.png`, `« ${fullTitle(b)} » — mon avis sur Tome · ${SITE_URL}`);
+      presentCard(cv, `tome-${slug}.png`, `« ${fullTitle(b)} », mon avis sur Tome · ${SITE_URL}`);
     }catch(e){
       // canvas « souillé » (couverture sans CORS) → on regénère sans l’image
       if(img) generate(null);
@@ -6699,7 +6699,7 @@ window.addEventListener('online', updateOnline);
 window.addEventListener('offline', updateOnline);
 // Le badge orange de l’en-tête passe inaperçu sur un téléphone : on le dit une fois, et on rassure
 // tout de suite sur ce qui marche encore (tout, sauf la recherche et le réseau).
-window.addEventListener('offline', ()=>toast('Hors ligne — ta bibliothèque reste disponible, la recherche non'));
+window.addEventListener('offline', ()=>toast('Hors ligne : ta bibliothèque reste disponible, la recherche non'));
 updateOnline();
 
 // Multi-fenêtres (PWA + onglet, ou onglet dupliqué) : une autre instance a écrit → on prend sa version
@@ -6795,14 +6795,14 @@ function flagSessionExpired(){
   try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
   setLibStatus(''); setFriendsBadge(0); syncMeButton();
   if(ui.view==='friends' || ui.view==='account'){ render(); return; }     // l’explication est déjà sur le formulaire
-  if(premier) toast('Session expirée — reconnecte-toi pour continuer à sauvegarder ta bibliothèque',
+  if(premier) toast('Session expirée. Reconnecte-toi pour continuer à sauvegarder ta bibliothèque',
     { label:'Se connecter', ms:8000, onAction:()=>selectView('account') });
 }
 // Un seul vocabulaire pour les pannes réseau : « Serveur injoignable » était répété 36 fois, sans
 // dire quoi faire, et ne distinguait pas une coupure locale d'une saturation ou d'une panne de Tome.
 function netMsg(e){
-  if(e && e.message==='offline') return 'Pas de connexion — réessaie quand le réseau sera revenu.';
-  if(e && e.status===429) return 'Trop de demandes d’un coup — attends une minute.';
+  if(e && e.message==='offline') return 'Pas de connexion. Réessaie quand le réseau sera revenu.';
+  if(e && e.status===429) return 'Trop de demandes d’un coup. Attends une minute.';
   if(e && e.status>=500) return 'Tome a un souci de son côté, réessaie dans un instant.';
   return (e && e.message) || 'Envoi impossible';
 }
@@ -6858,6 +6858,7 @@ function syncMeButton(){
   b.setAttribute('aria-label', lbl); b.title = lbl;
 }
 $('#btn-feedback').addEventListener('click', sendFeedback);
+{ const bv = $('#btn-versions'); if(bv) bv.addEventListener('click', ()=>showVersions()); }
 $('#btn-me').addEventListener('click', ()=>selectView('account', {focus:true}));
 // clé stable d’un livre côté social — DOIT rester identique entre la synchro (shareableBooks)
 // et les lectures croisées (« chez tes amis »), sinon les correspondances se perdent
@@ -6932,7 +6933,7 @@ function sessionChangedElsewhere(newToken){
     social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError='';
     social.sessionExpired=false;                           // une déconnexion voulue, pas une session perdue
     setLibStatus(''); setFriendsBadge(0); syncMeButton(); render();
-    toast(pending ? 'Déconnecté depuis un autre onglet — tes dernières modifications restent sur cet appareil seulement' : 'Déconnecté depuis un autre onglet', {ms:6000});
+    toast(pending ? 'Déconnecté depuis un autre onglet. Tes dernières modifications restent sur cet appareil seulement' : 'Déconnecté depuis un autre onglet', {ms:6000});
     return;
   }
   social.me=null; social.view=null; social.libRev=0; social.sessionExpired=false; setLibStatus('');
@@ -6985,10 +6986,10 @@ function retryLibrarySync(session, err){
 const LIB_STATUS = {
   saving:'Sauvegarde de ta bibliothèque sur ton compte…',
   saved:'Bibliothèque enregistrée sur ton compte',
-  offline:'Hors ligne — ta bibliothèque sera sauvegardée sur ton compte dès le retour du réseau',
-  error:'Ta bibliothèque n’a pas pu être sauvegardée sur ton compte — elle reste sur cet appareil',
+  offline:'Hors ligne : ta bibliothèque sera sauvegardée sur ton compte dès le retour du réseau',
+  error:'Ta bibliothèque n’a pas pu être sauvegardée sur ton compte, elle reste sur cet appareil',
   conflict:'Fusionnée avec les modifications d’un autre appareil',
-  tooLarge:'Bibliothèque trop volumineuse pour la sauvegarde du compte — exporte-la pour la garder à l’abri',
+  tooLarge:'Bibliothèque trop volumineuse pour la sauvegarde du compte. Exporte-la pour la garder à l’abri',
 };
 const LIB_STATUS_SHORT = { saving:'Sauvegarde…', saved:'Enregistré ✓', offline:'Sauvegarde différée', error:'Non sauvegardé', conflict:'Fusionné', tooLarge:'Trop volumineux' };
 function setLibStatus(s){
@@ -7186,7 +7187,7 @@ function mergeReport(merged){
   const parts = [];
   if(conflicts) parts.push(`${plur(conflicts,'livre existe','livres existent')} en deux versions, marquées « ${CONFLICT_TAG} »`);
   if(kept) parts.push(`${plur(kept,'livre modifié','livres modifiés')} ailleurs après ${kept>1?'leur':'sa'} suppression, gardé${kept>1?'s':''} « ${CONFLICT_TAG} »`);
-  return parts.length ? 'Fusion faite ✓ — '+parts.join(' ; ') : '';
+  return parts.length ? 'Fusion faite ✓ '+parts.join(' ; ') : '';
 }
 function mergeLibraries(localSt, serverRaw){
   const out = normalizeData(serverRaw);
@@ -7456,7 +7457,7 @@ function renderFriends(){
   // Une session expirée s’explique : sans ça, le formulaire de connexion ressemble à une
   // déconnexion inexpliquée — et on proposerait de s’inscrire à quelqu’un qui a déjà un compte.
   if(!social.me){
-    if(social.sessionExpired) renderAuth(box, 'login', 'Ta session a expiré — reconnecte-toi pour retrouver ton compte et la sauvegarde de ta bibliothèque.');
+    if(social.sessionExpired) renderAuth(box, 'login', 'Ta session a expiré. Reconnecte-toi pour retrouver ton compte et la sauvegarde de ta bibliothèque.');
     else renderAuth(box);
     return;
   }
@@ -7524,10 +7525,10 @@ function renderAccountView(){
     const fab = $('#fab'); if(fab) fab.hidden = false;   // caché par renderAuth tant qu’on n’était pas connecté
     renderAccount();
   }
-  else if(social.sessionExpired) renderAuth(box, 'login', 'Ta session a expiré — reconnecte-toi pour retrouver ton compte et la sauvegarde de ta bibliothèque.');
+  else if(social.sessionExpired) renderAuth(box, 'login', 'Ta session a expiré. Reconnecte-toi pour retrouver ton compte et la sauvegarde de ta bibliothèque.');
   else renderAuth(box, 'login');
   refreshDataPanel();
-  const mail = $('#btn-contact'); if(mail) mail.href = contactHref('Tome — question');
+  const mail = $('#btn-contact'); if(mail) mail.href = contactHref('Question sur Tome');
   syncThemeSeg();
 }
 async function renderNotifications(){
@@ -7626,7 +7627,7 @@ async function renderAccount(){
     <h4>Profil</h4>
     <input id="acc-dn" maxlength="40" value="${esc(social.me.displayName)}" placeholder="Nom affiché" aria-label="Nom affiché">
     <!-- La bio n’est jamais privée : le placeholder dit exactement qui la lit, page publique comprise. -->
-    <textarea id="acc-bio" aria-label="Ma bio" rows="2" maxlength="300" placeholder="${social.publicProfile?'Bio — visible par tes amis et sur ta page publique':'Bio — visible par tes amis (et sur ta page si tu la publies)'}">${esc(social.me.bio||'')}</textarea>
+    <textarea id="acc-bio" aria-label="Ma bio" rows="2" maxlength="300" placeholder="${social.publicProfile?'Bio, visible par tes amis et sur ta page publique':'Bio, visible par tes amis (et sur ta page si tu la publies)'}">${esc(social.me.bio||'')}</textarea>
     <button class="btn primary" id="acc-save">Enregistrer le profil</button>
     <h4>Mot de passe</h4>
     <div class="pw-wrap"><input id="acc-cur" aria-label="Mot de passe actuel" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
@@ -7635,13 +7636,13 @@ async function renderAccount(){
       <button type="button" class="linkish pw-eye" data-pw-noun="le nouveau mot de passe" aria-pressed="false" aria-label="Afficher le nouveau mot de passe">Afficher</button></div>
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
     <h4>Notifications</h4>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Recevoir une alerte quand un ami t’ajoute, aime ou commente une de tes lectures — même quand Tome est fermé. <span id="acc-push-state"></span></p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Recevoir une alerte quand un ami t’ajoute, aime ou commente une de tes lectures, même quand Tome est fermé. <span id="acc-push-state"></span></p>
     <div class="data-actions"><button class="btn" id="acc-push">${ic('bell',16)} Activer les notifications</button></div>
     <h4>Rappel de lecture</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Un mot chaque jour à l’heure choisie, avec ta lecture en cours. Nécessite les notifications ci-dessus.</p>
     <div class="data-actions"><select id="acc-rem" aria-label="Heure du rappel">${[['','Aucun rappel'],...Array.from({length:18},(_,i)=>[String(i+6),`${i+6} h`])].map(([v,l])=>`<option value="${v}"${String(social.me.reminderHour??'')===v?' selected':''}>${l}</option>`).join('')}</select><button class="btn" id="acc-rem-save">Enregistrer le rappel</button></div>
     <h4>Code de secours</h4>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n’est collecté). ${social.hasRecovery?'Un code est actif — le régénérer invalide l’ancien.':'<b>Aucun code actif</b> — génère-le maintenant.'}</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n’est collecté). ${social.hasRecovery?'Un code est actif : le régénérer invalide l’ancien.':'<b>Aucun code actif</b>. Génère-le maintenant.'}</p>
     <div class="pw-wrap"><input id="acc-rec" aria-label="Mot de passe actuel (pour générer le code de secours)" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
       <button type="button" class="linkish pw-eye" data-pw-noun="le mot de passe actuel" aria-pressed="false" aria-label="Afficher le mot de passe actuel">Afficher</button></div>
     <button class="btn" id="acc-rec-gen">${ic('key',16)} ${social.hasRecovery?'Régénérer mon code':'Générer mon code'}</button>
@@ -7670,7 +7671,7 @@ async function renderAccount(){
     try{ const d = await api('/api/account/profile', {method:'POST', body:{displayName:$('#acc-dn').value, bio:frTypo($('#acc-bio').value)}}); social.me=d.user; toast('Profil mis à jour ✓'); render(); }
     catch(err){ toast(netMsg(err)); b.disabled=false; } };
   $('#acc-pw').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
-    try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé — autres appareils déconnectés ✓'); }
+    try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé, autres appareils déconnectés ✓'); }
     catch(err){ toast(netMsg(err)); }
     finally{ b.disabled=false; } };
   $('#acc-rem-save').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
@@ -7725,7 +7726,7 @@ async function renderAccount(){
     if(!currentAccount(session)) return;                     // un autre onglet a changé de session entre-temps : ne pas effacer SON jeton
     resetLibrarySync(); _socUserToken='';
     try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render();
-    toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici — les autres appareils n’ont pas pu être joints'); };
+    toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici. Les autres appareils n’ont pas pu être joints'); };
   $('#acc-delete').onclick = async ()=>{
     if(!await uiConfirm({title:'Supprimer ton compte ?', message:'Action IRRÉVERSIBLE. Ton profil, tes amis, ta bibliothèque privée sauvegardée et ton étagère partagée seront effacés du serveur. Ta bibliothèque locale reste sur cet appareil.', okLabel:'Continuer', danger:true})) return;
     const pw = await uiPrompt({title:'Confirme avec ton mot de passe', message:'Tape ton mot de passe pour supprimer définitivement le compte.', type:'password', okLabel:'Supprimer'});
@@ -7742,7 +7743,7 @@ async function renderAccount(){
       if(mine){ state.meta.ownerId = null; state.meta.ownerName = null; state.meta.libRev = 0; state.meta.deletedBooks = {}; social.libRev = 0; libPersist(); }
       disownAside(session.id);
       try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render();
-      toast(mine && state.books.some(b=>!isDemoBook(b)) ? 'Compte supprimé — ta bibliothèque reste sur cet appareil, sans compte' : 'Compte supprimé.'); }
+      toast(mine && state.books.some(b=>!isDemoBook(b)) ? 'Compte supprimé. Ta bibliothèque reste sur cet appareil, sans compte' : 'Compte supprimé.'); }
     catch(err){ toast(netMsg(err)); } };
   // liste des bloqués
   try{
@@ -7759,7 +7760,7 @@ async function renderAccount(){
 // Reste affiché jusqu’à confirmation explicite ; copie et téléchargement proposés.
 async function showRecoveryCode(code, intro){
   // Le code n’est plus dans le message : il passe par cfg.code (bloc .dlg-code, gros et en mono).
-  const msg = `${intro||''}${intro?'\n\n':''}C’est la SEULE façon de récupérer ton compte si tu oublies ton mot de passe — aucun email n’est collecté. Copie-le ou télécharge-le, puis range-le en lieu sûr : il ne sera plus jamais affiché.`;
+  const msg = `${intro||''}${intro?'\n\n':''}C’est la SEULE façon de récupérer ton compte si tu oublies ton mot de passe : aucun email n’est collecté. Copie-le ou télécharge-le, puis range-le en lieu sûr : il ne sera plus jamais affiché.`;
   // Sortie conditionnée à une mise à l’abri : un code perdu ici l’est définitivement (le dialogue
   // ne se rouvre jamais et il n’existe aucune autre voie de récupération).
   let saved = false;
@@ -7780,11 +7781,11 @@ async function showRecoveryCode(code, intro){
       // Presse-papiers refusé (permission, contexte non sécurisé) : on ne bloque pas pour autant —
       // le bloc est en user-select:all, le code se recopie à la main en un geste.
       try{ await navigator.clipboard.writeText(code); toast('Code copié ✓'); }
-      catch(_){ toast('Copie impossible — recopie-le à la main, puis « C’est noté »'); }
+      catch(_){ toast('Copie impossible. Recopie-le à la main, puis « C’est noté »'); }
       saved = true;
     }
     else if(v==='dl'){
-      const txt = `Code de secours Tome\nPseudo : ${social.me?social.me.username:''}\n\n${code}\n\nCe code permet de récupérer ton compte en cas d’oubli du mot de passe.\nGarde ce fichier en lieu sûr — l’utiliser en génère un nouveau.\n${SITE_URL}\n`;
+      const txt = `Code de secours Tome\nPseudo : ${social.me?social.me.username:''}\n\n${code}\n\nCe code permet de récupérer ton compte en cas d’oubli du mot de passe.\nGarde ce fichier en lieu sûr. L’utiliser en génère un nouveau.\n${SITE_URL}\n`;
       const blob = new Blob([txt], {type:'text/plain'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tome-code-de-secours.txt';
       a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000); toast('Fichier téléchargé ✓');
@@ -7803,7 +7804,7 @@ async function shareInvite(){
     try{ await navigator.share({ title:'Tome', text:'Rejoins-moi sur Tome pour partager nos lectures !', url }); return; }
     catch(e){ if(e && e.name==='AbortError') return; /* sinon : repli presse-papiers */ }
   }
-  try{ await navigator.clipboard.writeText(url); toast('Lien d’invitation copié ✓ — envoie-le à un ami'); }
+  try{ await navigator.clipboard.writeText(url); toast('Lien d’invitation copié, envoie-le à un ami ✓'); }
   catch(_){ openDialog({ title:'Mon lien d’invitation', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}] }); }
 }
 // ---- Ajouter un ami par QR code : mon code (généré par qr.js, jamais via un service tiers),
@@ -7826,7 +7827,7 @@ async function openFriendQR(){
   // comment s’ajouter — alors que l’appareil photo du système lit le code et ouvre le lien.
   const qrHint = $('#ov-qr .qr-hint');
   if(qrHint) qrHint.textContent = $('#qr-scan').hidden
-    ? 'Sur iPhone : ouvre l’appareil photo et vise le code de ton ami — le lien s’ouvre dans Tome. Ou envoie-lui ton lien.'
+    ? 'Sur iPhone : ouvre l’appareil photo et vise le code de ton ami : le lien s’ouvre dans Tome. Ou envoie-lui ton lien.'
     : 'Fais scanner ce code par ton ami, ou envoie-lui ton lien. Il n’aura qu’à confirmer.';
   $('#qr-live').hidden = true; $('#qr-live').innerHTML = '';
   openOverlay('#ov-qr');
@@ -7922,7 +7923,7 @@ async function _processInvite(uname){
     if(social.tab==='friends') loadFriendLists();
   }catch(e){
     // hors ligne / serveur injoignable : l’invitation reste en attente pour la prochaine ouverture
-    toast(e.message==='offline' ? 'Pas de connexion — l’invitation est gardée pour plus tard.' : netMsg(e));
+    toast(e.message==='offline' ? 'Pas de connexion. L’invitation est gardée pour plus tard.' : netMsg(e));
   }
 }
 function renderAuth(box, mode, errMsg=''){
@@ -7937,11 +7938,11 @@ function renderAuth(box, mode, errMsg=''){
   // Dans Amis, le formulaire seul ne dit pas pourquoi on le remplit : une phrase sur ce que le
   // compte ouvre ici. Pas quand une invitation (déjà expliquée) ou une erreur occupe la place.
   const gate = inFriends && !social.invite && !errMsg
-    ? `<p class="friends-gate">Suis ce que lisent tes amis, recommande-leur un livre, compare vos goûts. Il faut pour ça un compte, gratuit et sans email.</p>`
+    ? `<p class="friends-gate">Ici, tu vois ce que lisent tes amis et tu leur recommandes des livres. Il faut un compte pour ça : gratuit, sans email.</p>`
     : '';
   dropOtherAuthForm(box);
   box.innerHTML = `
-    ${social.invite ? `<div class="invite-banner"><b>@${esc(social.invite)}</b> t’invite sur Tome — connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : gate}
+    ${social.invite ? `<div class="invite-banner"><b>@${esc(social.invite)}</b> t’invite sur Tome. Connecte-toi ou crée un compte pour l’ajouter en ami.</div>` : gate}
     <div class="auth-card">
       <h3>${mode==='login'?'Se connecter':'Créer un compte'}</h3>
       <p class="sub">${mode==='login'
@@ -7950,7 +7951,7 @@ function renderAuth(box, mode, errMsg=''){
       <label for="soc-user">Pseudo</label>
       <input id="soc-user" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex : lucas_bd" ${mode==='signup'?'aria-describedby="soc-user-help"':''}>
       ${mode==='signup'?`<small class="field-help" id="soc-user-help">Minuscules, chiffres, . _ - &middot; montome.fr/@pseudo</small>`:''}
-      ${mode==='signup'?`<label for="soc-name">Nom affiché <span class="lbl-opt">(optionnel — sinon ton pseudo)</span></label><input id="soc-name" maxlength="40" placeholder="ex : Lucas">`:''}
+      ${mode==='signup'?`<label for="soc-name">Nom affiché <span class="lbl-opt">(optionnel, sinon ton pseudo)</span></label><input id="soc-name" maxlength="40" placeholder="ex : Lucas">`:''}
       <label for="soc-pass">Mot de passe</label>
       <div class="pw-wrap">
         <input id="soc-pass" type="password" maxlength="256" autocomplete="${mode==='login'?'current-password':'new-password'}" placeholder="8 caractères minimum">
@@ -7989,7 +7990,7 @@ function renderAuth(box, mode, errMsg=''){
       social.sessionExpired = false;   // la session est neuve : plus rien à expliquer au prochain passage
       try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d’accueil
       await socRefresh(); // récupère aussi tosOutdated AVANT toute sauvegarde privée
-      if(stripDemo()) toast('Exemples retirés — ton compte démarre avec tes vrais livres.');
+      if(stripDemo()) toast('Exemples retirés. Ton compte démarre avec tes vrais livres.');
       if(!social.tosOutdated) syncLibraryOnLogin().then(()=>{ pushShelf(); refreshReminderTitle(); });
       // le code AVANT renderFriends : sinon la confirmation d’invitation (#invite) écraserait le
       // dialogue du code (une seule modale à la fois) — l’invitation s’ouvrira après « C’est noté »
@@ -8069,15 +8070,15 @@ function renderRecover(box, errMsg=''){
 }
 // La promesse publique du modèle : le cœur reste gratuit, le payant (un jour) sera du confort en
 // plus — jamais une reprise de l’existant. C’est un ENGAGEMENT : ne jamais l’affaiblir en douce.
-const FREE_PLEDGE = `Ce qui restera toujours gratuit — la promesse de Tome.
+const FREE_PLEDGE = `Ce qui restera toujours gratuit : la promesse de Tome.
 
 Tome proposera peut-être un jour des options payantes (du confort, du soutien au projet). Mais le cœur de l’app est gratuit, pour toujours :
 
-• Bibliothèque, séries et listes ILLIMITÉES — jamais de plafond de livres.
+• Bibliothèque, séries et listes ILLIMITÉES, sans plafond de livres.
 • Journal de lecture, notes, critiques, citations, ambiances, objectif annuel, streak.
 • Amis, fil d’activité, réactions ♥, réponses, notifications.
 • Récap annuel et cartes de partage.
-• Import ET export complets — tes données t’appartiennent, tu peux partir à tout moment.
+• Import ET export complets : tes données t’appartiennent, tu peux partir à tout moment.
 • Multi-appareils : ta bibliothèque enregistrée sur ton compte, privée.
 
 Et trois « jamais » :
@@ -8085,7 +8086,7 @@ Et trois « jamais » :
 • Jamais de vente de tes données individuelles.
 • Jamais de limite rétroactive : ce qui est gratuit aujourd’hui le reste.
 
-Si des options payantes arrivent, ce sera du confort EN PLUS (statistiques avancées, personnalisation, soutien) — jamais une rançon sur ce que tu utilises déjà.`;
+Si des options payantes arrivent, ce sera du confort EN PLUS (statistiques avancées, personnalisation, soutien), jamais une rançon sur ce que tu utilises déjà.`;
 
 /* ---- Recommander un livre à un ami (« tiens, lis ça ») ---- */
 async function recommendBook(id){
@@ -8098,7 +8099,7 @@ async function recommendBook(id){
   const who = await uiChoose({ title:`Recommander « ${fullTitle(b)} »`, message:'À qui ?',
     choices: friends.slice(0,12).map(f=>({ label:`${f.displayName||f.username} · @${f.username}`, value:f.username })) });
   if(!who) return;
-  const msg = await uiPrompt({ title:'Un mot pour accompagner ?', message:'Optionnel — pourquoi ce livre, pour cette personne.',
+  const msg = await uiPrompt({ title:'Un mot pour accompagner ?', message:'Optionnel : pourquoi ce livre, pour cette personne.',
     placeholder:'Tu vas adorer le premier chapitre…', okLabel:'Envoyer' });
   if(msg===null) return;
   try{
@@ -8132,38 +8133,84 @@ async function reportContent(targetType, targetKey){
   if(txt.length<5){ toast('Décris le problème en quelques mots.'); return; }
   try{
     await api('/api/report', { method:'POST', body:{ targetType, targetKey, reason:txt } });
-    toast('Signalement envoyé — merci, il sera examiné.');
+    toast('Signalement envoyé. Merci, il sera examiné.');
   }catch(e){ toast(netMsg(e)); }
 }
 function showPledge(){ openDialog({title:'Toujours gratuit', message:FREE_PLEDGE, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
-const LEGAL_TEXT = `Tome Social — mentions légales et confidentialité.
+// Journal des versions : tenu à la main depuis l’historique git, une entrée par mise en ligne
+// qui change quelque chose pour le lecteur. Rien d’inventé, rien d’embelli (cf. DESIGN.md).
+const CHANGELOG = `Ce qui a changé dans Tome, du plus récent au plus ancien.
+
+20 septembre 2026
+Nouvelle police, Alegreya, et des filets à la place des cadres : un lecteur trouvait que l’interface manquait d’âme. Textes relus dans toute l’app, accueil simplifié, et ce journal des versions.
+
+13 septembre
+L’onglet Amis s’explique quand on n’est pas connecté. Un avertissement s’affiche si le navigateur refuse d’enregistrer la bibliothèque.
+
+9 septembre
+La recherche interroge d’abord la BnF, puis Google Books et Open Library. « Un avis, un souci ? » arrive dans Mon compte. Un livre supprimé hors ligne ne revient plus à la synchronisation suivante.
+
+6 au 8 septembre
+Quatre séries de retouches sur l’inscription, le code de secours, l’ajout express, la notation rapide et la vue Mon compte.
+
+3 septembre
+Une page publique par livre. Ajouter un ami par QR code, lui recommander un livre, programmer un rappel de lecture. Import Babelio.
+
+2 septembre
+Thème clair « Fiche de bibliothèque ». Plus aucun emoji dans l’interface.
+
+30 août
+Mentions légales et conditions d’utilisation complètes, signalement d’un contenu, bouton « Essayer d’abord ».
+
+29 août
+Refonte visuelle « Reliure » : le livre en volume, la fiche qui s’ouvre depuis le dos, les quatre favoris.
+
+24 août
+Tome s’installe sur montome.fr. Barre d’onglets sur mobile, thème automatique.
+
+22 août
+Notifications push, page publique /@pseudo, notation à la chaîne, connexion utilisable au clavier.
+
+19 août
+Code de secours, cartes de partage, étagère partagée synchronisée, page « Toujours gratuit ».
+
+16 au 18 août
+Comptes et amis : recherche d’amis, notifications, bibliothèque enregistrée sur le compte, page d’accueil publique.
+
+11 août
+Onglet Amis, sélection multiple, collections, import CSV Goodreads et StoryGraph.
+
+10 août 2026
+Première version : un journal de lecture pour les livres, les BD et les mangas.`;
+function showVersions(){ openDialog({title:'Journal des versions', message:CHANGELOG, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
+const LEGAL_TEXT = `Tome Social : mentions légales et confidentialité.
 
 Responsable de traitement et directeur de la publication : Lucas Marroig (lucas.marroig@essec.edu).
-Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair — seule voie de récupération, aucun email n’étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils — livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d’amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non — les notifications lues sont effacées après 90 jours), si tu actives les notifications l’abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus — effacée automatiquement sous 48 heures). Si tu utilises les fonctions correspondantes : les recommandations de livres que tu envoies ou reçois entre amis (livre, mot d’accompagnement, expéditeur, destinataire — supprimées avec le compte de l’un ou l’autre, ou à la fin de l’amitié si elles sont encore en attente) et le réglage du rappel de lecture (heure choisie, fuseau horaire, titre de ta lecture en cours envoyé au serveur pour personnaliser le message — désactivable à tout moment dans Mon compte).
+Données traitées : ton pseudo, ton nom affiché, ta bio, un mot de passe haché (jamais en clair), un code de secours haché (jamais en clair ; seule voie de récupération, aucun email n’étant collecté), ta bibliothèque de lecture enregistrée sur ton compte (pour la retrouver sur tous tes appareils : livres, notes, critiques, listes, dates, résumés personnels et cartes mémoire), le sous-ensemble que tu choisis de partager avec tes amis, tes liens d’amitié, tes réactions ♥ et tes réponses sous les lectures de tes amis (horodatées, supprimables par toi à tout moment), la liste des personnes que tu bloques, tes notifications reçues (qui a réagi, commenté ou demandé en ami, sur quel livre, quand, lues ou non ; les notifications lues sont effacées après 90 jours), si tu actives les notifications l’abonnement push de chaque appareil (adresse technique fournie par ton navigateur + clés de chiffrement, supprimé dès que tu les désactives), et ton adresse IP (uniquement pour limiter les abus, effacée automatiquement sous 48 heures). Si tu utilises les fonctions correspondantes : les recommandations de livres que tu envoies ou reçois entre amis (livre, mot d’accompagnement, expéditeur, destinataire ; supprimées avec le compte de l’un ou l’autre, ou à la fin de l’amitié si elles sont encore en attente) et le réglage du rappel de lecture (heure choisie, fuseau horaire, titre de ta lecture en cours envoyé au serveur pour personnaliser le message, désactivable à tout moment dans Mon compte).
 Finalité : héberger ta bibliothèque pour toi, te permettre de retrouver des amis et de partager tes lectures.
 Base légale : ton consentement (recueilli à l’inscription).
 Âge minimum : Tome s’adresse aux 15 ans et plus (âge du consentement numérique en France) ; en dessous, l’inscription nécessite l’accord d’un parent ou tuteur.
-Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE — visible de toi uniquement. Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Le partage social est réglé sur « Rien » par défaut. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis › Partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n’envoie jamais rien. Exception si tu l’actives toi-même : « Ma page publique » (Amis › Partage) rend ce même sous-ensemble partagé — jamais plus, jamais ta bibliothèque privée — ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
-Pages publiques des livres : Tome tient un catalogue commun des livres partagés (titre, auteurs, couverture, résumé — des données de livre, jamais de personne). La page publique d’un livre affiche une note moyenne ANONYME calculée uniquement sur les membres ayant publié leur page, et seulement à partir de 3 notes (jamais une personne devinable) ; elle affiche les critiques signées de leur pseudo des seuls membres à page publique réglés sur « Tout ». Rendre ta page privée retire immédiatement tes notes et critiques de ces pages.
-Services tiers : Tome n’installe aucun traceur. Ta recherche de livres transite par le serveur de Tome, qui interroge le catalogue de la BnF et Google Books à ta place : le texte cherché sert à construire ces appels puis disparaît — il n’est ni journalisé, ni conservé, ni rattaché à un compte, et ces services ne voient ni ton adresse IP ni ton navigateur. La réponse (des données de livre, jamais de personne) est mise en cache 24 heures pour tout le monde. En revanche, pour interroger Open Library et pour afficher les couvertures, ton navigateur contacte directement openlibrary.org, covers.openlibrary.org, books.google.com ou openapi.bnf.fr — qui reçoivent alors ta requête ou l’identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n’a lieu que quand tu la déclenches ; les « Idées du jour » ne s’activent qu’avec ton accord explicite.
-Cookies et traceurs : Tome n’utilise aucun cookie publicitaire ni de mesure d’audience — uniquement le stockage strictement nécessaire au service (ta bibliothèque sur ton appareil, ta session). Ces usages sont exemptés de consentement, c’est pourquoi il n’y a pas de bannière cookies.
+Visibilité : ta bibliothèque enregistrée sur ton compte est PRIVÉE : visible de toi uniquement. Tes résumés, notes d’étude, questions et cartes mémoire ne font jamais partie du profil partagé. Le partage social est réglé sur « Rien » par défaut. Seul le sous-ensemble autorisé par ton mode de partage (réglable dans Amis › Partage : « Tout », « Notes seules » sans tes critiques, ou « Rien ») est synchronisé automatiquement et visible de tes amis acceptés uniquement. « Rien » n’envoie jamais rien. Exception si tu l’actives toi-même : « Ma page publique » (Amis › Partage) rend ce même sous-ensemble partagé (jamais plus, jamais ta bibliothèque privée) ainsi que ton pseudo, ton nom affiché et ta bio, lisibles par quiconque visite montome.fr/@tonpseudo, moteurs de recherche compris. Désactivée par défaut, désactivable à tout moment. Aucune publicité, aucune revente. Chiffrement en transit (HTTPS). Hébergeur : Cloudflare.
+Pages publiques des livres : Tome tient un catalogue commun des livres partagés (titre, auteurs, couverture, résumé : des données de livre, jamais de personne). La page publique d’un livre affiche une note moyenne ANONYME calculée uniquement sur les membres ayant publié leur page, et seulement à partir de 3 notes (jamais une personne devinable) ; elle affiche les critiques signées de leur pseudo des seuls membres à page publique réglés sur « Tout ». Rendre ta page privée retire immédiatement tes notes et critiques de ces pages.
+Services tiers : Tome n’installe aucun traceur. Ta recherche de livres transite par le serveur de Tome, qui interroge le catalogue de la BnF et Google Books à ta place : le texte cherché sert à construire ces appels puis disparaît : il n’est ni journalisé, ni conservé, ni rattaché à un compte, et ces services ne voient ni ton adresse IP ni ton navigateur. La réponse (des données de livre, jamais de personne) est mise en cache 24 heures pour tout le monde. En revanche, pour interroger Open Library et pour afficher les couvertures, ton navigateur contacte directement openlibrary.org, covers.openlibrary.org, books.google.com ou openapi.bnf.fr, qui reçoivent alors ta requête ou l’identifiant du livre et ton adresse IP, selon leurs propres politiques de confidentialité. Les couvertures sont chargées sans transmettre tes cookies. La recherche de livres n’a lieu que quand tu la déclenches ; les « Idées du jour » ne s’activent qu’avec ton accord explicite.
+Cookies et traceurs : Tome n’utilise aucun cookie publicitaire ni de mesure d’audience, uniquement le stockage strictement nécessaire au service (ta bibliothèque sur ton appareil, ta session). Ces usages sont exemptés de consentement, c’est pourquoi il n’y a pas de bannière cookies.
 Hébergement et transferts : Cloudflare, Inc. (101 Townsend St, San Francisco, États-Unis) ; la base de données est hébergée en Europe de l’Ouest. Les flux transitant hors de l’UE sont encadrés par les garanties reconnues (certification Data Privacy Framework et clauses contractuelles types).
-Liens d’achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises — sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d’affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d’Amazon qui s’appliquent.
+Liens d’achat : les boutons « Acheter » / « Kindle » des fiches livres renvoient vers une recherche Amazon.${AMAZON_TAG ? " En tant que Partenaire Amazon, ce site peut percevoir une commission sur les achats remplissant les conditions requises, sans aucun surcoût pour toi." : " Ces liens ne contiennent aucun identifiant d’affiliation : Tome ne perçoit aucune commission."} Ces liens ne transmettent aucune donnée personnelle ; une fois sur Amazon, ce sont les conditions et cookies d’Amazon qui s’appliquent.
 Conservation : sessions 30 jours ; compte et bibliothèque supprimés après 24 mois d’inactivité ; suppression immédiate possible à tout moment via Mon compte.
-Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données — inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil. Si tu estimes que tes droits ne sont pas respectés, tu peux adresser une réclamation à la CNIL (cnil.fr).`;
+Tes droits (RGPD) : accès et rectification (Mon compte), portabilité (Exporter mes données : inclut ta bibliothèque), effacement (Supprimer mon compte efface aussi ta bibliothèque du serveur). Tu peux aussi utiliser Tome sans compte : dans ce cas ta bibliothèque reste uniquement sur ton appareil. Si tu estimes que tes droits ne sont pas respectés, tu peux adresser une réclamation à la CNIL (cnil.fr).`;
 
-const TERMS_TEXT = `Tome — conditions d’utilisation.
+const TERMS_TEXT = `Tome : conditions d’utilisation.
 
 L’essentiel : Tome est un journal de lecture. Sois honnête, sois correct, et tout ira bien.
 
 Le service : Tome te permet de tenir ta bibliothèque, de noter et critiquer tes lectures, et de les partager avec des amis si tu le décides. Le cœur du service est gratuit (voir « Toujours gratuit »).
 Ton compte : tu es responsable de ce qui se passe avec ton compte et de la garde de ton mot de passe et de ton code de secours. Un compte = une personne réelle.
-Tes contenus : tes critiques, avis et listes restent les tiens. En les partageant (amis ou page publique), tu autorises Tome à les afficher aux personnes que TU as choisies — rien d’autre, aucune revente, aucune utilisation publicitaire.
+Tes contenus : tes critiques, avis et listes restent les tiens. En les partageant (amis ou page publique), tu autorises Tome à les afficher aux personnes que TU as choisies. Rien d’autre, aucune revente, aucune utilisation publicitaire.
 Contenus interdits : contenus illégaux, harcèlement, haine, spam, usurpation d’identité, ou toute utilisation visant à nuire au service ou à ses membres.
 Critiques publiques : si tu publies ta page, tes critiques peuvent apparaître sur les pages publiques des livres, signées de ton pseudo. Tu en restes l’auteur et le responsable ; elles peuvent être signalées et retirées si elles enfreignent ces règles.
 Signalement : chaque critique, commentaire et profil public peut être signalé (bouton « Signaler »). Les signalements sont examinés rapidement ; un contenu manifestement illicite est retiré, et l’auteur peut en discuter par email.
-Modération et résiliation : en cas d’abus, Tome peut retirer un contenu, suspendre ou fermer un compte — avec explication, sauf obligation légale contraire. Tu peux supprimer ton compte à tout moment (Mon compte), ce qui efface tes données du serveur.
-Disponibilité : Tome est un projet indépendant, fourni « en l’état », sans garantie de disponibilité permanente — l’export de ta bibliothèque est là pour que tes données ne dépendent jamais du service.
+Modération et résiliation : en cas d’abus, Tome peut retirer un contenu, suspendre ou fermer un compte, avec explication, sauf obligation légale contraire. Tu peux supprimer ton compte à tout moment (Mon compte), ce qui efface tes données du serveur.
+Disponibilité : Tome est un projet indépendant, fourni « en l’état », sans garantie de disponibilité permanente : l’export de ta bibliothèque est là pour que tes données ne dépendent jamais du service.
 Droit applicable : droit français. Contact : lucas.marroig@essec.edu.`;
 let _feedRows = [];   // dernières lignes peintes par renderFeed (source du menu « … »)
 async function renderFeed(){
@@ -8206,7 +8253,7 @@ async function renderFeed(){
             <button class="heart-btn${x.i_hearted?' on':''}" data-react="${esc(x.book_key)}" data-owner="${esc(x.username)}"
               aria-pressed="${x.i_hearted?'true':'false'}" title="J’aime" aria-label="${heartLabel(x.hearts)}">♥<span class="hn">${x.hearts||''}</span></button>`}
             <button class="heart-btn cmt-btn" data-thread="${esc(x.username)}" data-key="${esc(x.book_key)}"
-              aria-expanded="false" aria-controls="feed-thread-${fi}" title="Réponses" aria-label="${x.comments?`Réponses — ${x.comments}`:'Répondre'}">❝<span class="hn">${x.comments||''}</span></button>
+              aria-expanded="false" aria-controls="feed-thread-${fi}" title="Réponses" aria-label="${x.comments?`Réponses : ${x.comments}`:'Répondre'}">❝<span class="hn">${x.comments||''}</span></button>
             ${!isMe ? `<button class="heart-btn more-btn" data-feed-more="${fi}" title="Plus d\u2019actions" aria-label="Plus d\u2019actions sur cette lecture">\u2026</button>` : ''}
           </div>
         </div>
@@ -8222,7 +8269,7 @@ async function renderFeed(){
   }catch(e){ el.innerHTML = `<p class="friends-empty">${esc(netMsg(e))}</p>`; }
 }
 // le nom accessible remplace le contenu du bouton : il doit donc porter aussi le compteur
-const heartLabel = n => n ? `J’aime cette lecture — ${n} j’aime` : `J’aime cette lecture`;
+const heartLabel = n => n ? `J’aime cette lecture (${n} j’aime)` : `J’aime cette lecture`;
 // Un seul écouteur délégué pour le fil : cœurs, dépliage des réponses, envoi, suppression.
 function onFeedClick(e){
   if(e.target.closest('[data-react]')) return onFeedHeart(e);
@@ -8260,7 +8307,7 @@ async function feedMoreMenu(btn){
   const de = /^[aàâeéèêëiîïoôöuùûüyh]/i.test(String(x.display_name||'')) ? 'd’' : 'de ';   // élision
   const v = await uiChoose({ title:x.title, choices:[
     { label:`Voir le profil ${de}${x.display_name}`, value:'profile' },
-    owned ? { label:'Déjà dans ta bibliothèque — ouvrir', value:'open' }
+    owned ? { label:'Déjà dans ta bibliothèque : ouvrir', value:'open' }
           : { label:'Ajouter à ma pile', value:'add', variant:'primary' },
     { label:'Signaler cette critique', value:'report', variant:'danger' },
   ]});
@@ -8311,7 +8358,7 @@ async function loadThread(cell){
     if(draft){ const i = th.querySelector('.cmt-input'); if(i) i.value = draft; }
     // le compteur de l’entrée suit le fil réel
     const cn = btn.querySelector('.hn'); cn.textContent = d.comments.length || '';
-    btn.setAttribute('aria-label', d.comments.length?`Réponses — ${d.comments.length}`:'Répondre');
+    btn.setAttribute('aria-label', d.comments.length?`Réponses : ${d.comments.length}`:'Répondre');
   }catch(err){ th.innerHTML = `<p class="cmt-none">${esc(netMsg(err))}</p>`; }
 }
 // Va du fil à UNE lecture précise (depuis une notification) : bascule sur l’onglet, attend que
@@ -8328,7 +8375,7 @@ async function openFeedThread(bookKey){
     await new Promise(r=>setTimeout(r, 150));
   }
   // le fil ne remonte que les lectures partagées : la tienne n’y est pas si tu partages « Rien »
-  toast('Cette lecture n’apparaît pas dans ton fil — vérifie ton mode de partage (Amis › Partage).', {ms:6000});
+  toast('Cette lecture n’apparaît pas dans ton fil. Vérifie ton mode de partage (Amis › Partage).', {ms:6000});
 }
 function toggleThread(btn){
   const cell = btn.closest('.feed-cell');
@@ -8456,11 +8503,11 @@ async function renderMyShare(){
   const mode = social.me.shareMode || 'none';
   const shareable = shareableBooks();
   el.innerHTML = `
-    <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">Choisis ce que tes amis peuvent voir — ton étagère se synchronise ensuite automatiquement. ${plur(shareable.length,'titre partageable','titres partageables')} (lus ou notés).${(()=>{
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:14px">Choisis ce que tes amis peuvent voir. Ton étagère se synchronise ensuite automatiquement. ${plur(shareable.length,'titre partageable','titres partageables')} (lus ou notés).${(()=>{
       // le serveur n’accepte que les couvertures des catalogues de livres (une image quelconque
       // pourrait pister tes amis) : on le dit au lieu de les faire disparaître en silence
       const n = shareable.filter(b=>b.cover && !SHAREABLE_COVER.test(b.cover)).length;
-      return n ? ` <span style="color:var(--faint)">${plur(n,'couverture ne sera pas partagée','couvertures ne seront pas partagées')} — image hors catalogue, le titre reste visible.</span>` : '';
+      return n ? ` <span style="color:var(--faint)">${plur(n,'couverture ne sera pas partagée','couvertures ne seront pas partagées')} : image hors catalogue, le titre reste visible.</span>` : '';
     })()}</p>
     <fieldset class="share-options" id="share-mode">
       <legend>Visibilité de mon étagère</legend>
@@ -8474,7 +8521,7 @@ async function renderMyShare(){
     </div>
     <div id="share-status" role="status" aria-live="polite" style="font-size:13px;color:var(--muted);margin-top:12px"></div>
     <h4 class="soc-h4">Ma page publique</h4>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n’affiche que ce que tu partages ci-dessus — <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n’affiche que ce que tu partages ci-dessus, <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
     <div class="data-actions">
       <button class="btn ${social.publicProfile?'':'primary'}" id="acc-pub">${social.publicProfile?'Rendre ma page privée':'Publier ma page'}</button>
       ${social.publicProfile?`<button class="btn" id="acc-pub-copy">${ic('link',16)} Copier le lien</button><a class="btn" id="acc-pub-open" href="/@${esc(social.me.username)}" target="_blank" rel="noopener">Voir ma page publique ↗</a>`:''}
@@ -8509,7 +8556,7 @@ async function renderMyShare(){
       // la barre « moi » affiche le mode : elle doit suivre le réglage sans changer d’onglet
       updateMeBarShare();
     }catch(e){
-      setStatus(e.message==='offline' ? 'Pas de connexion — réglage non enregistré.' : netMsg(e));
+      setStatus(e.message==='offline' ? 'Pas de connexion : réglage non enregistré.' : netMsg(e));
       // rien n’a changé côté serveur : la case doit redire l’état réel, pas celui qu’on voulait
       const back = radios.find(r=>r.value===(social.me.shareMode||'none')); if(back) back.checked = true;
     }
@@ -8625,7 +8672,7 @@ function renderProfile(box, d){
           ${mine.has(b.book_key)?`<span class="ribbon done">✓ toi aussi</span>`:''}
         </div><div class="under">${starsHTML(b.rating)}</div></div>`).join('')}</div>`
       : `<p class="friends-empty">${esc(d.user.displayName)} ne partage rien pour le moment.</p>`)
-    : (d.iBlocked ? `<p class="friends-empty">Tu as bloqué cet utilisateur.</p>` : `<p class="friends-empty">Vous n’êtes pas encore amis — sa bibliothèque est privée.</p>`)}`;
+    : (d.iBlocked ? `<p class="friends-empty">Tu as bloqué cet utilisateur.</p>` : `<p class="friends-empty">Vous n’êtes pas encore amis : sa bibliothèque est privée.</p>`)}`;
   $('#prof-back').addEventListener('click', leaveProfile);
   const blockBtn = box.querySelector('[data-block]');
   if(blockBtn) blockBtn.addEventListener('click', async ()=>{
@@ -8634,7 +8681,7 @@ function renderProfile(box, d){
     // pas après, et dire où l’annuler.
     if(!await uiConfirm({title:'Bloquer '+d.user.displayName+' ?', message:'Vous ne serez plus amis ; cette personne ne pourra plus t’ajouter, voir tes lectures ni t’écrire. Vos réactions et réponses échangées seront effacées. Réversible depuis Mon compte › Utilisateurs bloqués.', okLabel:'Bloquer', danger:true})) return;
     blockBtn.disabled = true;
-    try{ await api('/api/block', {method:'POST', body:{username:d.user.username}}); toast('Blocage effectif — Mon compte pour annuler', {ms:6000}); social.profileFrom='friends'; leaveProfile(); }
+    try{ await api('/api/block', {method:'POST', body:{username:d.user.username}}); toast('Blocage effectif. Pour l’annuler : Mon compte', {ms:6000}); social.profileFrom='friends'; leaveProfile(); }
     catch(e){ blockBtn.disabled = false; toast(e.message); }
   });
   // Le serveur ne signale le blocage que dans un sens (celui qu’on a posé) : on propose donc
@@ -8731,7 +8778,7 @@ async function socLogout(){
   social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError=''; setLibStatus('');
   social.sessionExpired=false;   // partir de son plein gré n’est pas une session perdue : pas de message d’expiration
   setFriendsBadge(0);
-  if(retirer){ setAsideBeforeWipe(owner); replaceState({}); libPersist(); clearSelection(); toast('Bibliothèque retirée de cet appareil — elle reviendra à ta prochaine connexion ici', {ms:6000}); }
+  if(retirer){ setAsideBeforeWipe(owner); replaceState({}); libPersist(); clearSelection(); toast('Bibliothèque retirée de cet appareil, elle reviendra à ta prochaine connexion ici', {ms:6000}); }
   render();   // Mon compte repasse au formulaire de connexion, l’avatar de l’en-tête à la silhouette
 }
 // écouteur délégué unique pour toute la vue Amis
@@ -8838,7 +8885,7 @@ if(_loaded.notice){
         try{ r.scrollIntoView({block:'center'}); }catch(_){}
         r.click();
       }
-      else toast('Aucune sauvegarde récupérable — Mon compte › Mes données pour exporter ce qui reste', {ms:6000});
+      else toast('Aucune sauvegarde récupérable. Mon compte › Mes données pour exporter ce qui reste', {ms:6000});
     });
     $('#data-warning-close').addEventListener('click', ()=>{ dw.hidden = true; });
   }else{
@@ -8893,6 +8940,7 @@ $('#welcome').addEventListener('click', e=>{
   const a = b.dataset.lp;
   if(a==='legal'){ openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); return; }
   if(a==='pledge'){ showPledge(); return; }
+  if(a==='versions'){ showVersions(); return; }
   try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus l’imposer au prochain lancement
   hideWelcome();
   if(a==='signup' || a==='login'){ selectView('friends'); if(!social.me) renderAuth($('#friends-body'), a==='signup'?'signup':'login'); }
