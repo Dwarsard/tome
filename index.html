@@ -49,8 +49,8 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="preload" href="/fonts/ebgaramond-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="/fonts/ebgaramond-italic-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/alegreya-normal-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/alegreya-italic-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
@@ -163,7 +163,7 @@
            c’est ce bouton qui y mène. Silhouette avant connexion, avatar ensuite (syncMeButton) —
            même dessin que ic('user',18), inline pour éviter le clignotement avant le boot de app.js. -->
       <button class="btn icon" id="btn-me" aria-label="Mon compte" title="Mon compte"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:18px;height:18px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></button>
-      <!-- Le « ＋ » pleine chasse (U+FF0B) est hors de l’unicode-range d’EB Garamond : le navigateur
+      <!-- Le « ＋ » pleine chasse (U+FF0B) est hors de l’unicode-range d’Alegreya : le navigateur
            allait le chercher dans une police système, plus grasse et mal alignée. Même dessin que
            ic('plus',16), en SVG inline pour éviter le clignotement avant le boot de app.js. -->
       <button class="btn primary" id="btn-open-search" aria-label="Ajouter un livre"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="width:16px;height:16px;flex-shrink:0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span class="lbl-txt">Ajouter</span></button>
@@ -542,7 +542,7 @@
     <div class="modal-body">
       <p id="dialog-msg"></p>
       <!-- Code à recopier (code de secours) : hors du message pour rester la chose la plus grande
-           du dialogue, en Plex Mono, sélectionnable d’un seul geste. Rempli par openDialog({code}). -->
+           du dialogue, en Plex Mono (--font-code), sélectionnable d’un seul geste. Rempli par openDialog({code}). -->
       <code id="dialog-code" class="dlg-code" hidden></code>
       <input id="dialog-input" hidden aria-labelledby="dialog-title">
       <textarea id="dialog-textarea" rows="6" hidden aria-labelledby="dialog-title"></textarea>

@@ -6121,9 +6121,9 @@ document.addEventListener('click', e => {
 async function ensureCardFonts(){
   if(!(document.fonts && document.fonts.load)) return;
   try{ await Promise.all([
-    document.fonts.load("600 46px 'EB Garamond'"), document.fonts.load("700 46px 'EB Garamond'"),
-    document.fonts.load("700 128px 'EB Garamond'"), document.fonts.load("700 165px 'EB Garamond'"),
-    document.fonts.load("italic 400 26px 'EB Garamond'"),
+    document.fonts.load("600 46px 'Alegreya'"), document.fonts.load("700 46px 'Alegreya'"),
+    document.fonts.load("700 128px 'Alegreya'"), document.fonts.load("700 165px 'Alegreya'"),
+    document.fonts.load("italic 400 26px 'Alegreya'"),
   ]); }catch(_){ }
 }
 function drawCard(b, coverImg){
@@ -6147,7 +6147,7 @@ function drawCard(b, coverImg){
   if(coverImg) ditherRegion(ctx, cx, cy, cw, ch, 16);
   if(ctx.roundRect){ ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.roundRect(cx,cy,cw,ch,16); ctx.stroke(); }
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#ece3d1'; ctx.font = '600 46px "EB Garamond", Georgia, serif';
+  ctx.fillStyle = '#ece3d1'; ctx.font = '600 46px "Alegreya", Georgia, serif';
   let y = wrapText(ctx, fullTitle(b), W/2, cy+ch+84, W-160, 56, 2);
   ctx.font = '28px system-ui, sans-serif'; ctx.fillStyle = '#a2977e';
   y = wrapText(ctx, authorsStr(b), W/2, y+4, W-200, 36, 1);
@@ -6156,10 +6156,10 @@ function drawCard(b, coverImg){
     ctx.fillText(starsTxt(b.rating), W/2, y+30); y += 74;
   }
   if(b.review){
-    ctx.font = 'italic 400 26px "EB Garamond", Georgia, serif'; ctx.fillStyle = '#c7bda6';
+    ctx.font = 'italic 400 26px "Alegreya", Georgia, serif'; ctx.fillStyle = '#c7bda6';
     y = wrapText(ctx, '« '+b.review+' »', W/2, y+26, W-200, 38, 5);
   }
-  ctx.font = '700 34px "EB Garamond", Georgia, serif'; ctx.fillStyle = '#cba351';
+  ctx.font = '700 34px "Alegreya", Georgia, serif'; ctx.fillStyle = '#cba351';
   ctx.fillText('Tome.', W/2, H-88);
   ctx.font = '22px system-ui, sans-serif'; ctx.fillStyle = '#c9b892';
   ctx.fillText('montome.fr', W/2, H-52);
@@ -6206,11 +6206,11 @@ function drawYearCard(year, coverImg){
   ctx.fillStyle=halo; ctx.fillRect(0,0,W,H);
   const PAD=88; ctx.textAlign='left';
   ctx.fillStyle='#a2977e'; ctx.font='600 32px system-ui'; ctx.fillText('MA RÉTRO LECTURE', PAD, 128);
-  ctx.fillStyle='#ece3d1'; ctx.font='700 165px "EB Garamond", Georgia, serif'; ctx.fillText(String(r.year), PAD, 300);
+  ctx.fillStyle='#ece3d1'; ctx.font='700 165px "Alegreya", Georgia, serif'; ctx.fillText(String(r.year), PAD, 300);
   const hY=430;
-  ctx.fillStyle='#cba351'; ctx.font='700 128px "EB Garamond", Georgia, serif'; ctx.fillText(String(r.count), PAD, hY);
+  ctx.fillStyle='#cba351'; ctx.font='700 128px "Alegreya", Georgia, serif'; ctx.fillText(String(r.count), PAD, hY);
   ctx.fillStyle='#a2977e'; ctx.font='600 32px system-ui'; ctx.fillText(r.count>1?'lectures':'lecture', PAD, hY+44);
-  const c2=W*0.52; ctx.fillStyle='#ece3d1'; ctx.font='700 128px "EB Garamond", Georgia, serif';
+  const c2=W*0.52; ctx.fillStyle='#ece3d1'; ctx.font='700 128px "Alegreya", Georgia, serif';
   ctx.fillText(r.pages?r.pages.toLocaleString('fr-FR'):'—', c2, hY);
   ctx.fillStyle='#a2977e'; ctx.font='600 32px system-ui'; ctx.fillText('pages lues', c2, hY+44);
   let y=560;
@@ -6223,7 +6223,7 @@ function drawYearCard(year, coverImg){
     if(coverImg) ditherRegion(ctx, cx, cy, cw, ch, 14);
     const tx=cx+cw+40;
     ctx.fillStyle='#cba351'; ctx.font='700 26px system-ui'; ctx.fillText('COUP DE CŒUR', tx, cy+42);
-    ctx.fillStyle='#ece3d1'; ctx.font='600 44px "EB Garamond", Georgia, serif'; const aT=wrapText(ctx, fullTitle(r.best), tx, cy+100, W-PAD-tx, 50, 2);
+    ctx.fillStyle='#ece3d1'; ctx.font='600 44px "Alegreya", Georgia, serif'; const aT=wrapText(ctx, fullTitle(r.best), tx, cy+100, W-PAD-tx, 50, 2);
     ctx.fillStyle='#a2977e'; ctx.font='28px system-ui'; const aA=wrapText(ctx, authorsStr(r.best), tx, aT+6, W-PAD-tx, 34, 1);
     ctx.fillStyle='#cba351'; ctx.font='36px system-ui'; ctx.fillText(starsTxt(r.best.rating), tx, aA+34);
     y=cy+ch+76;
@@ -6252,7 +6252,7 @@ function drawYearCard(year, coverImg){
     if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(bx, base-bh, bw, bh, 5); ctx.fill(); } else ctx.fillRect(bx, base-bh, bw, bh);
     ctx.fillStyle='#7c7360'; ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.fillText(MONTHS_MINI[i], bx+bw/2, base+32);
   }
-  ctx.textAlign='center'; ctx.fillStyle='#cba351'; ctx.font='700 44px "EB Garamond", Georgia, serif'; ctx.fillText('Tome.', W/2, H-84);
+  ctx.textAlign='center'; ctx.fillStyle='#cba351'; ctx.font='700 44px "Alegreya", Georgia, serif'; ctx.fillText('Tome.', W/2, H-84);
   ctx.fillStyle='#c9b892'; ctx.font='26px system-ui'; ctx.fillText('montome.fr', W/2, H-40);
   return cv;
 }

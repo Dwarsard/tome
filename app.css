@@ -1,12 +1,16 @@
-/* Police auto-hébergée (OFL) — EB Garamond, la lettre des livres français (Gallimard, Pléiade) :
-   une seule voix pour les titres (en italique) et le texte ; Plex Mono pour les chiffres.
-   Variable : une ressource par style couvre toute la plage de graisses. */
-@font-face{font-family:'EB Garamond';font-style:normal;font-weight:400 800;font-display:swap;src:url('./fonts/ebgaramond-normal-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:'EB Garamond';font-style:normal;font-weight:400 800;font-display:swap;src:url('./fonts/ebgaramond-normal-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
-@font-face{font-family:'EB Garamond';font-style:italic;font-weight:400 800;font-display:swap;src:url('./fonts/ebgaramond-italic-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
-@font-face{font-family:'EB Garamond';font-style:italic;font-weight:400 800;font-display:swap;src:url('./fonts/ebgaramond-italic-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+/* Polices auto-hébergées (OFL) — Alegreya, dessinée pour la littérature, compose les titres (en italique)
+   et le texte ; Alegreya Sans porte ce qui s'actionne et se compte (boutons, onglets, chiffres, libellés).
+   Alegreya est variable : une ressource par style couvre toute la plage de graisses. latin-ext AVANT latin. */
+@font-face{font-family:'Alegreya';font-style:normal;font-weight:400 900;font-display:swap;src:url('./fonts/alegreya-normal-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Alegreya';font-style:normal;font-weight:400 900;font-display:swap;src:url('./fonts/alegreya-normal-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Alegreya';font-style:italic;font-weight:400 900;font-display:swap;src:url('./fonts/alegreya-italic-latinext.woff2') format('woff2');unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Alegreya';font-style:italic;font-weight:400 900;font-display:swap;src:url('./fonts/alegreya-italic-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Alegreya Sans';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/alegreyasans-normal-400-latin.woff2') format('woff2')}
+@font-face{font-family:'Alegreya Sans';font-style:normal;font-weight:500;font-display:swap;src:url('./fonts/alegreyasans-normal-500-latin.woff2') format('woff2')}
+@font-face{font-family:'Alegreya Sans';font-style:normal;font-weight:700;font-display:swap;src:url('./fonts/alegreyasans-normal-700-latin.woff2') format('woff2')}
+@font-face{font-family:'Alegreya Sans';font-style:italic;font-weight:400;font-display:swap;src:url('./fonts/alegreyasans-italic-400-latin.woff2') format('woff2')}
 
-/* Mono pour les données (chiffres, dates, libellés techniques) : le contraste qui manquait au tout-serif. */
+/* Plex Mono ne sert plus qu'aux codes à recopier (code de secours) : --font-code. */
 @font-face{font-family:'Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/plexmono-normal-400-latin.woff2') format('woff2')}
 @font-face{font-family:'Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url('./fonts/plexmono-normal-500-latin.woff2') format('woff2')}
 @font-face{font-family:'Plex Mono';font-style:italic;font-weight:400;font-display:swap;src:url('./fonts/plexmono-italic-400-latin.woff2') format('woff2')}
@@ -29,11 +33,12 @@
   --rule:#6b5a3a; /* filet éditorial (titres courants, séparations de page) */
   --sh-1:0 2px 8px rgba(0,0,0,.28); --sh-2:0 10px 26px rgba(0,0,0,.42); --sh-3:0 20px 48px rgba(0,0,0,.5);
   --shadow:var(--sh-2);
-  /* Typo d'affichage : serif système chaleureux (Iowan sur Apple, Palatino sur Windows, Georgia en repli)
-     — donne une identité « livre » aux grands titres, sans police externe (CSP/offline). */
-  --font-display:"EB Garamond",Garamond,"Iowan Old Style",Georgia,"Times New Roman",serif;
-  --font-serif:"EB Garamond",Garamond,"Iowan Old Style",Georgia,serif;
-  --font-mono:"Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  /* Alegreya pour ce qui se lit. --font-mono garde son nom historique (comme --green) mais désigne
+     désormais Alegreya Sans : chiffres, dates, libellés et contrôles. --font-code = vrai mono, pour les codes. */
+  --font-display:"Alegreya","Iowan Old Style",Georgia,"Times New Roman",serif;
+  --font-serif:"Alegreya","Iowan Old Style",Georgia,serif;
+  --font-mono:"Alegreya Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-code:"Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --page:#e8dfc9; --page-edge:#c9bda0;   /* tranche de papier des « livres en volume » */
 }
 :root[data-theme="light"]{
@@ -591,7 +596,7 @@ body.selecting .card .qk{display:none}
 }
 .overlay.open{display:flex}
 .modal{
-  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
   width:100%; max-width:600px; box-shadow:var(--shadow); animation:pop .16s ease;
 }
 @keyframes pop{from{transform:translateY(10px); opacity:0} to{transform:none; opacity:1}}
@@ -963,7 +968,7 @@ body.selecting .row-stars, body.selecting .lrow .rmenu{pointer-events:none; opac
 #ov-card{z-index:150}
 .card-modal{max-width:430px}
 #card-body{text-align:center}
-.card-preview{width:100%; max-width:330px; border-radius:14px; border:1px solid var(--border); box-shadow:var(--sh-2); display:block; margin:0 auto 14px}
+.card-preview{width:100%; max-width:330px; border-radius:var(--r-lg); border:1px solid var(--border); box-shadow:var(--sh-2); display:block; margin:0 auto 14px}
 .card-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
 .card-hint{font-size:var(--fs-md); color:var(--faint); margin-top:10px}
 /* Sous la critique : à qui elle est visible. Discret comme une note de marge, mais toujours là. */
@@ -1196,7 +1201,7 @@ div.pw-wrap > input{padding-right:88px; margin-bottom:0}
   .overlay{padding:0}
   .overlay .modal{margin-top:max(24px, env(safe-area-inset-top, 0px));
     min-height:calc(100% - max(24px, env(safe-area-inset-top, 0px)));
-    border-radius:14px 14px 0 0; border-left:0; border-right:0; border-bottom:0}
+    border-radius:var(--r-lg) var(--r-lg) 0 0; border-left:0; border-right:0; border-bottom:0}
   .overlay .modal-head{position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--surface)}
   /* Pied de fiche : le .spacer poussait « Supprimer » seul contre le bord droit, à côté de
      « Partager » — un mis-tap coûteux. Il passe sur sa propre ligne, en pointillé. */
@@ -1767,11 +1772,67 @@ a.btn{text-decoration:none} /* les liens habillés en bouton ne se soulignent pa
 @media(max-width:560px){ .pb-txt .pp-stats{display:flex; gap:18px; flex-wrap:wrap} .pb-actions .btn{flex:1 1 auto; justify-content:center} }
 .seg-select{padding:5px 8px; font-size:var(--fs-sm); font-family:var(--font-mono); border:1px solid var(--control-border); border-radius:var(--r-sm); background:var(--surface); color:var(--text); max-width:150px}
 
-/* ---------- Voix Garamond : les titres de page en italique, comme une page de titre ---------- */
+/* ---------- Titres de page en italique, comme une page de titre ---------- */
 .today-hero h2,.lp-title,.lp-final-t,.pp-name,.detail h3.dt,#edit-title,#detail-head{font-style:italic; font-weight:500; letter-spacing:-.005em}
 .today-hero h2{font-size:clamp(42px,6.4vw,66px)}
 .brand{font-weight:600; letter-spacing:-.01em}
 h3,h4{font-weight:600}
+
+/* ---------- Voix Alegreya + encarts sur filets (lot 6, 20/09/2026) ----------
+   Un lecteur a trouvé que Tome « manquait d'âme » et « faisait IA ». Deux causes retenues avec Lucas,
+   comparées sur le vrai écran : le couple serif italique + mono en capitales, et la forme des encarts
+   (barre d'accent à gauche, pilules, champs à 10 px, panneaux gris arrondis). Ce bloc applique le choix
+   fait sur les planches : Alegreya / Alegreya Sans, et des filets à la place des boîtes. */
+
+/* Ce qui s'actionne et se compte passe en Alegreya Sans. Elle n'a pas de graisse 600 : 500 pour les
+   contrôles, 700 pour l'action principale et l'état actif. Les zones de texte long restent en serif. */
+.btn,nav button,.header-actions button,.chip,.mood,.pill,input,select,label,.seg button,.seg-mini button,
+.linkish,.today-links button,.toast-action,[role="tab"],.badge,.tbadge,.ribbon,.st-tag{font-family:var(--font-mono)}
+.btn,nav button,.chip,.seg button,.seg-mini button,.linkish,label{font-weight:500}
+.btn.primary,nav button.active,.chip.active,.seg button.on,.seg-mini button.on,[role="tab"][aria-selected="true"]{font-weight:700}
+.btn,.chip,nav button,input,select{font-variant-numeric:lining-nums}
+/* Alegreya compose ses chiffres en elzéviriens : parfait dans une phrase, pas dans une donnée. */
+.today-run,.today-date,.today-kicker,.today-mini small,.today-progress-meta,.today-progress-meta strong,.entry .day b,
+.tile b,.tile span,.goal-big .gnum,.hbar .val,.affinity-ring .pct,.heart-btn .hn,#btn-streak,.qr-count,.pp-stat b,.bulkbar b,
+.pace,.today-feed-row time,#lib-dir,#month-year,.rating-histo .cnt,.rdate,.rstart,.reading-row .rdays,.pb-review-when,
+.pb-source,.seg-select,#acc-rem,.count-note{font-variant-numeric:lining-nums tabular-nums}
+.today-run,.today-date,.today-kicker{font-size:var(--fs-sm); font-weight:700; letter-spacing:.09em}
+.dlg-code:not([hidden]){font-family:var(--font-code)}
+
+/* Des filets, pas des boîtes : ce que contient une vue se pose sur la page. */
+.panel,.auth-card,.me-bar,.ideas-panel,.pp-fav{background:none; border:0; border-top:2px solid var(--rule); border-radius:0; padding-left:0; padding-right:0; box-shadow:none}
+.frow,.feed-item,.sr,.quote-item,.today-feed-row{background:none; border:0; border-bottom:1px solid var(--border); border-radius:0; padding-left:0; padding-right:0; margin-bottom:0}
+.frow:hover,.feed-item:hover,.sr:hover{border-color:var(--border-hover)}
+.today-social-empty{background:none; border-radius:0; border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding-left:0; padding-right:0}
+.demo-banner,.invite-banner{background:none; border:0; border-top:2px solid var(--rule); border-bottom:1px solid var(--border); border-radius:0; padding-left:0; padding-right:0}
+/* Les alertes de la bibliothèque (cartes à réviser, prêt en retard) et le temps fort de la rétro :
+   fin du dégradé et du fond teinté. Le prêt en retard garde sa couleur, dans le filet. */
+.study-alert,.loan-alert,.recap-hi{background:none; border:0; border-top:2px solid var(--rule); border-bottom:1px solid var(--border); border-radius:0; padding-left:0; padding-right:0}
+.loan-alert{border-top-color:var(--orange)}
+/* L'encart « pourquoi ce livre » : fin de la barre d'accent sur fond teinté, une simple incise. */
+.today-reason{background:none; border:0; border-radius:0; padding:0; font-style:italic; color:var(--muted)}
+.today-reason span{color:var(--muted)}
+
+/* Les puces : des mots soulignés, plus des pilules. La couleur du type passe dans le filet. */
+.chip{border-radius:0; border:0; border-bottom:2px solid transparent; background:none; padding:6px 2px; margin-right:10px}
+.chip:hover{border-color:var(--control-border)}
+.chip.active{background:none; border-bottom-color:var(--text); color:var(--text)}
+.chip.t-livre.active{border-bottom-color:var(--blue)} .chip.t-bd.active{border-bottom-color:var(--orange)} .chip.t-manga.active{border-bottom-color:var(--pink)}
+.smart-chips .sc-group [data-sc]{border-radius:0}
+
+/* Les champs : une ligne d'écriture. Les zones de texte long gardent un cadre, à angles secs. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),select{border-radius:0; border-width:0 0 1.5px 0; background-color:transparent}
+textarea{border-radius:2px}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,select:focus{border-color:var(--green); box-shadow:0 1.5px 0 0 var(--green)}
+
+/* Le toast : « left:50% » sans largeur ne lui laissait que la moitié droite de l'écran (188 px sur un
+   téléphone, le texte sur quatre lignes). Même motif que #data-warning : marges égales, largeur au plus juste. */
+#toast{left:14px; right:14px; margin-inline:auto; width:fit-content; transform:translateY(90px)}
+#toast.show{transform:translateY(0)}
+
+/* Rayons secs partout ailleurs : ce qui restait en 8, 10 px ou en pilule rejoint l'échelle. */
+nav button,.seg,.now-card,.goal-line,.rate-row,.tome-row,.bulkbar .bb-actions button,.mood,.pill,.heart-btn,.today-streak,.common-badge{border-radius:var(--r-sm)}
+.btn{border-radius:2px}
 
 /* ===== iOS : pas de rezoom au focus =====
    Safari agrandit la page dès qu'un champ affiche moins de 16 px, et ne revient jamais en
