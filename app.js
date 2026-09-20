@@ -3164,7 +3164,9 @@ async function searchGoogleBooks(q, opts={}){
     description:typeof r.description==='string' ? r.description.slice(0,5000) : '',
     series:typeof r.series==='string' ? r.series.slice(0,150) : '', volume:numIn(r.volume,1,9999), source:'bnf',
   }));
-  if(data.tomeSources && data.tomeSources.google!=='ok'){
+  // « gb-nokey » : le site n'a pas de clé Google, ce catalogue ne fait donc pas partie des sources.
+  // Rien à signaler au lecteur — la BnF et Open Library ont répondu, la recherche n'est pas amputée.
+  if(data.tomeSources && data.tomeSources.google!=='ok' && data.tomeSources.google!=='gb-nokey'){
     _gbPartial=true;
     if(data.tomeSources.google==='gb-quota') _gbQuotaHit=true;
   }
@@ -8548,6 +8550,7 @@ const CHANGELOG = `Ce qui a changé dans Tome, du plus récent au plus ancien.
 
 20 septembre 2026, le soir
 La recherche retrouve les livres : elle ne ramène plus de disques ni de films de la BnF, cherche par titre et par auteur, et trouve un livre par son code-barres même quand la BnF ne connaît que son ancien ISBN. Une collection d’éditeur comme « Folio » n’est plus prise pour une série.
+La recherche ne prétend plus que « Google Books a atteint sa limite du jour » : ce catalogue n’est simplement pas branché ici pour le moment.
 Entre deux appareils, un livre modifié sur l’un ne se dédouble plus sur l’autre. « Restaurer une sauvegarde » garde d’abord une copie de la bibliothèque actuelle. Le titre de ta lecture en cours, utilisé pour le rappel, n’est plus visible par tes amis.
 
 20 septembre 2026
