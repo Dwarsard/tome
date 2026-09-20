@@ -1,7 +1,7 @@
 /* Service worker de Tome — cache l'app pour l'usage hors ligne.
    Incrémenter CACHE à chaque déploiement : déclenche 'updatefound' côté page,
    qui affiche le bandeau « Nouvelle version — Recharger ». */
-const CACHE = 'tome-v24';
+const CACHE = 'tome-v25';
 const CACHE_PREFIX = 'tome-';
 // Cache SÉPARÉ des couvertures : il doit SURVIVRE aux déploiements (voir le filtre d'activate),
 // sinon la grille repart grise à chaque nouvelle version.
@@ -34,6 +34,28 @@ const ASSETS = [
   './icon-maskable-512.png',
   './apple-touch-icon.png'
 ];
+// Polices auto-hébergées (fonts/). Elles n'étaient dans aucune liste : le cache ne les recevait
+// qu'au passage, par la branche « tout le reste » du handler fetch. Or au tout premier lancement
+// la page se charge AVANT que ce worker ne contrôle quoi que ce soit : les polices venaient du
+// réseau sans passer par lui, et une app installée puis rouverte hors ligne s'affichait en Georgia.
+// Liste à garder alignée sur les @font-face d'app.css (un test la compare au fichier).
+// À PART des ASSETS, pour deux raisons : addAll est tout ou rien, et une police absente ne doit
+// pas faire échouer l'installation, donc tout le hors-ligne (voir install) ; et elles n'ont pas à
+// entrer dans ASSET_PATHS, dont chaque entrée est rafraîchie en arrière-plan à chaque lancement
+// alors qu'une police est servie « immutable » un an (pour en changer une, on la renomme).
+const FONTS = [
+  './fonts/alegreya-normal-latin.woff2',
+  './fonts/alegreya-normal-latinext.woff2',
+  './fonts/alegreya-italic-latin.woff2',
+  './fonts/alegreya-italic-latinext.woff2',
+  './fonts/alegreyasans-normal-400-latin.woff2',
+  './fonts/alegreyasans-normal-500-latin.woff2',
+  './fonts/alegreyasans-normal-700-latin.woff2',
+  './fonts/alegreyasans-italic-400-latin.woff2',
+  './fonts/plexmono-normal-400-latin.woff2',
+  './fonts/plexmono-normal-500-latin.woff2',
+  './fonts/plexmono-italic-400-latin.woff2'
+];
 // Chemins absolus des ASSETS, calculés une fois : le handler fetch les compare à chaque requête.
 const ASSET_PATHS = new Set(ASSETS.map(a => new URL(a, self.location.href).pathname));
 // Chemins de NAVIGATION qui doivent afficher l'app elle-même (et donc la coquille index.html) :
@@ -48,7 +70,11 @@ self.addEventListener('install', e => {
   // cache le nouvel index.html SANS app.css/app.js (qu'il ne connaît pas) — hors ligne, la page
   // serait alors vide. On prend donc le contrôle tout de suite pour réparer cet état incohérent.
   e.waitUntil((async () => {
-    await (await caches.open(CACHE)).addAll(ASSETS);
+    const cache = await caches.open(CACHE);
+    await cache.addAll(ASSETS);
+    // Polices : une par une et sans condition de réussite. Une police qui manque coûte un repli
+    // sur Georgia ; un addAll qui échoue coûterait l'installation du worker.
+    await Promise.allSettled(FONTS.map(f => cache.add(f)));
     const keys = await caches.keys();
     if (keys.some(k => PRE_SPLIT.test(k))) await self.skipWaiting();
   })());

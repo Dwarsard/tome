@@ -518,7 +518,9 @@ function normalizeBook(b){
    « Annuler » d’un ajout) laisse { [id]: {rev, fp} } : rev = révision de base + 1 (ordre et purge),
    fp = empreinte du livre au moment de la suppression. À la fusion — et seulement là — un livre dont
    l’id est marqué disparaît si son empreinte est la même ; modifié après ailleurs, il est GARDÉ,
-   étiqueté CONFLICT_TAG. Import, restauration et chargement ne posent ni n’appliquent jamais rien. */
+   étiqueté CONFLICT_TAG. Avec une base de fusion (meta.syncFp), une copie restée égale à cette base
+   n’a été modifiée par personne depuis la dernière synchro : elle disparaît aussi (mergeLibraries).
+   Import, restauration et chargement ne posent ni n’appliquent jamais rien. */
 function normalizeDeletedBooks(raw){
   const src = (raw && typeof raw==='object' && !Array.isArray(raw)) ? raw : {};
   const entries = [];
@@ -546,6 +548,42 @@ function mergeDeletedBooks(a, b){
     if(!cur || m.rev>cur.rev || (m.rev===cur.rev && m.fp>cur.fp)) out[id] = m;
   }
   return normalizeDeletedBooks(out);
+}
+/* ---- Base de la fusion à trois voies (meta.syncFp) ----
+   Sans version de base, la fusion ne savait pas QUI avait modifié un livre : un appareil simplement
+   en retard dédoublait (« à réconcilier ») tout ce qui avait changé ailleurs, sans avoir lui-même
+   rien touché — livres, mais aussi listes renommées, notes de série et collections.
+   syncFp = { rev, books:{[id]:empreinte}, lists:{…}, series:{[clé]:…}, smart:{…} } : les empreintes
+   de la dernière version DU COMPTE que cet appareil a intégrée (reçue à une fusion ou une adoption,
+   ou écrite par un envoi accepté). Une empreinte n’y entre jamais autrement : c’est ce qui permet de
+   lâcher sans perte une copie locale restée égale à sa base. rev = la révision (libRev) à laquelle
+   la base a été posée : si libRev avance sans elle (onglet d’une version antérieure de l’app, qui
+   transporte la clé sans la comprendre), la base est ignorée et la fusion retombe sur « dans le
+   doute, on garde les deux ».
+   La base est PAR APPAREIL — deux appareils n’ont pas intégré la même version au même moment. Elle
+   vit donc dans le stockage local, à côté de libRev (même écriture : toujours cohérents, y compris
+   entre deux onglets), et ne part ni sur le compte (libraryPayload) ni dans un export. */
+function emptySyncBase(){ return { books:{}, lists:{}, series:{}, smart:{} }; }
+function normalizeSyncFp(raw){
+  const src = (raw && typeof raw==='object' && !Array.isArray(raw)) ? raw : {};
+  // `ids` : la section est indexée par identifiant (livres, listes, collections) ; sinon par clé de
+  // série, un texte libre. « __proto__ » est écarté partout, et toute lecture passe par hasOwn.
+  const section = (m, cap, ids) => {
+    const out = {}; let n = 0;
+    if(!m || typeof m!=='object' || Array.isArray(m)) return out;
+    for(const k of Object.keys(m)){
+      const fp = m[k];
+      if(k==='__proto__' || !k || k.length>200 || (ids && !ID_RE.test(k)) || typeof fp!=='string' || !fp || fp.length>32) continue;
+      if(++n>cap) break;
+      out[k] = fp;
+    }
+    return out;
+  };
+  return {
+    rev: Number.isFinite(+src.rev) ? Math.max(0, Math.round(+src.rev)) : 0,
+    books: section(src.books, MAX_BOOKS, true), lists: section(src.lists, MAX_LISTS, true),
+    series: section(src.series, MAX_BOOKS, false), smart: section(src.smart, MAX_SMART, true),
+  };
 }
 function normalizeData(d){
   const out = {
@@ -577,6 +615,10 @@ function normalizeData(d){
       ownerName: (d.meta && typeof d.meta.ownerName==='string') ? d.meta.ownerName.slice(0,20) : null,
       libRev: (d.meta && Number.isFinite(+d.meta.libRev)) ? Math.max(0, Math.round(+d.meta.libRev)) : 0,
       deletedBooks: normalizeDeletedBooks(d.meta && d.meta.deletedBooks),
+      // Base de la fusion à trois voies : propre à l’appareil, préservée au rechargement. Celle d’un
+      // fichier importé ou d’une version du compte ne vaut rien ici : replaceLocalLibrary,
+      // mergeLibraries et adoptServerLibrary la remplacent.
+      syncFp: normalizeSyncFp(d.meta && d.meta.syncFp),
       mergeConflicts: (d.meta && Number.isFinite(+d.meta.mergeConflicts)) ? Math.max(0, Math.round(+d.meta.mergeConflicts)) : 0,
       // Objectif posé par la bibliothèque d’exemple : préservé au rechargement pour savoir
       // qu’il doit repartir avec les exemples (jamais renvoyé au serveur, meta locale).
@@ -669,11 +711,14 @@ function restoreBookIdentity(b, lists=state.lists, deleted=state.meta && state.m
 // Remplace l’état local par une sauvegarde (import JSON, restauration) SANS poser de marqueur. Le
 // compte de destination et sa révision restent ceux de l’appareil — jamais ceux du fichier, qui
 // peut venir d’un autre compte ou d’une autre époque ; les marqueurs des deux côtés sont réunis, et
-// un livre du fichier supprimé depuis reçoit un nouvel id (voir restoreBookIdentity).
+// un livre du fichier supprimé depuis reçoit un nouvel id (voir restoreBookIdentity). La base de
+// fusion suit la révision : c’est celle de l’appareil — vus d’elle, les livres du fichier sont des
+// modifications locales, que la prochaine fusion garde (et dédouble s’ils ont aussi changé ailleurs).
 function replaceLocalLibrary(clean){
   const meta = state.meta || {};
   clean.meta.ownerId = meta.ownerId || null;
   clean.meta.libRev = (+meta.libRev) || 0;
+  clean.meta.syncFp = normalizeSyncFp(meta.syncFp);
   clean.meta.deletedBooks = mergeDeletedBooks(meta.deletedBooks, clean.meta.deletedBooks);
   for(const b of clean.books) restoreBookIdentity(b, clean.lists, clean.meta.deletedBooks);
   replaceState(clean);
@@ -832,8 +877,17 @@ function syncFilterChips(){
 /* =============== Helpers métier =============== */
 function authorsStr(b){ return (b.authors||[]).join(', '); }
 function hasTomeInTitle(t){ return /\b(tome|vol(?:ume)?\.?|t\.)\s*\d/i.test(t); }
+// Titre qui porte déjà sa série ET son numéro (« Dune, livre 1 », « One piece, épisode 5 : Thriller
+// bark », notices de la BnF) : le préfixer donnait « Dune, tome 1 : Dune, livre 1 ». Un titre qui
+// commence seulement par la série (« Harry Potter à l’école des sorciers ») garde son « tome 1 ».
+function titleCarriesSeries(b){
+  const s = String(b.series||'').toLowerCase(), t = String(b.title||'').toLowerCase();
+  if(!s || t.length<=s.length || !t.startsWith(s)) return false;
+  return /^[\s,:.–-]*(?:(?:tome|t\.|vol(?:ume)?\.?|livre|épisode|episode|partie|cycle|n[°o]|#)\s*)?(?:\d+|[ivxlcdm]+)(?![\p{L}\p{N}])/iu.test(t.slice(s.length));
+}
 function fullTitle(b){
   let t = b.title;
+  if(b.series && b.volume!=null && titleCarriesSeries(b)) return t;
   if(b.series && b.volume!=null) t = `${b.series}, tome ${b.volume}` + (b.title && b.title.toLowerCase()!==b.series.toLowerCase() && !hasTomeInTitle(b.title) ? ` : ${b.title}` : '');
   else if(b.volume!=null && !hasTomeInTitle(b.title)) t = `${b.title}, tome ${b.volume}`;
   return t;
@@ -3064,13 +3118,18 @@ function isbnOf(q){
 }
 let _gbQuotaHit = false;   // quota Google épuisé : message honnête plutôt que « une source indisponible »
 let _gbTooFast = false;    // limite de Tome (60 recherches/min) : c'est passager, le message doit le dire
-let _gbPartial = false;    // Google peut tomber tandis que la BnF continue de répondre
+let _gbPartial = false;    // une des deux sources du Worker (Google ou la BnF) est tombée tandis que l’autre répond
+// Version des réponses de /api/books, alignée sur la clé de cache du Worker (books-v3). Le Worker
+// l’ignore : elle ne sert qu’à changer l’URL, donc à écarter tout de suite du cache du NAVIGATEUR
+// (max-age de 24 h) les réponses d’avant la correction de la requête BnF, où disques et films se
+// mêlaient aux livres. À incrémenter avec la clé du Worker.
+const BOOKS_API_V = 3;
 // La recherche BnF + Google passe par /api/books (Worker) : quota propre à Tome + cache de bordure.
 // Le Worker garde la forme Google historique et ajoute des résultats BnF déjà normalisés.
 async function searchGoogleBooks(q, opts={}){
   const isbn = isbnOf(q);
   const forced = (ui.searchLang && ui.searchLang!=='auto' && ui.searchLang!=='all') ? ui.searchLang : (opts.lang||'');
-  const url = `${API_BASE}/api/books?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}${forced?'&lang='+encodeURIComponent(forced):''}`;
+  const url = `${API_BASE}/api/books?q=${encodeURIComponent(isbn ? 'isbn:'+isbn : q)}${forced?'&lang='+encodeURIComponent(forced):''}&v=${BOOKS_API_V}`;
   const res = await fetch(url, opts.signal ? {signal:opts.signal} : undefined);
   const data = await res.json().catch(()=>null);
   if(!res.ok || !data){
@@ -3109,6 +3168,10 @@ async function searchGoogleBooks(q, opts={}){
     _gbPartial=true;
     if(data.tomeSources.google==='gb-quota') _gbQuotaHit=true;
   }
+  // L’inverse arrive aussi : la BnF tombe (bnf-net, bnf-http, bnf-diag) ou ne répond qu’à moitié
+  // (bnf-partial) pendant que Google répond. Sans ce test, une recherche vide disait « Aucun
+  // résultat » alors que la première source du catalogue français n’avait pas été interrogée.
+  if(data.tomeSources && data.tomeSources.bnf && data.tomeSources.bnf!=='ok') _gbPartial=true;
   // Recherche PAR ISBN : c'est l'édition qu'on a en main. Google renvoie parfois une autre
   // édition (traduction, poche) dont l'ISBN n'est pas celui scanné — on réimpose le nôtre.
   if(isbn) [...bnfItems, ...googleItems].forEach(r=>{ r.isbn = isbn; });
@@ -5161,7 +5224,7 @@ function buildTomeCSV(books){
   return '\uFEFF'+[TOME_CSV_HEADERS, ...books.map(bookToTomeCSVRow)].map(row=>row.map(csvCell).join(',')).join('\r\n');
 }
 $('#btn-export').addEventListener('click', ()=>{
-  downloadJSON(state, `tome-export-${today()}.json`);
+  downloadJSON(withoutSyncBase(state), `tome-export-${today()}.json`);   // la base de fusion est propre à l’appareil : elle ne sort pas
   state.meta.changes = 0;
   state.meta.lastExport = today();
   save(true);
@@ -5439,7 +5502,7 @@ async function importCSV(text){
   if(state.books.length) choices.push({ label:'Tout remplacer', value:'replace', variant:'danger' });
   const choice = await uiChoose({
     title: `Import ${sourceLabel}`,
-    message: `${apercu}${source==='tome'?'\n\nLe CSV contient les ouvrages, pas les listes ni les objectifs. Le JSON reste le format de sauvegarde complète.':''}${source==='babelio'?'\n\nBabelio n’exporte ni les dates de lecture, ni les critiques, ni les étagères : tes livres lus arrivent sans date, les couvertures seront récupérées par ISBN.':''}${state.books.length?'\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d’abord ta bibliothèque actuelle. Une sauvegarde de secours est conservée (restaurable dans Stats).':''}`,
+    message: `${apercu}${source==='tome'?'\n\nLe CSV contient les ouvrages, pas les listes ni les objectifs. Le JSON reste le format de sauvegarde complète.':''}${source==='babelio'?'\n\nBabelio n’exporte ni les dates de lecture, ni les critiques, ni les étagères : tes livres lus arrivent sans date, les couvertures seront récupérées par ISBN.':''}${state.books.length?'\n\n« Fusionner » ajoute les nouveaux titres à ta bibliothèque (recommandé).\n« Tout remplacer » efface d’abord ta bibliothèque actuelle. Une sauvegarde de secours est conservée (restaurable dans Mon compte › Mes données).':''}`,
     choices,
   });
   if(choice===null) return; // Annuler / Échap / clic hors modale = AUCUNE écriture
@@ -5452,7 +5515,7 @@ async function importCSV(text){
     // Remplacement : backup d’abord (réutilise le mécanisme d’import JSON)
     const prev = JSON.stringify(state);
     let backedUp=false; try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp=true; }catch(_){}
-    if(!backedUp && state.books.length) downloadJSON(prev, `tome-sauvegarde-avant-import-${today()}.json`);
+    if(!backedUp && state.books.length) downloadJSON(JSON.stringify(withoutSyncBase(state)), `tome-sauvegarde-avant-import-${today()}.json`);
     // Effacement explicite, doublement confirmé : marqué, sinon un autre appareil ramènerait tout.
     markBooksDeleted(state.books);
     state.books = []; state.lists = []; state.goals = {}; state.series = {}; state.smartCollections = [];
@@ -5520,13 +5583,13 @@ $('#import-file').addEventListener('change', e => {
       const d = JSON.parse(head);
       const clean = normalizeData(d);
       if(!clean.books.length && !clean.lists.length) throw new Error('vide');
-      if(!await uiConfirm({ title:'Importer cette sauvegarde ?', message:`${plur(clean.books.length,'ouvrage')} et ${plur(clean.lists.length,'liste')}. Cela remplace tes données actuelles. Une sauvegarde de secours est conservée (restaurable dans Stats).`, okLabel:'Importer et remplacer', danger:true })) return;
+      if(!await uiConfirm({ title:'Importer cette sauvegarde ?', message:`${plur(clean.books.length,'ouvrage')} et ${plur(clean.lists.length,'liste')}. Cela remplace tes données actuelles. Une sauvegarde de secours est conservée (restaurable dans Mon compte › Mes données).`, okLabel:'Importer et remplacer', danger:true })) return;
       // sauvegarde de secours AVANT tout écrasement ; si le stockage est plein, on télécharge l’ancien état
       const prev = JSON.stringify(state);
       let backedUp = false;
       try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp = true; }catch(_){ }
       if(!backedUp && state.books.length){
-        downloadJSON(prev, `tome-sauvegarde-avant-import-${today()}.json`);
+        downloadJSON(JSON.stringify(withoutSyncBase(state)), `tome-sauvegarde-avant-import-${today()}.json`);
         toast('Stockage plein : ancienne bibliothèque téléchargée en secours');
       }
       replaceLocalLibrary(clean);   // sans marqueur : un import n’est pas une suppression, la fusion ramène le reste
@@ -5540,15 +5603,154 @@ $('#import-file').addEventListener('change', e => {
   reader.readAsText(f);
 });
 // Sauvegardes restaurables : avant-import (-backup), données corrompues (-corrupt), les copies de
-// secours faites avant une réconciliation avec le compte (-preacct / -conflit), et les bibliothèques
-// mises de côté (-autre : ancien emplacement unique ; -autre:<compte> : une copie par compte).
+// secours faites avant une réconciliation avec le compte (-preacct / -conflit), les bibliothèques
+// mises de côté (-autre : ancien emplacement unique ; -autre:<compte> : une copie par compte), et
+// la version qu’une restauration a remplacée (-prerestore, -prerestore:<compte> : voir plus bas).
 const RESTORE_KEYS = [
   { k:'-backup',  label:"Sauvegarde d’avant-import" },
   { k:'-preacct', label:"Version locale d’avant la synchro du compte" },
   { k:'-conflit', label:"Version locale d’avant une fusion multi-appareils" },
   { k:'-autre',   label:"Bibliothèque mise de côté" },
 ];
-function restoreKeys(){ return [...RESTORE_KEYS, ...asideCopies().map(c=>({ k:c.key.slice(LS_KEY.length), label:'Bibliothèque mise de côté' }))]; }
+/* ---- Version d’avant restauration (LS_KEY-prerestore, LS_KEY-prerestore:<compte>) ----
+   « Restaurer » remplaçait la bibliothèque de l’appareil, puis celle du compte à l’envoi suivant,
+   sans garder nulle part ce qu’il y avait à l’écran, tout en promettant qu’elle resterait « côté
+   serveur ». La version remplacée est maintenant écrite ici AVANT le remplacement, et se reprend
+   par le même bouton. Si l’écriture échoue, rien n’est remplacé (voir exportBeforeRestore).
+   Une copie PAR PROPRIÉTAIRE, celui de l’état copié (meta.ownerId, qui part dans la copie) : sur un
+   appareil partagé, la restauration de B n’écrase pas la copie de A (la leçon de « -autre »), et
+   restorableBy s’y applique comme aux autres copies. Sans la base de fusion : elle ne sert qu’à
+   l’état vivant, replaceLocalLibrary garde celle de l’appareil.
+   Un seul emplacement, donc une règle pour qu’il protège la bonne version. Qui cherche la bonne
+   sauvegarde les essaie l’une après l’autre : au deuxième essai, l’écran ne montre plus sa
+   bibliothèque mais le premier essai, et le copier ici effacerait la seule trace de la vraie. On
+   note donc l’empreinte de ce que chaque restauration a produit (-prerestore-fp, par propriétaire
+   aussi) ; tant que l’écran y est resté égal, il n’est qu’un essai, et l’emplacement ne bouge pas.
+   Un essai ne peut être lâché que parce qu’il existe encore, tel quel, dans la copie d’où il sort :
+   la marque note donc aussi cette copie (clé et empreinte du contenu), relue avant de conclure. Le
+   cas qui l’a imposé : annuler une restauration APRÈS une retouche échange l’écran et l’emplacement
+   (l’essai retouché y remplace la vraie bibliothèque, qui revient à l’écran) ; la source de l’écran
+   est alors l’emplacement lui-même, qui ne la contient plus. Prise pour un essai, la vraie
+   bibliothèque disparaissait à la restauration suivante, sous un dialogue qui la disait à l’abri. */
+const PRE_RESTORE = '-prerestore', PRE_RESTORE_FP = '-prerestore-fp', PRE_RESTORE_LABEL = 'Version d’avant restauration';
+function preRestoreKey(owner){ return PRE_RESTORE + (owner ? ':'+owner : ''); }
+// Copies présentes, lues dans le stockage lui-même (comme asideCopies) : celles des autres comptes
+// de l’appareil en font partie, l’écouteur les montre inertes.
+function preRestoreKeys(){
+  const out = [], own = LS_KEY+PRE_RESTORE;
+  try{ for(let i=0;i<localStorage.length;i++){ const k = localStorage.key(i); if(k && (k===own || k.startsWith(own+':'))) out.push(k.slice(LS_KEY.length)); } }catch(_){ }
+  return out.sort();
+}
+// Y a-t-il à l’écran quelque chose qu’un remplacement ferait perdre ? Les exemples et l’objectif
+// qu’ils prêtent ne comptent pas : un état vide n’a pas à écraser une copie encore utile (même
+// règle que -preacct, voir adoptServerLibrary), ni à buter sur un stockage plein alors qu’on
+// restaure justement parce que les données étaient illisibles.
+function hasLibraryContent(st){
+  return (st.books||[]).some(b=>!isDemoBook(b)) || !!(st.lists||[]).length || !!(st.smartCollections||[]).length
+    || !!Object.keys(st.series||{}).length || (!!Object.keys(st.goals||{}).length && !(st.meta && st.meta.demoGoal));
+}
+// Empreinte de ce que l’utilisateur a saisi, et de rien d’autre (ni compte, ni révision, ni
+// marqueurs, ni compteurs) : dit si l’écran a changé depuis la dernière restauration. Les livres,
+// intitulés de listes, notes de série et collections viennent de la base de fusion (empreintes
+// mémorisées par livre) ; on y ajoute ce qu’elle laisse de côté, les livres de chaque liste et les objectifs.
+function libraryContentFp(st){
+  const fp = syncFingerprints(st, memoFingerprint), sorted = o => Object.entries(o||{}).sort(([a],[b])=>a<b ? -1 : a>b ? 1 : 0);
+  return comparableFingerprint(JSON.stringify([sorted(fp.books), sorted(fp.lists), sorted(fp.series), sorted(fp.smart),
+    (st.lists||[]).map(l=>[l.id, l.bookIds||[]]), sorted(st.goals)]));
+}
+// Marque de la dernière restauration du propriétaire `owner` (voir markRestored), ou null. Tout ce
+// qui ne se lit pas (absente, tronquée, ou l’empreinte nue d’une version antérieure) vaut « pas de
+// marque » : l’écran sera copié.
+function restoredMark(owner){
+  try{
+    const m = JSON.parse(localStorage.getItem(LS_KEY+PRE_RESTORE_FP+(owner ? ':'+owner : ''))||'null');
+    return (m && typeof m==='object' && [m.fp, m.src, m.was].every(v=>typeof v==='string' && v)) ? m : null;
+  }catch(_){ return null; }
+}
+// Empreinte du contenu d’une copie du stockage, ou '' si elle a disparu ou ne se lit plus. Sur le
+// contenu, pas sur le texte : une copie de secours refaite à l’identique par une synchro (seules
+// les méta changent) contient toujours l’essai.
+function storedContentFp(k){
+  try{ const raw = localStorage.getItem(LS_KEY+k); return raw ? libraryContentFp(normalizeData(JSON.parse(raw))) : ''; }
+  catch(_){ return ''; }
+}
+// Ce que devient la version à l’écran si on restaure maintenant :
+//   rien  : il n’y a rien à garder ;
+//   essai : l’écran est resté tel qu’une restauration l’a laissé, la copie d’où il sort le contient
+//           ENCORE, et l’emplacement protège déjà une version : il n’est pas copié, l’emplacement
+//           garde la version d’avant. Sans rien à protéger, ou si la copie source a été réécrite
+//           (échange avec l’emplacement, import, copie purgée), pas d’exception : dans le doute, on copie ;
+//   copie : il part dans l’emplacement de son propriétaire. `replaces` : il y prend la place d’une
+//           autre version (sauf si c’est elle qu’on restaure : elle passe à l’écran), ce que le dialogue annonce.
+function planBeforeRestore(chosen){
+  const owner = (state.meta && state.meta.ownerId) || '', k = preRestoreKey(owner);
+  let kept = false;
+  try{ kept = !!localStorage.getItem(LS_KEY+k); }catch(_){ }
+  if(!hasLibraryContent(state)) return { kind:'rien', k, owner };
+  const mark = kept ? restoredMark(owner) : null;
+  if(mark && mark.fp===libraryContentFp(state) && storedContentFp(mark.src)===mark.was) return { kind:'essai', k, owner };
+  return { kind:'copie', k, owner, replaces: kept && chosen.k!==k };
+}
+// Écrit la version à l’écran dans son emplacement, et la relit. Faux si le stockage la refuse
+// (plein, ou interdit) : l’ancienne copie est alors intacte, et l’appelant ne remplace rien.
+function keepBeforeRestore(k){
+  try{ const json = JSON.stringify(withoutSyncBase(state)); localStorage.setItem(LS_KEY+k, json); return localStorage.getItem(LS_KEY+k)===json; }
+  catch(_){ return false; }
+}
+// Après une restauration : la marque { fp, src, was } (voir planBeforeRestore, « essai »). fp =
+// empreinte de ce qu’elle a produit à l’écran ; src = la copie restaurée ; was = l’empreinte du
+// contenu de cette copie. Les deux empreintes diffèrent quand la restauration ré-identifie un livre
+// dont l’id porte un marqueur de suppression (restoreBookIdentity) : l’écran n’en reste pas moins
+// un essai tant que sa source est intacte.
+// Retirée d’abord : si la nouvelle ne s’écrit pas, mieux vaut aucune marque qu’une ancienne.
+function markRestored(owner, src, was){
+  const k = LS_KEY+PRE_RESTORE_FP+(owner ? ':'+owner : '');
+  try{ localStorage.removeItem(k); localStorage.setItem(k, JSON.stringify({ fp:libraryContentFp(state), src, was })); }catch(_){ }
+}
+// Le dialogue de confirmation dit ce qui est remplacé, et où retrouver ce qui l’était. Le compte
+// suit l’appareil : l’envoi qui suit la restauration y dépose la même version (une bibliothèque
+// laissée hors session par un compte repart de même vers lui à sa reconnexion). Rien n’y est
+// supprimé pour autant : sans marqueur, un autre appareil du compte rapporte à sa fusion les
+// livres qu’il a encore (test B2).
+function restoreConfirmMessage(chosen, clean, plan){
+  const me = social.me ? social.me.id : '', account = !!me && plan.owner===me;
+  const head = `${chosen.label} : ${plur(clean.books.length,'ouvrage')}, ${plur(clean.lists.length,'liste')}.`;
+  if(plan.kind==='rien') return `${head} Il n’y a rien à remplacer sur cet appareil.`;
+  const n = plur(state.books.filter(b=>!isDemoBook(b)).length, 'ouvrage');
+  const where = account ? 'sur cet appareil et sur ton compte'
+    : (!me && plan.owner) ? 'sur cet appareil, puis sur le compte qui a laissé sa bibliothèque ici, à sa prochaine connexion'
+    : 'sur cet appareil';
+  // Une copie rattachée à un compte ne se reprend que connecté à ce compte (restorableBy)
+  const slot = `sous « ${PRE_RESTORE_LABEL} »`, locked = ' ; pour la reprendre, il faudra te connecter avec le compte auquel elle est rattachée';
+  const mine = restorableBy(plan.owner||null, me);
+  if(plan.kind==='essai'){
+    return `${head} Elle remplacera ce qu’il y a à l’écran (${n}) ${where}. Ce contenu sort lui-même d’une restauration et n’a pas changé depuis : il ne sera pas gardé.`
+      + (mine ? ` Ta bibliothèque d’avant reste récupérable ici même, ${slot}.` : ` Ta bibliothèque d’avant reste gardée sur cet appareil, ${slot}${locked}.`);
+  }
+  const only = STORAGE_BLOCKED ? ', le temps de cette visite seulement (ton navigateur bloque le stockage de ce site)' : account ? ', sur cet appareil seulement' : '';
+  return `${head} Elle remplacera ta bibliothèque actuelle (${n}) ${where}. `
+    + (mine ? `L’actuelle restera récupérable ici même, ${slot}${only}.` : `L’actuelle restera gardée sur cet appareil, ${slot}${locked}.`)
+    + (plan.replaces ? ' Elle y prendra la place de la copie faite à la restauration précédente.' : '');
+}
+// La copie n’a pas pu être écrite (stockage plein, ou refusé) : rien n’a été remplacé. Seule suite
+// honnête : sortir d’abord la bibliothèque actuelle dans un fichier, puis confirmer en sachant que
+// ce fichier sera le seul filet. (L’import, lui, télécharge d’office et continue : on vient d’y
+// choisir un fichier. Ici, un clic de trop emporterait aussi la version du compte.)
+// Vrai seulement si l’export est parti, que la suite est confirmée et que l’écran n’a pas changé entre-temps.
+async function exportBeforeRestore(){
+  const pick = await uiChoose({ title:'Ta bibliothèque actuelle ne peut pas être mise à l’abri',
+    message:'Le stockage de cet appareil est plein ou refusé : la copie de sécurité n’a pas pu être écrite, et rien n’a été remplacé. Exporte d’abord ta bibliothèque actuelle dans un fichier ; tu pourras restaurer ensuite.',
+    choices:[{ label:'Exporter ma bibliothèque', value:'export', variant:'primary', default:true }] });
+  if(pick!=='export') return false;
+  const before = JSON.stringify(withoutSyncBase(state)), file = `tome-avant-restauration-${today()}.json`;
+  downloadJSON(before, file);
+  if(!await uiConfirm({ title:'Export téléchargé. Restaurer maintenant ?',
+    message:`Vérifie d’abord que le fichier ${file} est bien dans tes téléchargements : ta bibliothèque actuelle n’existera plus que là. Pour la reprendre, ce sera « Importer (JSON) », dans Mon compte › Mes données.`,
+    okLabel:'Restaurer', danger:true })) return false;
+  if(JSON.stringify(withoutSyncBase(state))!==before){ toast('Ta bibliothèque a changé entre-temps : relance la restauration'); return false; }
+  return true;
+}
+function restoreKeys(){ return [...preRestoreKeys().map(k=>({ k, label:PRE_RESTORE_LABEL })), ...RESTORE_KEYS, ...asideCopies().map(c=>({ k:c.key.slice(LS_KEY.length), label:'Bibliothèque mise de côté' }))]; }
 function hasRecoverable(){ return restoreKeys().some(r=>localStorage.getItem(LS_KEY+r.k)) || !!localStorage.getItem(LS_KEY+'-corrupt'); }
 // Une copie ne se restaure que si elle est à personne ou au compte connecté (hors session : à
 // personne seulement). Sur un appareil partagé, toutes les copies sont en clair : sans cette règle,
@@ -5584,13 +5786,31 @@ $('#btn-restore').addEventListener('click', async ()=>{
     const pick = await uiChoose({ title:'Quelle sauvegarde restaurer ?', message: foreign.length ? 'Une copie d’un autre compte se récupère en se connectant avec ce compte.' : '', choices });
     if(!pick) return; chosen = avail.find(r=>r.k===pick);
   }
-  try{
-    const clean = normalizeData(JSON.parse(chosen.raw));
-    if(!await uiConfirm({ title:'Restaurer cette sauvegarde ?', message:`${chosen.label} : ${plur(clean.books.length,'ouvrage')}, ${plur(clean.lists.length,'liste')}. Tes données actuelles seront remplacées (elles resteront sauvegardées côté serveur si tu es connecté).`, okLabel:'Restaurer', danger:true })) return;
-    replaceLocalLibrary(clean); libPersist(); render(); if(social.me) scheduleLibPush();   // sans marqueur, comme l’import
-    const dw = $('#data-warning'); if(dw) dw.hidden = true; // l’alerte « données illisibles » n’a plus lieu d’être
-    toast('Sauvegarde restaurée ✓');
-  }catch(_){ toast('Sauvegarde illisible'); }
+  let clean;
+  try{ clean = normalizeData(JSON.parse(chosen.raw)); }catch(_){ toast('Sauvegarde illisible'); return; }
+  if(!await uiConfirm({ title:'Restaurer cette sauvegarde ?', message:restoreConfirmMessage(chosen, clean, planBeforeRestore(chosen)), okLabel:'Restaurer', danger:true })) return;
+  // Le plan est refait APRÈS le dialogue, et la copie écrite dans le même souffle que le
+  // remplacement : le temps de lire, une synchro ou une autre fenêtre a pu changer l’écran.
+  const plan = planBeforeRestore(chosen);
+  if(plan.kind==='copie' && !keepBeforeRestore(plan.k) && !await exportBeforeRestore()) return;
+  // Sans marqueur, comme l’import : vus de la base de fusion (celle de l’appareil, que
+  // replaceLocalLibrary conserve avec la révision), les livres restaurés sont des retouches locales.
+  // L’envoi qui suit les dépose donc sur le compte sans rien dédoubler ; s’il tombe sur un 409, la
+  // fusion ne garde en double que ce qu’un autre appareil a lui aussi retouché.
+  // L’empreinte de la copie restaurée est prise AVANT le remplacement (il peut ré-identifier des
+  // livres de `clean`) ; c’est elle que planBeforeRestore relira dans la clé source. Après un échange
+  // avec l’emplacement (keepBeforeRestore vient d’y écrire l’écran d’avant), elle n’y sera plus :
+  // l’écran, revenu de l’emplacement, ne passera donc pas pour un essai.
+  const was = libraryContentFp(clean);
+  replaceLocalLibrary(clean);
+  markRestored(plan.owner, chosen.k, was);
+  // save() plutôt que libPersist() : un stockage qui refuse l’écriture est signalé (bandeau), l’envoi
+  // vers le compte est planifié, et une version reçue d’une autre fenêtre pendant une modale
+  // (_externalState) ne vient plus recouvrir la restauration à la fermeture suivante.
+  const saved = save(true); render();
+  const dw = $('#data-warning'); if(dw) dw.hidden = true; // l’alerte « données illisibles » n’a plus lieu d’être
+  if(saved) toast('Sauvegarde restaurée ✓');
+  else toast('Restaurée, mais pas enregistrée sur cet appareil (stockage plein). Exporte pour sécuriser', { label:'Exporter', ms:8000, onAction:()=>$('#btn-export').click() });
 });
 
 /* =============== Notifications push ===============
@@ -5664,6 +5884,7 @@ async function showPublicProfile(uname){
   }
   const u = d.user, st = d.stats||{}, shelf = d.shelf||[];
   const annee = u.since ? new Date(u.since).getFullYear() : '';
+  const nBooks = Number(st.books)||0;   // compteur venu du serveur : écrit comme un nombre, jamais tel quel
   // Une liste de couvertures ne donne pas envie ; un livre défendu, si. On met en avant le mieux
   // noté — en préférant celui qui porte une critique, c’est ce qui fait la valeur d’un journal.
   const coeur = shelf.filter(b=>b.rating>=4.5).sort((a,b)=>
@@ -5682,8 +5903,8 @@ async function showPublicProfile(uname){
       <div class="pp-user">@${esc(u.username)}</div>
       ${u.bio ? `<p class="pp-bio">${esc(u.bio)}</p>` : ''}
       <div class="pp-stats">
-        <div class="pp-stat"><b>${st.books||0}</b><span>livre${(st.books||0)>1?'s':''}</span></div>
-        ${st.avg!=null ? `<div class="pp-stat"><b>${fmtDec(st.avg)} ★</b><span>note moyenne</span></div>` : ''}
+        <div class="pp-stat"><b>${nBooks}</b><span>livre${nBooks>1?'s':''}</span></div>
+        ${st.avg!=null ? `<div class="pp-stat"><b>${esc(fmtDec(st.avg))} ★</b><span>note moyenne</span></div>` : ''}
         ${annee ? `<div class="pp-stat"><b>${annee}</b><span>sur Tome depuis</span></div>` : ''}
       </div>
     </header>
@@ -5782,8 +6003,14 @@ async function showPublicBook(slug){
   const b = d.book, st = d.stats||{}, reviews = d.reviews||[];
   if(b.slug && b.slug !== slug){ try{ history.replaceState(history.state, '', '/livre/' + b.slug); }catch(_){ } } // slug canonique
   const mine = state.books.find(x=>shelfKey(x)===b.key) || null;
-  const meta = [b.type==='bd' ? 'BD' : b.type==='manga' ? 'Manga' : 'Livre', b.series ? `${b.series}${b.volume!=null ? ' · tome '+b.volume : ''}` : '', b.year || '', b.pages ? `${b.pages} pages` : ''].filter(Boolean).join(' · ');
-  const stars = st.avg!=null ? `<b>${fmtDec(st.avg)} ★</b><span>note moyenne · ${st.rated} avis</span>` : `<b>${st.readers||0}</b><span>lecteur${(st.readers||0)>1?'s':''} public${(st.readers||0)>1?'s':''}</span>`;
+  // Le catalogue commun est écrit par le PREMIER membre qui partage un livre, et cette écriture
+  // reste : série, tome, année et pages sont donc des données d’autrui, à échapper morceau par
+  // morceau (la ligne est injectée telle quelle plus bas). Une série « <img onerror=…> » s’exécutait
+  // chez tout visiteur de la page, connecté ou non.
+  const meta = [b.type==='bd' ? 'BD' : b.type==='manga' ? 'Manga' : 'Livre', b.series ? `${b.series}${b.volume!=null ? ' · tome '+b.volume : ''}` : '', b.year || '', b.pages ? `${b.pages} pages` : ''].filter(Boolean).map(esc).join(' · ');
+  // Les compteurs viennent du serveur eux aussi : on ne les écrit que comme des nombres.
+  const nReaders = Number(st.readers)||0, nRated = Number(st.rated)||0;
+  const stars = st.avg!=null ? `<b>${esc(fmtDec(st.avg))} ★</b><span>note moyenne · ${nRated} avis</span>` : `<b>${nReaders}</b><span>lecteur${nReaders>1?'s':''} public${nReaders>1?'s':''}</span>`;
   document.title = `${b.title}${b.authors ? ', ' + b.authors : ''} · Tome`;
   // Ouverte depuis la fiche (« Page du livre ») : le livre est forcément dans la bibliothèque
   // locale — on propose d’y revenir, jamais de créer un compte ni de repartir de zéro.
@@ -5800,7 +6027,7 @@ async function showPublicBook(slug){
         <div class="pp-fav-kicker">${meta || 'Livre'}</div>
         <h1 class="pp-name">${esc(b.title)}</h1>
         ${b.authors ? `<div class="pp-user">${esc(b.authors)}</div>` : ''}
-        <div class="pp-stats"><div class="pp-stat">${stars}</div>${st.avg==null && st.readers ? `<div class="pp-stat"><b>${st.rated||0}</b><span>note${(st.rated||0)>1?'s':''}, moyenne dès 3</span></div>` : ''}</div>
+        <div class="pp-stats"><div class="pp-stat">${stars}</div>${st.avg==null && nReaders ? `<div class="pp-stat"><b>${nRated}</b><span>note${nRated>1?'s':''}, moyenne dès 3</span></div>` : ''}</div>
         <div class="pb-actions">${cta}<button class="btn" data-pb-share>Partager la page</button></div>
       </div>
     </header>
@@ -6706,8 +6933,16 @@ updateOnline();
 // pour ne pas l’écraser à la prochaine sauvegarde. Modale ouverte : on ne repeint pas sous une saisie
 // en cours — la version attend dans _externalState (appliquée par closeOverlays), et « Recharger »
 // sert à ceux qui la veulent tout de suite ; l’ancien toast demandait de recharger sans le permettre.
+// La révision de base du prochain envoi suit l’état qu’on adopte : l’autre onglet vient peut-être
+// d’écrire sur le compte (libRev avancé). Restée à l’ancienne valeur, social.libRev valait un 409 à
+// la première retouche d’ici, et la fusion qui s’ensuivait dédoublait le livre retouché — la base
+// de fusion (meta.syncFp), elle, arrive avec l’état, dans la même écriture.
 function applyExternalState(json){
-  try{ replaceState(JSON.parse(json)); render(); }catch(_){ }
+  try{
+    replaceState(JSON.parse(json));
+    if(social.me && state.meta && state.meta.ownerId===social.me.id) social.libRev = (+state.meta.libRev) || 0;
+    render();
+  }catch(_){ }
 }
 window.addEventListener('storage', e => {
   // Le jeton de session a changé dans un autre onglet (connexion, déconnexion, autre compte) :
@@ -7021,7 +7256,7 @@ function backupLocal(suffix){ try{ localStorage.setItem(LS_KEY+suffix, localStor
 // existe de vraies données, on télécharge l’état courant pour qu’aucun effacement ne soit définitif.
 function wipeFallback(){
   if((state.books||[]).some(b=>!isDemoBook(b))){
-    try{ downloadJSON(state, `tome-sauvegarde-${today()}.json`); toast('Stockage plein : ancienne bibliothèque téléchargée en secours', {ms:7000}); }catch(_){ }
+    try{ downloadJSON(withoutSyncBase(state), `tome-sauvegarde-${today()}.json`); toast('Stockage plein : ancienne bibliothèque téléchargée en secours', {ms:7000}); }catch(_){ }
   }
 }
 function backupBeforeWipe(suffix){ if(!backupLocal(suffix)) wipeFallback(); }
@@ -7069,12 +7304,85 @@ function setAsideBeforeWipe(id){ if(!setAsideFor(id)) wipeFallback(); }
 // restaurable — au lieu de rester à jamais « d’un autre compte » qui n’existe plus.
 function disownAside(id){
   const d = readAside(id); if(!d) return;
-  d.meta = Object.assign({}, d.meta, { ownerId:null, ownerName:null, libRev:0, deletedBooks:{} });
+  d.meta = Object.assign({}, d.meta, { ownerId:null, ownerName:null, libRev:0, deletedBooks:{}, syncFp:normalizeSyncFp(null) });
   try{ localStorage.setItem(asideKey(id), JSON.stringify(d)); }catch(_){ }
 }
-// rattache la biblio locale au compte courant + à une révision serveur (persisté → survit au reload)
-function libTag(rev){ state.meta = state.meta || {}; if(social.me){ state.meta.ownerId = social.me.id; state.meta.ownerName = social.me.username || null; } if(rev!=null){ state.meta.libRev = rev; social.libRev = rev; } }
+// Même chose pour la version qu’une restauration a remplacée (-prerestore:<compte>) : sans cela
+// elle restait à jamais « d’un autre compte », donc irrécupérable par l’interface. Elle rejoint
+// l’emplacement sans propriétaire s’il est libre ; sinon elle garde sa clé mais perd son
+// propriétaire (restorableBy lit le propriétaire DANS la copie), sans rien écraser.
+function disownPreRestore(id){
+  if(!id) return;
+  const from = LS_KEY+preRestoreKey(id), to = LS_KEY+preRestoreKey('');
+  try{
+    const raw = localStorage.getItem(from); if(!raw) return;
+    const d = JSON.parse(raw);
+    d.meta = Object.assign({}, d.meta, { ownerId:null, ownerName:null, libRev:0, deletedBooks:{} });
+    const free = !localStorage.getItem(to);
+    localStorage.setItem(free ? to : from, JSON.stringify(d));
+    if(free) localStorage.removeItem(from);
+    localStorage.removeItem(LS_KEY+PRE_RESTORE_FP+':'+id);   // la marque « essai » ne parlait que de ce compte
+  }catch(_){ }
+}
+// rattache la biblio locale au compte courant + à une révision serveur (persisté → survit au reload).
+// `base` (facultatif) : empreintes de la version du compte que porte cette révision — la base de la
+// prochaine fusion à trois voies (voir normalizeSyncFp). Une bibliothèque qui change de
+// propriétaire perd la sienne : elle ne parlait que de l’ancien compte.
+function libTag(rev, base){
+  state.meta = state.meta || {};
+  if(social.me){
+    if(state.meta.ownerId!==social.me.id) state.meta.syncFp = normalizeSyncFp(null);
+    state.meta.ownerId = social.me.id; state.meta.ownerName = social.me.username || null;
+  }
+  if(rev!=null){ state.meta.libRev = rev; social.libRev = rev; }
+  if(base) state.meta.syncFp = { ...emptySyncBase(), ...base, rev: (+state.meta.libRev) || 0 };
+}
 function libPersist(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){ } }
+// Ce que la fusion compare d’une liste, d’une note de série, d’une collection. Les livres d’une liste
+// n’y sont pas : ils restent unis (pas de marqueur de retrait — les départager ferait d’un import
+// ancien sur un appareil un retrait sur tous les autres).
+const listComparable = l => JSON.stringify([String((l&&l.name)||''), String((l&&l.desc)||'')]);
+const seriesComparable = v => JSON.stringify([(v && v.rating!=null) ? v.rating : null, String((v&&v.review)||''), !!(v&&v.favorite), (v && Array.isArray(v.moods)) ? v.moods : []]);
+const smartComparable = c => JSON.stringify({ name:(c&&c.name)||'', f:(c&&c.f)||{} });
+// Empreinte d’un livre DE L’ÉTAT, mémorisée. Chaque envoi les reprend toutes (c’est la base de
+// fusion), or normalizeBook et deux hachages par livre finissent par se sentir sur un téléphone
+// au-delà du millier de livres. La clé est l’objet livre, que l’interface modifie en place : son
+// JSON dit s’il a changé depuis ; un état remplacé (replaceState) emporte ses entrées avec lui.
+const _fpMemo = new WeakMap();
+function memoFingerprint(b){
+  const s = JSON.stringify(b), hit = _fpMemo.get(b);
+  if(hit && hit.s===s) return hit.fp;
+  const fp = bookFingerprint(b);
+  _fpMemo.set(b, { s, fp });
+  return fp;
+}
+// Empreintes d’une version du compte — celle qu’on reçoit ou celle qu’on envoie (démo exclue : elle
+// n’y va jamais). Voir normalizeSyncFp. `fpOf` : l’appelant qui a déjà de quoi les calculer le passe.
+function syncFingerprints(st, fpOf=bookFingerprint){
+  const out = emptySyncBase(), okId = id => id!=='__proto__' && ID_RE.test(String(id||''));
+  for(const b of ((st&&st.books)||[])) if(b && !isDemoBook(b) && okId(b.id)) out.books[b.id] = fpOf(b);
+  for(const l of ((st&&st.lists)||[])) if(l && okId(l.id)) out.lists[l.id] = comparableFingerprint(listComparable(l));
+  for(const [k, v] of Object.entries((st&&st.series)||{})) if(k && k!=='__proto__') out.series[k] = comparableFingerprint(seriesComparable(v));
+  for(const c of ((st&&st.smartCollections)||[])) if(c && okId(c.id)) out.smart[c.id] = comparableFingerprint(smartComparable(c));
+  return out;
+}
+// Base utilisable pour fusionner l’état `st` : seulement si elle a été posée à SA révision. Sinon
+// (ancienne installation, première synchro après la mise à jour, libRev avancé sans elle) : aucune.
+function syncBase(st){
+  const m = st && st.meta, fp = m && m.syncFp;
+  if(!fp || typeof fp!=='object' || ((+fp.rev)||0)!==((+m.libRev)||0)) return emptySyncBase();
+  return { ...emptySyncBase(), ...normalizeSyncFp(fp) };
+}
+// Empreinte de base d’un élément, ou null : lecture sûre (une série peut s’appeler « constructor »).
+function baseFp(section, key){ return (section && hasOwn(section, key)) ? section[key] : null; }
+// L’état sans sa base de fusion : ce qui sort de l’appareil (compte, export). La base est par
+// appareil — sur le compte, un autre appareil la prendrait pour la sienne ; dans un export, elle
+// n’est que du bruit (replaceLocalLibrary l’ignorerait de toute façon).
+function withoutSyncBase(st){
+  if(!st || !st.meta || st.meta.syncFp===undefined) return st;
+  const meta = { ...st.meta }; delete meta.syncFp;
+  return { ...st, meta };
+}
 function scheduleLibPush(delay=1400){
   if(!libraryReady()) return;
   _libDirty = true; clearTimeout(_libPushTimer); _libPushTimer = 0;
@@ -7082,16 +7390,18 @@ function scheduleLibPush(delay=1400){
   _libPushTimer = setTimeout(()=>{ _libPushTimer=0; pushLibrary(); }, delay);
   scheduleShelfPush();
 }
-// état à sauvegarder sur le compte : identique à state, sans les livres de démonstration
+// état à sauvegarder sur le compte : identique à state, sans les livres de démonstration ni la base
+// de fusion (propre à l’appareil, voir withoutSyncBase)
 function libraryPayload(){
   // Invariant défensif avant tout envoi : aucun livre présent ne porte de marqueur de suppression
   // (sinon un autre appareil l’effacerait à sa fusion) — le marqueur cède, jamais le livre.
   const deleted = state.meta && state.meta.deletedBooks;
   if(deleted) for(const b of state.books) if(hasOwn(deleted, b.id)) delete deleted[b.id];
-  if(!state.books.some(isDemoBook)) return state;
-  const books = state.books.filter(b=>!isDemoBook(b));
+  const st = withoutSyncBase(state);
+  if(!st.books.some(isDemoBook)) return st;
+  const books = st.books.filter(b=>!isDemoBook(b));
   const ids = new Set(books.map(b=>b.id));
-  return { ...state, books, lists:(state.lists||[]).map(l=>({ ...l, bookIds:(l.bookIds||[]).filter(id=>ids.has(id)) })) };
+  return { ...st, books, lists:(st.lists||[]).map(l=>({ ...l, bookIds:(l.bookIds||[]).filter(id=>ids.has(id)) })) };
 }
 async function pushLibrary(opts){
   if(!libraryReady()) return false;
@@ -7101,7 +7411,11 @@ async function pushLibrary(opts){
   // compte), le finally de cet envoi ne touche plus à l’état de la suivante.
   _libPushing = session; _libDirty = false; clearTimeout(_libPushTimer); _libPushTimer = 0; setLibStatus('saving');
   try{
-    const body = JSON.stringify({ data: JSON.stringify(libraryPayload()), baseRev: social.libRev||0 });
+    const payload = libraryPayload();
+    // Empreintes de CE QUI PART, prises maintenant : si le compte l’accepte, c’est la nouvelle base
+    // de fusion — pas l’état à l’arrivée de la réponse, qu’une retouche a pu changer entre-temps.
+    const sent = syncFingerprints(payload, memoFingerprint);
+    const body = JSON.stringify({ data: JSON.stringify(payload), baseRev: social.libRev||0 });
     // keepalive : les navigateurs plafonnent le corps à ~64 Ko — au-delà, la requête échoue
     // silencieusement ; on retombe alors sur un fetch normal (best-effort à la fermeture).
     const keep = !!(opts&&opts.keepalive) && body.length < 60000;
@@ -7116,11 +7430,11 @@ async function pushLibrary(opts){
       const merged = mergeLibraries(state, JSON.parse(d.data));
       const report = mergeReport(merged);
       replaceState(merged); state.meta.mergeConflicts=0;
-      libTag(d.rev); libPersist(); scheduleRender();
+      libTag(d.rev, merged.meta.syncFp); libPersist(); scheduleRender();   // nouvelle base : la version du compte qu’on vient d’intégrer
       setLibStatus('conflict');
       toast(report || 'Bibliothèque fusionnée avec un autre appareil ✓');
       scheduleLibPush();                                      // re-pousse la fusion
-    } else if(res.ok){ const d = await res.json(); if(!libraryReady()) return false; _libRetryMs=2000; libTag(d.rev); libPersist(); setLibStatus('saved');
+    } else if(res.ok){ const d = await res.json(); if(!libraryReady()) return false; _libRetryMs=2000; libTag(d.rev, sent); libPersist(); setLibStatus('saved');
       dropAside(session.id);                                  // le compte a tout : la copie mise de côté (fusionnée à la connexion) n’a plus d’objet
       return true; }
     else if(res.status===401){ flagSessionExpired(); }       // le jeton est bien le courant (vérifié juste au-dessus)
@@ -7152,7 +7466,9 @@ async function flushLibrary(){
 function adoptServerLibrary(d){
   if(!d || !d.data) return;
   if((state.books||[]).some(b=>!isDemoBook(b))) backupBeforeWipe('-preacct');
-  try{ replaceState(JSON.parse(d.data)); libTag(d.rev); libPersist(); scheduleRender(); }
+  // la base de fusion est recalculée sur ce qu’on adopte : celle qui traînerait dans la version du
+  // compte (déposée par un client antérieur, qui renvoie les clés qu’il ne connaît pas) est d’un autre appareil
+  try{ replaceState(JSON.parse(d.data)); libTag(d.rev, syncFingerprints(state)); libPersist(); scheduleRender(); }
   catch(e){ setLibStatus('error'); }
 }
 // Fusion SANS perte : union des livres (id + clé titre|auteur|tome), listes, objectifs, collections, séries.
@@ -7173,12 +7489,14 @@ function bookComparable(b){
   return JSON.stringify(x);
 }
 // Empreinte courte (deux hachages 32 bits indépendants, base 36) : ce qu’un marqueur de suppression
-// mémorise du livre supprimé, pour reconnaître plus tard une copie restée identique ailleurs.
-function bookFingerprint(b){
-  const s = bookComparable(b);
+// mémorise du livre supprimé, pour reconnaître plus tard une copie restée identique ailleurs — et ce
+// que la base de fusion (meta.syncFp) mémorise de chaque livre tel que synchronisé.
+// comparableFingerprint part du texte de bookComparable : la fusion, qui l’a déjà, ne le recalcule pas.
+function comparableFingerprint(s){
   let h = 0x811c9dc5; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193)>>>0; }
   return shelfHash(s)+'.'+h.toString(36);
 }
+function bookFingerprint(b){ return comparableFingerprint(bookComparable(b)); }
 // Phrase du toast après une fusion (409 ou connexion) : conflits de versions et livres gardés malgré
 // une suppression ailleurs. Retire le compteur transitoire mergeKept AVANT que l’état ne soit adopté.
 function mergeReport(merged){
@@ -7189,19 +7507,52 @@ function mergeReport(merged){
   if(kept) parts.push(`${plur(kept,'livre modifié','livres modifiés')} ailleurs après ${kept>1?'leur':'sa'} suppression, gardé${kept>1?'s':''} « ${CONFLICT_TAG} »`);
   return parts.length ? 'Fusion faite ✓ '+parts.join(' ; ') : '';
 }
-function mergeLibraries(localSt, serverRaw){
+// Fusion à TROIS voies : `localSt` apporte sa base (meta.syncFp, voir normalizeSyncFp), c’est-à-dire
+// l’empreinte de chaque livre — et de chaque intitulé de liste, note de série, collection — dans la
+// dernière version du compte que l’appareil a intégrée. Pour un même élément (même id) qui diffère
+// entre les deux côtés :
+//   seul le compte a changé depuis la base  → on prend la version du compte (l’appareil était en retard) ;
+//   seul le local a changé                  → on garde la version locale (le compte en était resté à la base) ;
+//   les deux ont changé, ou base inconnue   → les DEUX sont gardées, la locale étiquetée (règle d’origine).
+// Le reste ne change pas : union de ce qui n’existe que d’un côté (livres, listes, livres d’une
+// liste), marqueurs de suppression appliqués avant tout, objectif le plus haut. La base sert aussi
+// aux marqueurs (une copie restée à la base n’a pas été « modifiée après » la suppression), et les
+// livres de même id passent AVANT ceux qu’on rapproche par titre (deux passes, voir plus bas).
+// `fromAccount` : le second argument est une version du compte (lecture à la connexion, réponse 409).
+// Faux pour une copie mise de côté, fusionnée avec l’état de l’appareil : deux états locaux, sans
+// ancêtre commun fiable → deux voies, et la base du résultat est l’affaire de l’appelant.
+function mergeLibraries(localSt, serverRaw, fromAccount=true){
   const out = normalizeData(serverRaw);
+  const base = fromAccount ? syncBase(localSt) : emptySyncBase();
+  // Base de la PROCHAINE fusion : la version du compte qu’on intègre ici, telle que reçue (avant
+  // les marqueurs). Jamais celle que le blob transporterait : elle serait d’un autre appareil.
+  // L’appelant la pose avec la révision (libTag) ; `theirs` sert aussi, plus bas, à savoir si le
+  // compte en est resté à la base. Le texte comparable de chaque livre du compte n’est calculé
+  // qu’une fois (normalizeBook est le gros du coût d’une fusion).
+  const cmpMemo = new Map();
+  const comparable = b => { let s = cmpMemo.get(b); if(s===undefined){ s = bookComparable(b); cmpMemo.set(b, s); } return s; };
+  const theirs = fromAccount ? syncFingerprints(out, b=>comparableFingerprint(comparable(b))) : emptySyncBase();
+  out.meta.syncFp = { ...theirs, rev:0 };
   // Marqueurs de suppression : union des deux côtés, puis application — ici et nulle part ailleurs.
   // Côté serveur, un livre marqué disparaît s’il est resté tel qu’au moment de la suppression ;
   // modifié après (autre appareil), il est gardé sous un nouvel id, étiqueté : jamais de perte muette.
-  const deleted = mergeDeletedBooks(out.meta.deletedBooks, localSt.meta && localSt.meta.deletedBooks);
+  // « Modifié après » se juge AUSSI sur la base, des deux côtés : l’empreinte du marqueur est celle
+  // de la dernière version supprimée, pas forcément celle que l’autre côté connaissait. Un livre
+  // retouché PUIS supprimé hors ligne retrouvait sur le compte sa version d’avant la retouche, que
+  // personne n’avait touchée : elle ressuscitait étiquetée, et l’annonce « modifié ailleurs » mentait.
+  // Donc, quand c’est CET appareil qui porte le marqueur : la copie du compte restée égale à la base
+  // de l’appareil part avec lui (même règle en miroir plus bas, pour la copie locale). Sans base,
+  // rien ne change : dans le doute, on garde.
+  const ownMarks = normalizeDeletedBooks(localSt.meta && localSt.meta.deletedBooks);
+  const deleted = mergeDeletedBooks(out.meta.deletedBooks, ownMarks);
   out.meta.deletedBooks = deleted;
   let kept = 0;
   const serverRemap = new Map(), dropped = new Set();
   out.books = out.books.filter(b=>{
     const mark = deletionMark(deleted, b.id);
     if(!mark) return true;
-    if(mark.fp===bookFingerprint(b)){ dropped.add(b.id); return false; }
+    const there = comparableFingerprint(comparable(b)), was = baseFp(base.books, b.id);
+    if(mark.fp===there || (was && was===there && deletionMark(ownMarks, b.id))){ dropped.add(b.id); return false; }
     const old = b.id; b.id = uid(); serverRemap.set(old, b.id); withConflictTag(b); kept++;
     return true;
   });
@@ -7210,19 +7561,48 @@ function mergeLibraries(localSt, serverRaw){
   const booksById = new Map(out.books.map(b=>[b.id,b])), booksByKey = new Map(out.books.map(b=>[libMergeKey(b),b]));
   const localIdMap = new Map();
   let conflicts = 0;
-  for(const b of (localSt.books||[])){
+  // DEUX PASSES : d’abord les livres locaux dont l’id existe sur le compte (règle à trois voies),
+  // ensuite ceux qu’il reste à rapprocher par titre|auteur|tome. En une seule passe, dans l’ordre
+  // de l’état (les ajouts sont en tête), un livre rajouté pouvait être rapproché d’un livre du compte
+  // identique, donc lâché au profit de celui-ci… que la retouche locale du MÊME id remplaçait
+  // l’instant d’après : « tome 1 » renuméroté en « tome 2 » puis rajouté, et le tome 1 n’existait
+  // plus nulle part, sans conflit annoncé. Le rapprochement se fait maintenant contre le contenu
+  // définitif des livres du compte (booksByKey suit chaque remplacement).
+  const locals = (localSt.books||[]).filter(Boolean);
+  const ordered = [...locals.filter(b=>booksById.has(b.id)), ...locals.filter(b=>!booksById.has(b.id))];
+  for(const b of ordered){
     if((b.tags||[]).includes('exemple')) continue;                 // ne pas réinjecter la démo
     // Même règle côté local : supprimé ailleurs et inchangé ici → la suppression l’emporte ;
     // modifié ici → il continue comme n’importe quel livre, sous un nouvel id et étiqueté.
+    // « Inchangé ici » : égal à la version supprimée, ou resté à la base de l’appareil. Noté PUIS
+    // supprimé ailleurs, le livre d’un appareil simplement en retard n’a pas l’empreinte du marqueur.
     const mark = deletionMark(deleted, b.id);
-    if(mark && mark.fp===bookFingerprint(b)) continue;
+    if(mark){ const fpHere = bookFingerprint(b); if(mark.fp===fpHere || baseFp(base.books, b.id)===fpHere) continue; }
     const key=libMergeKey(b), existing=booksById.get(b.id)||booksByKey.get(key);
     if(existing){
-      if(bookComparable(b)===bookComparable(existing)){
+      const here = bookComparable(b), there = comparable(existing);
+      if(here===there){
         localIdMap.set(b.id, existing.id);
         continue;
       }
-      // Sans historique champ par champ, choisir silencieusement un côté détruirait l’autre version.
+      // Trois voies : seulement pour LE MÊME livre (même id, sans marqueur en jeu) dont la base est
+      // connue. Un rapprochement par titre|auteur|tome entre deux id différents reste à deux voies :
+      // la base ne dit rien du livre d’en face.
+      const was = (existing.id===b.id && !mark) ? baseFp(base.books, b.id) : null;
+      if(was && comparableFingerprint(here)===was){               // inchangé ici depuis la base : le compte a la suite
+        localIdMap.set(b.id, existing.id);
+        continue;
+      }
+      if(was && comparableFingerprint(there)===was){              // le compte en est resté à la base : la retouche locale la remplace
+        const nb = normalizeBook(b);
+        out.books[out.books.indexOf(existing)] = nb; booksById.set(nb.id, nb);
+        if(booksByKey.get(libMergeKey(existing))===existing) booksByKey.delete(libMergeKey(existing));
+        if(!booksByKey.has(key)) booksByKey.set(key, nb);
+        keys.add(key); localIdMap.set(b.id, nb.id);
+        continue;
+      }
+      // Vrai conflit (les deux côtés ont changé), ou pas de base : sans historique champ par champ,
+      // choisir silencieusement un côté détruirait l’autre version.
       // On conserve donc les DEUX livres : la copie locale est clairement marquée et reçoit un nouvel
       // id uniquement en cas de collision. L’utilisateur peut ensuite réconcilier les versions.
       const localCopy = normalizeBook(b);
@@ -7245,7 +7625,12 @@ function mergeLibraries(localSt, serverRaw){
       t.bookIds=[...new Set([...t.bookIds, ...mappedIds])];
       // un renommage / une description locale divergente ne doit pas disparaître : on préserve la
       // version locale comme liste distincte (les livres, eux, sont déjà unionnés juste au-dessus).
+      // Trois voies d’abord, comme pour les livres : intitulé resté à la base ici → celui du compte
+      // suffit ; resté à la base sur le compte → celui d’ici le remplace ; sinon, les deux listes.
       if((l.name||'')!==(t.name||'') || (l.desc||'')!==(t.desc||'')){
+        const was = baseFp(base.lists, l.id);
+        if(was && comparableFingerprint(listComparable(l))===was) continue;
+        if(was && baseFp(theirs.lists, l.id)===was){ t.name = l.name; t.desc = l.desc; continue; }
         out.lists.push({ ...l, id: uid(), name: (l.name||'Liste')+' ('+CONFLICT_TAG+')', bookIds: mappedIds });
         conflicts++;
       }
@@ -7261,6 +7646,10 @@ function mergeLibraries(localSt, serverRaw){
     const srv = out.series[name];
     if(!srv){ out.series[name] = loc; continue; }
     if(JSON.stringify(loc)===JSON.stringify(srv)) continue;
+    // Trois voies : sans elles, un appareil en retard recollait son ancienne critique sous la nouvelle.
+    const was = baseFp(base.series, name);
+    if(was && comparableFingerprint(seriesComparable(loc))===was) continue;          // rien changé ici : le compte a la suite
+    if(was && baseFp(theirs.series, name)===was){ out.series[name] = loc; continue; }   // rien changé sur le compte : la retouche d’ici
     const locRev=(loc&&loc.review||'').trim(), srvRev=(srv&&srv.review||'').trim();
     if(locRev && locRev!==srvRev){ srv.review = (srvRev?srvRev+'\n\n':'')+CONFLICT_TAG+' : '+locRev; conflicts++; }
     if(srv.rating==null && loc && loc.rating!=null) srv.rating = loc.rating;
@@ -7268,12 +7657,16 @@ function mergeLibraries(localSt, serverRaw){
   }
   // collections intelligentes : union par id ; une locale modifiée (même id, contenu différent)
   // est préservée sous un nouvel id plutôt qu’ignorée silencieusement.
+  // Trois voies là aussi : seule celle que les DEUX côtés ont retouchée depuis la base est dédoublée.
   const scById = new Map((out.smartCollections||[]).map(c=>[c.id,c]));
-  const scStrip = c => JSON.stringify({ name:c.name||'', f:c.f||{} });
   for(const c of (localSt.smartCollections||[])){
     const t = scById.get(c.id);
-    if(!t){ out.smartCollections.push(c); scById.set(c.id,c); }
-    else if(scStrip(c)!==scStrip(t)){ out.smartCollections.push({ ...c, id: uid(), name: (c.name||'Collection')+' ('+CONFLICT_TAG+')' }); conflicts++; }
+    if(!t){ out.smartCollections.push(c); scById.set(c.id,c); continue; }
+    if(smartComparable(c)===smartComparable(t)) continue;
+    const was = baseFp(base.smart, c.id);
+    if(was && comparableFingerprint(smartComparable(c))===was) continue;
+    if(was && baseFp(theirs.smart, c.id)===was){ out.smartCollections[out.smartCollections.indexOf(t)] = c; scById.set(c.id, c); continue; }
+    out.smartCollections.push({ ...c, id: uid(), name: (c.name||'Collection')+' ('+CONFLICT_TAG+')' }); conflicts++;
   }
   // compteur d’export : garder la date la plus récente
   if(localSt.meta && localSt.meta.lastExport && (!out.meta.lastExport || localSt.meta.lastExport > out.meta.lastExport)) out.meta.lastExport = localSt.meta.lastExport;
@@ -7318,15 +7711,26 @@ async function loadAccountLibrary(){
       else { setAsideBeforeWipe(localOwner); replaceState({}); libTag(0); libPersist(); wiped = true; }
       scheduleRender();
     }
+    // Une bibliothèque à personne n’a jamais rien synchronisé avec ce compte : pas de base de fusion
+    // (c’est déjà le cas par construction ; garde contre un état laissé par une version antérieure).
+    if(!localOwner){ state.meta = state.meta || {}; state.meta.syncFp = normalizeSyncFp(null); }
     // Copie mise de côté pour CE compte (déconnexion avec « Retirer », ou passage d’un autre compte
     // sur l’appareil) : fusionnée dans l’état courant AVANT toute lecture du serveur — hors ligne
     // compris —, elle porte peut-être des modifications que le compte n’a jamais reçues. Purgée au
     // premier envoi réussi ; d’ici là, la refusionner ne change rien (union).
+    // Fusion à deux voies (deux états locaux), mais la BASE de la copie est reprise : c’est ce que
+    // cet appareil avait synchronisé avec ce compte avant d’être mis de côté. Grâce à elle, la
+    // fusion avec le compte qui suit ne dédouble pas les livres que la copie n’a pas touchés. Si
+    // l’état courant est déjà à ce compte, sa propre base, plus récente, passe devant.
     const aside = readAside(myId);
     if(aside){
-      const merged = mergeLibraries(normalizeData(aside), state);
+      const asideSt = normalizeData(aside);
+      const asideBase = syncBase(asideSt), ownBase = (state.meta && state.meta.ownerId===myId) ? syncBase(state) : emptySyncBase();
+      const base = emptySyncBase();
+      for(const k of Object.keys(base)) base[k] = { ...asideBase[k], ...ownBase[k] };
+      const merged = mergeLibraries(asideSt, state, false);
       const report = mergeReport(merged), rev = (state.meta && +state.meta.libRev) || 0;   // la révision reste celle de l’appareil
-      replaceState(merged); state.meta.mergeConflicts = 0; libTag(rev); libPersist(); scheduleRender();
+      replaceState(merged); state.meta.mergeConflicts = 0; libTag(rev, base); libPersist(); scheduleRender();
       if(report) toast(report);
       else if((aside.books||[]).some(b=>!isDemoBook(b))) toast('Ta bibliothèque mise de côté sur cet appareil est de retour ✓');
     }
@@ -7350,8 +7754,8 @@ async function loadAccountLibrary(){
     _libRetryDelay = 15000;
     if(!d.exists){
       // compte sans biblio → migrer la biblio locale (à moi/anonyme). Un écran tout juste vidé n’a
-      // rien à enregistrer : pas d’envoi à vide.
-      libTag(0); _libReadySession = session;
+      // rien à enregistrer : pas d’envoi à vide. Pas de version du compte, donc pas de base de fusion.
+      libTag(0, {}); _libReadySession = session;
       if(!wiped || localHasReal) await pushLibrary();
       if(localHasReal) toast('Bibliothèque enregistrée sur ton compte ✓');
       return libraryReady();
@@ -7367,12 +7771,13 @@ async function loadAccountLibrary(){
       return libraryReady();
     }
     // divergence (autre appareil a avancé) ou 1re fois sur ce compte → FUSION sans perte + secours
-    // (un local sans livre n’a rien à mettre à l’abri : il n’écrase pas une copie encore utile)
+    // (un local sans livre n’a rien à mettre à l’abri : il n’écrase pas une copie encore utile).
+    // À trois voies dès que l’appareil a une base : ce qu’il n’a pas touché suit le compte sans doublon.
     if(!wiped && localHasReal) backupLocal('-preacct');
     const merged = mergeLibraries(state, server);
     const report = mergeReport(merged);
     replaceState(merged); state.meta.mergeConflicts=0;
-    libTag(d.rev); libPersist(); scheduleRender();
+    libTag(d.rev, merged.meta.syncFp); libPersist(); scheduleRender();   // nouvelle base : la version du compte qu’on vient d’intégrer
     _libReadySession = session;
     await pushLibrary();
     if(report) toast(report);
@@ -7737,11 +8142,11 @@ async function renderAccount(){
       resetLibrarySync(); _socUserToken='';
       // Le compte n’existe plus : la bibliothèque locale redevient « à personne » (sinon une
       // future inscription la prendrait pour celle d’un autre compte et la mettrait de côté), sans
-      // révision ni marqueurs de suppression — ils ne parlaient qu’à ce compte. Une copie mise de
-      // côté pour lui, s’il en reste une ici, redevient restaurable de la même façon.
+      // révision, marqueurs de suppression ni base de fusion — ils ne parlaient qu’à ce compte. Une
+      // copie mise de côté pour lui, s’il en reste une ici, redevient restaurable de la même façon.
       const mine = !!(state.meta && state.meta.ownerId===session.id);
-      if(mine){ state.meta.ownerId = null; state.meta.ownerName = null; state.meta.libRev = 0; state.meta.deletedBooks = {}; social.libRev = 0; libPersist(); }
-      disownAside(session.id);
+      if(mine){ state.meta.ownerId = null; state.meta.ownerName = null; state.meta.libRev = 0; state.meta.deletedBooks = {}; state.meta.syncFp = normalizeSyncFp(null); social.libRev = 0; libPersist(); }
+      disownAside(session.id); disownPreRestore(session.id);
       try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render();
       toast(mine && state.books.some(b=>!isDemoBook(b)) ? 'Compte supprimé. Ta bibliothèque reste sur cet appareil, sans compte' : 'Compte supprimé.'); }
     catch(err){ toast(netMsg(err)); } };
@@ -8140,6 +8545,10 @@ function showPledge(){ openDialog({title:'Toujours gratuit', message:FREE_PLEDGE
 // Journal des versions : tenu à la main depuis l’historique git, une entrée par mise en ligne
 // qui change quelque chose pour le lecteur. Rien d’inventé, rien d’embelli (cf. DESIGN.md).
 const CHANGELOG = `Ce qui a changé dans Tome, du plus récent au plus ancien.
+
+20 septembre 2026, le soir
+La recherche retrouve les livres : elle ne ramène plus de disques ni de films de la BnF, cherche par titre et par auteur, et trouve un livre par son code-barres même quand la BnF ne connaît que son ancien ISBN. Une collection d’éditeur comme « Folio » n’est plus prise pour une série.
+Entre deux appareils, un livre modifié sur l’un ne se dédouble plus sur l’autre. « Restaurer une sauvegarde » garde d’abord une copie de la bibliothèque actuelle. Le titre de ta lecture en cours, utilisé pour le rappel, n’est plus visible par tes amis.
 
 20 septembre 2026
 Nouvelle police, Alegreya, et des filets à la place des cadres : un lecteur trouvait que l’interface manquait d’âme. Textes relus dans toute l’app, accueil simplifié, et ce journal des versions.
@@ -9089,7 +9498,28 @@ if(location.search.includes('selftest')){
   assert('marqueur : union, la suppression la plus récente gagne', mergeDeletedBooks({a:{rev:1, fp:'x.1'}}, {a:{rev:4, fp:'x.4'}, b:{rev:2, fp:'y.2'}}).a.fp==='x.4' && mergeDeletedBooks({a:{rev:5, fp:'x.5'}}, {a:{rev:4, fp:'x.4'}}).a.fp==='x.5');
   // F42c : une copie de secours ne se restaure que si elle est à personne ou au compte connecté
   assert('restauration : à personne → toujours ; à moi → connecté seulement ; à un autre → jamais', restorableBy(null,'') && restorableBy(null,'A') && restorableBy('A','A') && !restorableBy('A','') && !restorableBy('A','B'));
+  assert('restauration : la version remplacée a un emplacement par propriétaire, un écran vide ou d’exemples n’en demande pas', preRestoreKey('')==='-prerestore' && preRestoreKey('A')==='-prerestore:A' && !hasLibraryContent({books:[{title:'x', tags:['exemple']}], goals:{2026:20}, meta:{demoGoal:true}}) && hasLibraryContent({books:[{title:'x'}]}) && libraryContentFp({books:[{id:'a', title:'x'}], goals:{2026:3}})!==libraryContentFp({books:[{id:'a', title:'x'}], goals:{2026:4}}));
   assert('mise de côté : clé par compte, ownerName transite par normalizeData', asideKey('A')===LS_KEY+'-autre:A' && normalizeData({meta:{ownerName:'lucas_bd'}}).meta.ownerName==='lucas_bd' && normalizeData({meta:{ownerName:42}}).meta.ownerName===null);
+  // Fusion à trois voies : avec une base, seul un livre retouché des DEUX côtés est dédoublé
+  const _b0 = {id:'t1', title:'Dune', authors:['Frank Herbert']}, _b5 = {..._b0, rating:5}, _b3 = {..._b0, rating:3};
+  const _base = libRev => ({libRev, syncFp:{rev:libRev, ...syncFingerprints({books:[_b0]})}});
+  const _t1 = mergeLibraries({books:[_b0], meta:_base(2)}, {books:[_b5]});
+  assert('trois voies : seul le compte a changé → sa version, sans doublon', _t1.books.length===1 && _t1.books[0].rating===5 && _t1.meta.mergeConflicts===0);
+  const _t2 = mergeLibraries({books:[_b3], meta:_base(2)}, {books:[_b0]});
+  assert('trois voies : seul le local a changé → la version locale, sans doublon', _t2.books.length===1 && _t2.books[0].rating===3 && !hasConflictTag(_t2.books[0]));
+  const _t3 = mergeLibraries({books:[_b3], meta:_base(2)}, {books:[_b5]});
+  assert('trois voies : vrai conflit → les deux versions, la locale étiquetée', _t3.books.length===2 && _t3.meta.mergeConflicts===1 && _t3.books.some(b=>b.rating===3 && hasConflictTag(b)));
+  const _t4 = mergeLibraries({books:[_b0], meta:{..._base(2), libRev:3}}, {books:[_b5]});
+  assert('trois voies : une base posée à une autre révision est ignorée', _t4.books.length===2);
+  assert('trois voies : la base ne sort pas de l’appareil', withoutSyncBase({books:[], meta:_base(2)}).meta.syncFp===undefined && _t1.meta.syncFp.books.t1===bookFingerprint(_b5));
+  // Contre-vérification du 20/09 : le rapprochement par titre passe APRÈS la règle à trois voies, et les marqueurs regardent la base
+  const _v1 = {..._b0, volume:1}, _vBase = {libRev:2, syncFp:{rev:2, ...syncFingerprints({books:[_v1]})}};
+  const _t5 = mergeLibraries({books:[{..._v1, id:'t9'}, {..._v1, volume:2}], lists:[{id:'L', name:'L', bookIds:['t9']}], meta:_vBase}, {books:[_v1]});
+  assert('trois voies : un tome renuméroté puis rajouté (en tête) ne disparaît pas, la liste le garde', _t5.books.length===2 && _t5.books.some(b=>b.id==='t1' && b.volume===2) && _t5.books.some(b=>b.id==='t9' && b.volume===1) && eq(_t5.lists[0].bookIds, ['t9']) && _t5.meta.mergeConflicts===0);
+  const _mk5 = {deletedBooks:{t1:{rev:3, fp:bookFingerprint(_b5)}}};
+  const _t6 = mergeLibraries({books:[_b0], meta:_base(2)}, {books:[], meta:_mk5}), _t7 = mergeLibraries({books:[], meta:{..._base(2), ..._mk5}}, {books:[_b0]});
+  assert('marqueur : noté puis supprimé, la copie restée à la base disparaît (locale, ou du compte si la suppression vient d’ici)', _t6.books.length===0 && _t6.meta.mergeKept===0 && _t7.books.length===0 && _t7.meta.mergeKept===0);
+  assert('marqueur : sans base, ou copie retouchée depuis la base, le livre est gardé', mergeLibraries({books:[_b0]}, {books:[], meta:_mk5}).books.length===1 && mergeLibraries({books:[], meta:_mk5}, {books:[_b0]}).books.length===1 && mergeLibraries({books:[_b3], meta:_base(2)}, {books:[], meta:_mk5}).meta.mergeKept===1 && mergeLibraries({books:[], meta:{..._base(2), ..._mk5}}, {books:[_b3]}).meta.mergeKept===1);
   // v10 : fiches d’étude et répétition espacée
   const _st=normalizeStudy({objective:' comprendre ',ideas:['Idée A',''],questions:[{question:'Pourquoi ?',answer:'Parce que'}],cards:[{front:'Recto',back:'Verso',due:'invalide'}]});
   assert('study : normalise les champs et listes', _st.objective==='comprendre' && _st.ideas.length===1 && _st.questions[0].answer==='Parce que');
