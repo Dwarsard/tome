@@ -1258,6 +1258,7 @@ function selectView(view, opts={}){
 }
 function render(){
   renderDemoBanner();   // bandeau global : la démo se signale dans toutes les vues, pas seulement Bibliothèque
+  renderAnnounce();     // idem pour l’annonce du service (elle s’efface avec la session)
   syncMeButton();       // idem pour l’avatar de l’en-tête : il suit la session quel que soit le chemin
   if(ui.view==='today') renderToday();
   else if(ui.view==='library') renderLibrary();
@@ -1436,13 +1437,15 @@ async function loadTodayFeed(){
   if(fresh) return;
   _todayFeedLoading=true; social.todayFeedError='';
   try{ const d=await api('/api/feed'); social.todayFeed=Array.isArray(d.feed)?d.feed:[]; social.todayFeedAt=Date.now(); social.todayFeedUser=social.me&&social.me.id; }
-  catch(e){ social.todayFeedError=e.message==='offline'?'Le fil est indisponible hors ligne.':e.message; social.todayFeedAt=Date.now(); }
+  catch(e){ social.todayFeedError=e.message==='offline'?'Le fil est indisponible hors ligne.':netMsg(e); social.todayFeedAt=Date.now(); }
   finally{ _todayFeedLoading=false; if(ui.view==='today') renderTodaySocial(); }
 }
 function renderTodaySocial(){
   const el=$('#today-social-feed'); if(!el) return;
   if(!social.me){
-    if(socToken() && social.sessionError){ el.innerHTML=`<div class="today-social-empty"><p>${social.sessionError==='offline'?'Ton cercle sera de retour dès que la connexion reviendra.':esc(social.sessionError)}</p><button class="btn" data-today-friends>Ouvrir l’espace Amis</button></div>`; return; }
+    // sessionError garde le message brut de api() ('offline', 'timeout', 'network' ou celui du serveur) :
+    // netMsg le traduit ici, à l’affichage
+    if(socToken() && social.sessionError){ el.innerHTML=`<div class="today-social-empty"><p>${social.sessionError==='offline'?'Ton cercle sera de retour dès que la connexion reviendra.':esc(netMsg({message:social.sessionError}))}</p><button class="btn" data-today-friends>Ouvrir l’espace Amis</button></div>`; return; }
     if(socToken()){ el.innerHTML=`<div class="today-social-empty"><span class="today-pulse" aria-hidden="true"></span><p>Connexion à ton cercle de lecture…</p></div>`; return; }
     el.innerHTML=`<div class="today-social-empty"><div><b>Les livres sont meilleurs quand on en parle.</b><p>Ajoute tes proches, comparez vos goûts et retrouvez leurs dernières lectures.</p></div><button class="btn" data-today-friends>Retrouver mes amis</button></div>`; return;
   }
@@ -1884,6 +1887,35 @@ function renderDemoBanner(){
   }
   banner.innerHTML = `<span>Tu explores une <b>bibliothèque d’exemple</b>. Ajoute tes vraies lectures quand tu veux.</span>
     <button class="btn small db-x" id="demo-clear">${n>1?`Retirer les ${n} exemples`:'Retirer l’exemple'}</button>`;
+}
+// Annonce du service (maintenance prévue, nouveauté, incident) : Lucas pose ANNOUNCE_ID et
+// ANNOUNCE_TEXT dans wrangler.toml, /api/me la sert aux connectés, ce bandeau l’affiche au-dessus de
+// toutes les vues. « Compris » la range par son id : une annonce nouvelle a un id nouveau et
+// réapparaît, la même ne revient pas. Le texte vient du serveur : échappé, jamais innerHTML brut.
+// Même habit que le bandeau de démonstration (aucune règle CSS à ajouter) ; on garde l’élément et on
+// joue sur hidden plutôt que de le recréer à chaque rendu.
+const ANNOUNCE_READ_KEY = 'tome-announce-lu';
+// Copie en mémoire de l’id rangé : stockage refusé (navigation privée stricte), « Compris » doit
+// quand même fermer le bandeau pour la durée de la visite au lieu de rester sans effet.
+let _announceLu = '';
+function renderAnnounce(){
+  let ban = $('#announce-banner');
+  const a = social.me && social.announce;
+  const id = a ? (a.id || fnv1a(a.text)) : '';
+  let lu = ''; try{ lu = localStorage.getItem(ANNOUNCE_READ_KEY)||''; }catch(_){ }
+  const show = !!(a && a.text && id!==lu && id!==_announceLu);
+  if(!show){ if(ban) ban.hidden = true; return; }
+  if(!ban){
+    ban = document.createElement('div'); ban.id='announce-banner'; ban.className='demo-banner';
+    $('#main-content').prepend(ban);
+  }
+  ban.hidden = false;
+  if(ban.dataset.key===id) return;                 // render() repasse souvent : ne rien réécrire pour rien
+  ban.dataset.key = id;
+  ban.setAttribute('role', 'status');
+  ban.innerHTML = `<span>${esc(a.text)}</span><button type="button" class="btn small db-x" id="announce-ok">Compris</button>`;
+  const ok = ban.querySelector('#announce-ok');
+  if(ok) ok.onclick = ()=>{ _announceLu = id; try{ localStorage.setItem(ANNOUNCE_READ_KEY, id); }catch(_){ } renderAnnounce(); };
 }
 
 // Teaser de décembre : la rétro est LE moteur de partage de l’année — on la met sous les yeux
@@ -5879,8 +5911,10 @@ async function showPublicProfile(uname){
   let d;
   try{ d = await api('/api/public/'+encodeURIComponent(uname)); }
   catch(e){
+    // « n’existe pas » seulement quand le serveur l’a dit (404, 403) : un délai dépassé, un Tome
+    // injoignable, saturé (429) ou en panne ne disent rien de l’existence du profil.
     body.innerHTML = `<div class="pp-empty">
-      <p>${e.message==='offline' ? 'Profil indisponible hors ligne.' : 'Ce profil n’existe pas ou n’est pas public.'}</p>
+      <p>${e.message==='offline' ? 'Profil indisponible hors ligne.' : (!e.status || e.status>=500 || e.status===429) ? esc(netMsg(e)) : 'Ce profil n’existe pas ou n’est pas public.'}</p>
       <p style="margin-top:16px"><a class="btn primary" href="/">Découvrir Tome</a></p></div>`;
     return;
   }
@@ -5998,7 +6032,7 @@ async function showPublicBook(slug){
   try{ d = await api('/api/book/'+encodeURIComponent(slug)); }
   catch(e){
     body.innerHTML = `<div class="pp-empty">
-      <p>${e.message==='offline' ? 'Page indisponible hors ligne.' : 'Ce livre n’a pas encore de page publique.'}</p>
+      <p>${e.message==='offline' ? 'Page indisponible hors ligne.' : (!e.status || e.status>=500 || e.status===429) ? esc(netMsg(e)) : 'Ce livre n’a pas encore de page publique.'}</p>
       <p style="margin-top:16px"><a class="btn primary" href="/">Découvrir Tome</a></p></div>`;
     return;
   }
@@ -6950,6 +6984,8 @@ window.addEventListener('storage', e => {
   // Le jeton de session a changé dans un autre onglet (connexion, déconnexion, autre compte) :
   // traité AVANT tout le reste, sinon cet onglet continuerait d’envoyer vers l’ancien compte.
   if(e.key === SOC_TOKEN){ sessionChangedElsewhere(e.newValue); return; }
+  // Mot de passe changé dans un autre onglet (même jeton) : l’attente est levée ici aussi.
+  if(e.key === RESET_DONE_KEY){ resetDoneElsewhere(e.newValue); return; }
   if(e.key !== LS_KEY || e.newValue == null) return;
   if($$('.overlay.open').length){
     if(!_externalState) toast('Modifié dans une autre fenêtre', { label:'Recharger', ms:10000, onAction:()=>location.reload() });
@@ -7015,7 +7051,9 @@ function loadPendingInvite(){
   }catch(_){ return ''; }
 }
 function clearPendingInvite(){ try{ localStorage.removeItem(PENDING_INVITE); }catch(_){ } }
-const social = { me:null, tab:'feed', view:null, profile:null, profileFrom:'friends', sessionError:'', libStatus:'', sessionExpired:false };
+// announce : { id, text } servi par /api/me quand Lucas a posé ANNOUNCE_TEXT (bandeau, lu une fois par id).
+// mustReset : le serveur exige un nouveau mot de passe avant toute autre route (users.must_reset).
+const social = { me:null, tab:'feed', view:null, profile:null, profileFrom:'friends', sessionError:'', libStatus:'', sessionExpired:false, announce:null, mustReset:false };
 function socToken(){ try{ return localStorage.getItem(SOC_TOKEN)||''; }catch(_){ return ''; } }
 // Jeton avec lequel l’identité AFFICHÉE (social.me) a été authentifiée. Le jeton de localStorage
 // peut être remplacé par un autre onglet : les envois de bibliothèque comparent les deux pour
@@ -7028,39 +7066,152 @@ function flagSessionExpired(){
   const premier = !social.sessionExpired;                 // un seul toast, même si plusieurs appels échouent
   social.sessionExpired = true;
   resetLibrarySync(); _socUserToken = '';                // plus rien ne doit partir sous cette session
-  social.me = null; social.view = null;
+  social.me = null; social.view = null; social.mustReset = false; social.announce = null;
   try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
-  setLibStatus(''); setFriendsBadge(0); syncMeButton();
+  // renderAnnounce() ici et pas seulement via render() : hors d’Amis et de Mon compte, rien ne
+  // repeint, et l’annonce du compte restait affichée au-dessus d’une session qui n’existe plus.
+  setLibStatus(''); setFriendsBadge(0); syncMeButton(); renderAnnounce();
   if(ui.view==='friends' || ui.view==='account'){ render(); return; }     // l’explication est déjà sur le formulaire
   if(premier) toast('Session expirée. Reconnecte-toi pour continuer à sauvegarder ta bibliothèque',
     { label:'Se connecter', ms:8000, onAction:()=>selectView('account') });
 }
+// Mot de passe à renouveler (users.must_reset, posé par Lucas après un incident) : appris à la
+// connexion (mustReset:true) ou par un 403 password-reset-required en cours d’usage. Tant que ce
+// n’est pas fait, toute route sauf /api/me, la déconnexion et le changement lui-même est refusée :
+// autant amener tout de suite au bon champ, avec l’explication à côté. Un second appel (autre 403 de
+// fond, fil ou envoi, pendant qu’on tape) ne repeint pas Mon compte et ne vole pas le focus.
+// libraryReady() devient faux : la sauvegarde attend, rien ne part pour être refusé.
+// L’en-tête, lui, suit à chaque appel : une retouche en attente (_libDirty) y est dite, « partira
+// après le changement » ; sinon il se tait, l’encart explique. Même au second appel : un envoi déjà
+// en vol, refusé à son tour, laissait « Sauvegarde… » affiché pour toujours.
+function flagPasswordReset(){
+  const premier = !social.mustReset;
+  social.mustReset = true;
+  setLibStatus(_libDirty ? 'resetWait' : '');
+  if(!premier) return;
+  selectView('account');
+  // focus() sans preventScroll : selectView a pu rendre à Mon compte une hauteur de défilement
+  // ancienne, le navigateur amène alors le champ à l’écran (et rien ne bouge s’il y est déjà).
+  const f = $('#acc-new'); if(f) f.focus();
+}
+// Refus « mot de passe à renouveler » (403). Le Worker le dit par code:'password-reset-required', son
+// error étant désormais une phrase pour l’utilisateur ; celui en production le dit encore dans error.
+// Les deux formes, pour qu’un client livré avant ou après le Worker s’y retrouve. api() pose le code
+// sur l’erreur qu’il lève : les appelants testent e.code, jamais la phrase.
+const RESET_REQUIRED = 'password-reset-required';
+function isResetRequired(status, data){ return status===403 && !!data && (data.code===RESET_REQUIRED || data.error===RESET_REQUIRED); }
+// Retouche faite pendant l’attente, qui partira vraiment après le changement. Bibliothèque de ce
+// compte : toute retouche compte, une suppression aussi. À personne : seulement s’il y a de quoi
+// migrer vers lui à la synchro qui suit (retirer les exemples à la connexion n’est pas une
+// modification à envoyer, et la déconnexion n’a pas à s’en inquiéter). Celle d’un AUTRE compte,
+// encore affichée sur un appareil partagé, sera mise de côté pour lui : rien n’est promis ici.
+function pendingUntilReset(){
+  if(!social.me || !social.mustReset) return false;
+  const owner = state.meta && state.meta.ownerId;
+  return owner ? owner===social.me.id : hasLibraryContent(state);
+}
+// Exigence levée : changement fait ici (#acc-pw), dans un autre onglet (resetDoneElsewhere) ou levée
+// par le serveur (/api/me). L’en-tête ne promet plus un envoi « après le changement » ; la synchro
+// que lance l’appelant (loadAccountLibrary) renvoie l’état entier, retouches de l’attente comprises,
+// et affiche son propre statut.
+function passwordResetLifted(){
+  social.mustReset = false;
+  if(social.libStatus==='resetWait') setLibStatus('');
+}
+// Les onglets d’un même navigateur partagent le jeton, que le changement de mot de passe garde
+// valide : aucun 403 ne viendra plus leur dire que l’exigence est levée, et /api/me n’y est pas
+// rappelé. L’onglet qui a changé le mot de passe le dit par cette clé (l’événement « storage » ne
+// part que si la valeur change : d’où l’heure et le tirage), les autres retirent l’encart et reprennent.
+const RESET_DONE_KEY = 'tome-reset-fait';
+function broadcastResetDone(){
+  if(!social.me) return;
+  try{ localStorage.setItem(RESET_DONE_KEY, JSON.stringify({ u:social.me.id, at:Date.now(), n:Math.random().toString(36).slice(2) })); }catch(_){ }
+}
+function resetDoneElsewhere(raw){
+  if(!social.me || !social.mustReset) return;
+  let d = null; try{ d = JSON.parse(raw); }catch(_){ }
+  // même compte ET même session que celle affichée : un avis resté d’un autre compte ne lève rien
+  if(!d || d.u!==social.me.id || !_socUserToken || _socUserToken!==socToken()) return;
+  passwordResetLifted();
+  if(ui.view==='account') renderAccount();
+  toast('Mot de passe changé dans un autre onglet ✓');
+  if(!social.tosOutdated) syncLibraryOnLogin().then(ok=>{ if(ok){ pushShelf(); refreshReminderTitle(); } });
+}
 // Un seul vocabulaire pour les pannes réseau : « Serveur injoignable » était répété 36 fois, sans
 // dire quoi faire, et ne distinguait pas une coupure locale d'une saturation ou d'une panne de Tome.
+// Trois pannes réseau distinctes, trois messages : 'offline' (l’appareil se sait hors ligne),
+// 'timeout' (Tome ne répond pas dans les 15 s) et 'network' (le fetch a échoué alors que l’appareil
+// se croit connecté : DNS, pare-feu, Worker injoignable). Avant, tout échec disait « pas de
+// connexion », y compris quand la connexion allait très bien et que c’était Tome qui manquait.
 function netMsg(e){
   if(e && e.message==='offline') return 'Pas de connexion. Réessaie quand le réseau sera revenu.';
+  if(e && e.message==='timeout') return 'Tome met trop de temps à répondre. Réessaie dans un instant.';
+  if(e && e.message==='network') return 'Impossible de joindre Tome. Vérifie ta connexion, puis réessaie.';
+  if(e && (e.code===RESET_REQUIRED || e.message===RESET_REQUIRED)) return 'Choisis d’abord un nouveau mot de passe (Mon compte).';
   if(e && e.status===429) return 'Trop de demandes d’un coup. Attends une minute.';
   if(e && e.status>=500) return 'Tome a un souci de son côté, réessaie dans un instant.';
   return (e && e.message) || 'Envoi impossible';
 }
+// Borne de chaque appel : sans elle, un fetch peut rester pendant des minutes (Wi-Fi captif, réseau
+// mobile qui décroche) et l’interface avec lui (« … » sur le bouton, sauvegarde « en cours »).
+const API_TIMEOUT_MS = 15000;
+// Mais 15 s tout compris coupaient les GROS transferts eux-mêmes : une bibliothèque de 1,65 Mo sur
+// un lien montant de 100 Ko/s (16,5 s) n’était plus jamais sauvegardée, renvoyée toutes les deux
+// minutes pour rien (constaté le 22/09/2026 ; sans borne, elle passait du premier coup). Les 15 s
+// couvrent l’échange et les 64 premiers Ko ; au-delà, chaque tranche de 25 Ko ajoute une seconde :
+// un débit plancher de 25 Ko/s, celui d’un réseau mobile très dégradé mais vivant. Le serveur
+// accepte jusqu’à 2 Mo (bibliothèque, étagère) : jusqu’à 94 s au pire.
+const API_SMALL_BYTES = 64*1024, API_MIN_BYTES_PER_MS = 25;
+function transferTimeout(bytes){ return API_TIMEOUT_MS + Math.ceil(Math.max(0, (bytes||0) - API_SMALL_BYTES) / API_MIN_BYTES_PER_MS); }
+// Réponses lourdes (bibliothèque du compte, export) : leur lecture a droit au même débit plancher
+// pour 2,5 Mo (la bibliothèque de 2 Mo, échappée dans le JSON), une fois les en-têtes arrivés.
+const API_BIG_MS = transferTimeout(2.5e6);
+function utf8Bytes(s){ try{ return new TextEncoder().encode(String(s||'')).length; }catch(_){ return String(s||'').length*3; } }
 async function api(path, opts={}){
   // sessionToken : jeton d’une session PRÉCISE (envois liés à la bibliothèque d’un compte) ; par
-  // défaut, le jeton courant de localStorage.
-  const { sessionToken, ...requestOpts } = opts; opts = requestOpts;
+  // défaut, le jeton courant de localStorage. bigResponse : la réponse peut peser des Mo.
+  const { sessionToken, bigResponse, ...requestOpts } = opts; opts = requestOpts;
   const headers = Object.assign({}, opts.headers);
   const tk = sessionToken===undefined ? socToken() : sessionToken;
   if(tk) headers['Authorization'] = 'Bearer '+tk;
   if(opts.body){ headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(opts.body); }
-  let res;
-  try{ res = await fetch(API_BASE+path, {...opts, headers}); }
-  catch(e){ throw new Error('offline'); }
-  let data = {};
-  try{ data = await res.json(); }catch(_){}
+  const ctl = new AbortController();
+  // Jusqu’aux en-têtes : 15 s, plus le temps d’envoyer un gros corps (POST /api/sync, jusqu’à 2 Mo).
+  let timer = setTimeout(()=>ctl.abort(), transferTimeout(opts.body ? utf8Bytes(opts.body) : 0));
+  let res, data = {};
+  try{
+    res = await fetch(API_BASE+path, {...opts, headers, signal:ctl.signal});
+    // Le corps compte dans la borne : une coupure pendant sa lecture est un délai dépassé, pas une
+    // réponse vide à prendre pour bonne. Un corps illisible sans coupure (vide, page d’erreur HTML)
+    // laisse data = {} : c’est le statut qui juge, comme avant. Tome a répondu (en-têtes reçus) :
+    // une réponse lourde repart sur sa propre borne de téléchargement, les autres gardent le reste
+    // des 15 s. Un Tome muet, lui, est toujours coupé à 15 s, lourd ou pas.
+    if(bigResponse){ clearTimeout(timer); timer = setTimeout(()=>ctl.abort(), API_BIG_MS); }
+    try{ data = (await res.json()) ?? {}; }catch(e){ if(ctl.signal.aborted) throw e; }
+  }
+  catch(e){
+    if(ctl.signal.aborted || (e && e.name==='AbortError')) throw new Error('timeout');
+    // « offline » seulement si l’appareil le dit : sinon la coupure est côté Tome (ou entre les deux).
+    throw new Error(navigator.onLine===false ? 'offline' : 'network');
+  }
+  finally{ clearTimeout(timer); }
   // Session expirée en cours d’usage → retour propre à l’écran de connexion. Seulement si le jeton
   // refusé est ENCORE le jeton courant : un 401 tardif du compte A (déconnecté entre-temps sur cet
   // appareil) ne doit pas déconnecter le compte B qui vient d’ouvrir sa session.
-  if(res.status===401 && social.me && tk===socToken()) flagSessionExpired();
-  if(!res.ok){ const e = new Error(data.error || (res.status>=500 ? 'Tome a un souci de son côté' : 'Requête refusée ('+res.status+')')); e.status = res.status; throw e; }
+  // Sauf quand le 401 refuse un mot de passe saisi (changement, code de secours, suppression du
+  // compte : « Mot de passe … incorrect ») : la session est bonne, c’est la saisie qui ne l’est pas.
+  // Se faire déconnecter pour une faute de frappe, quand le serveur exige justement un nouveau mot de
+  // passe, ramènerait à la case connexion à chaque essai.
+  // (« Code de secours incorrect » aussi : pendant un renouvellement exigé, le Worker demande le
+  // code en plus du mot de passe, et une erreur de saisie y est tout aussi possible.)
+  const badPassword = /mot de passe|code de secours/i.test(String(data.error||''));
+  if(res.status===401 && !badPassword && social.me && tk===socToken()) flagSessionExpired();
+  // Même garde pour le mot de passe à renouveler : c’est bien NOTRE session que le serveur bloque.
+  const resetRequired = isResetRequired(res.status, data);
+  if(resetRequired && social.me && tk===socToken()) flagPasswordReset();
+  if(!res.ok){ const e = new Error(data.error || (res.status>=500 ? 'Tome a un souci de son côté' : 'Requête refusée ('+res.status+')')); e.status = res.status;
+    if(resetRequired) e.code = RESET_REQUIRED;   // quelle que soit la forme du refus (voir isResetRequired)
+    throw e; }
   return data;
 }
 const initials = s => {
@@ -7142,7 +7293,7 @@ function setFriendsBadge(n){
 function refreshSocBadge(){ setFriendsBadge((social.pendingRequests||0) + (social.unreadNotifs||0)); }
 async function socRefresh(){
   const tk = socToken();
-  if(!tk){ social.me=null; _socUserToken=''; social.sessionError=''; social.pendingRequests=0; social.unreadNotifs=0; setFriendsBadge(0); syncMeButton(); return; }
+  if(!tk){ social.me=null; _socUserToken=''; social.sessionError=''; social.pendingRequests=0; social.unreadNotifs=0; social.announce=null; social.mustReset=false; setFriendsBadge(0); syncMeButton(); renderAnnounce(); return; }
   try{ const d = await api('/api/me');
        // Le jeton a changé pendant l’appel (connexion ou déconnexion dans un autre onglet) : cette
        // réponse décrit une session qui n’est plus la nôtre — on l’ignore, le nouvel appel suivra.
@@ -7151,6 +7302,18 @@ async function socRefresh(){
        social.me = d.user; _socUserToken = tk; social.todayFeedUser=d.user.id; social.sessionError=''; social.tosOutdated = !!d.tosOutdated;
        social.hasRecovery = !!d.hasRecovery;
        social.publicProfile = !!d.publicProfile;
+       // Annonce de Lucas (ANNOUNCE_TEXT du Worker) : gardée telle quelle, échappée à l’affichage.
+       social.announce = d.announce && d.announce.text ? { id:String(d.announce.id||''), text:String(d.announce.text) } : null;
+       renderAnnounce();
+       // /api/me porte aussi mustReset : au rechargement, Mon compte s’ouvre sans attendre un 403.
+       // Et l’inverse : exigence levée ailleurs (Lucas remet must_reset à 0) pendant que cette page
+       // l’attendait, l’encart part et la bibliothèque reprend, sans rechargement ni 403 qui ne
+       // viendrait plus jamais.
+       if(d.mustReset) flagPasswordReset();
+       else if(d.mustReset===false && social.mustReset){
+         passwordResetLifted(); if(ui.view==='account') renderAccount();
+         if(!social.tosOutdated) syncLibraryOnLogin().then(ok=>{ if(ok) pushShelf(); });
+       }
        social.pendingRequests = d.pendingRequests||0; social.unreadNotifs = d.unreadNotifs||0; refreshSocBadge(); syncMeButton();
        if((social.tosOutdated || social.unreadNotifs) && ui.view==='friends') renderFriends();
        if(ui.view==='today') renderToday(); }
@@ -7169,11 +7332,12 @@ function sessionChangedElsewhere(newToken){
     if(!social.me) return;                                 // cet onglet n’était pas connecté : rien à défaire
     social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError='';
     social.sessionExpired=false;                           // une déconnexion voulue, pas une session perdue
+    social.mustReset=false; social.announce=null;
     setLibStatus(''); setFriendsBadge(0); syncMeButton(); render();
     toast(pending ? 'Déconnecté depuis un autre onglet. Tes dernières modifications restent sur cet appareil seulement' : 'Déconnecté depuis un autre onglet', {ms:6000});
     return;
   }
-  social.me=null; social.view=null; social.libRev=0; social.sessionExpired=false; setLibStatus('');
+  social.me=null; social.view=null; social.libRev=0; social.sessionExpired=false; social.mustReset=false; social.announce=null; setLibStatus('');
   socRefresh().then(()=>{ if(social.me && !social.tosOutdated) syncLibraryOnLogin().then(ok=>{ if(ok) pushShelf(); }); render(); });
 }
 
@@ -7194,7 +7358,7 @@ function currentAccount(s){ return !!(s && s.id && s.token && social.me && socia
 function currentLibrarySession(s){ return !!s && s===_libSession && currentAccount(s); }
 // Vrai seulement quand la bibliothèque du compte courant a été chargée ou adoptée : avant, rien
 // ne part (sauvegarde, étagère, titre du rappel). recommendBook n’en dépend pas, à dessein.
-function libraryReady(){ return !!(_libReadySession && currentLibrarySession(_libReadySession) && !social.tosOutdated && state.meta && state.meta.ownerId===social.me.id); }
+function libraryReady(){ return !!(_libReadySession && currentLibrarySession(_libReadySession) && !social.tosOutdated && !social.mustReset && state.meta && state.meta.ownerId===social.me.id); }
 // Oublie la session de bibliothèque (déconnexion, changement de compte, session expirée) : les
 // minuteries et files d’envoi sont vidées — l’état local, lui, reste tel quel.
 function resetLibrarySync(){
@@ -7227,8 +7391,10 @@ const LIB_STATUS = {
   error:'Ta bibliothèque n’a pas pu être sauvegardée sur ton compte, elle reste sur cet appareil',
   conflict:'Fusionnée avec les modifications d’un autre appareil',
   tooLarge:'Bibliothèque trop volumineuse pour la sauvegarde du compte. Exporte-la pour la garder à l’abri',
+  // retouche faite pendant l’attente d’un nouveau mot de passe (voir pendingUntilReset)
+  resetWait:'Ta dernière modification est gardée sur cet appareil : elle sera sauvegardée sur ton compte après le changement de ton mot de passe',
 };
-const LIB_STATUS_SHORT = { saving:'Sauvegarde…', saved:'Enregistré ✓', offline:'Sauvegarde différée', error:'Non sauvegardé', conflict:'Fusionné', tooLarge:'Trop volumineux' };
+const LIB_STATUS_SHORT = { saving:'Sauvegarde…', saved:'Enregistré ✓', offline:'Sauvegarde différée', error:'Non sauvegardé', conflict:'Fusionné', tooLarge:'Trop volumineux', resetWait:'Sauvegarde en attente' };
 function setLibStatus(s){
   social.libStatus = s;
   const el = $('#lib-status'); if(!el) return;
@@ -7386,7 +7552,14 @@ function withoutSyncBase(st){
   return { ...st, meta };
 }
 function scheduleLibPush(delay=1400){
-  if(!libraryReady()) return;
+  if(!libraryReady()){
+    // Mot de passe à renouveler : rien ne part (la route répondrait 403), mais la retouche est bien
+    // pour ce compte. Sans _libDirty, la déconnexion partait sans prévenir qu’elle n’avait jamais
+    // quitté l’appareil, et l’en-tête n’en disait rien ; elle partira avec la synchro qui suit le
+    // changement (loadAccountLibrary renvoie l’état entier).
+    if(pendingUntilReset()){ _libDirty = true; setLibStatus('resetWait'); }
+    return;
+  }
   _libDirty = true; clearTimeout(_libPushTimer); _libPushTimer = 0;
   if(!navigator.onLine){ setLibStatus('offline'); return; }
   _libPushTimer = setTimeout(()=>{ _libPushTimer=0; pushLibrary(); }, delay);
@@ -7412,18 +7585,28 @@ async function pushLibrary(opts){
   // _libPushing porte la session : si elle est abandonnée pendant l’envoi (déconnexion, autre
   // compte), le finally de cet envoi ne touche plus à l’état de la suivante.
   _libPushing = session; _libDirty = false; clearTimeout(_libPushTimer); _libPushTimer = 0; setLibStatus('saving');
+  // Même borne que api() (ce fetch-ci garde la main sur les statuts 409/413/428) : un envoi qui ne
+  // revient jamais laissait « Sauvegarde… » affiché et _libPushing pris, donc plus aucun envoi.
+  // Dépassée, elle tombe dans le catch : « Non sauvegardé » et nouvel essai, comme une panne.
+  // Elle compte le TÉLÉVERSEMENT au débit plancher (transferTimeout) : 15 s tout compris coupaient
+  // l’envoi d’une grosse bibliothèque sur un lien lent, à chaque essai, pour toujours.
+  const ctl = new AbortController(); let abortTimer = 0;
   try{
     const payload = libraryPayload();
     // Empreintes de CE QUI PART, prises maintenant : si le compte l’accepte, c’est la nouvelle base
     // de fusion — pas l’état à l’arrivée de la réponse, qu’une retouche a pu changer entre-temps.
     const sent = syncFingerprints(payload, memoFingerprint);
     const body = JSON.stringify({ data: JSON.stringify(payload), baseRev: social.libRev||0 });
+    abortTimer = setTimeout(()=>ctl.abort(), transferTimeout(utf8Bytes(body)));
     // keepalive : les navigateurs plafonnent le corps à ~64 Ko — au-delà, la requête échoue
     // silencieusement ; on retombe alors sur un fetch normal (best-effort à la fermeture).
     const keep = !!(opts&&opts.keepalive) && body.length < 60000;
-    const res = await fetch(API_BASE+'/api/library', { method:'POST', keepalive: keep,
+    const res = await fetch(API_BASE+'/api/library', { method:'POST', keepalive: keep, signal: ctl.signal,
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+session.token },
       body });
+    // 409 : la réponse porte toute la bibliothèque du compte (jusqu’à 2 Mo) ; sa lecture repart sur
+    // la borne des réponses lourdes, comme GET /api/library
+    if(res.status===409){ clearTimeout(abortTimer); abortTimer = setTimeout(()=>ctl.abort(), API_BIG_MS); }
     if(!currentLibrarySession(session)) return false;        // compte quitté pendant l’envoi : réponse sans objet
     if(res.status===409){                                     // un autre appareil a écrit entre-temps
       const d = await res.json();
@@ -7441,12 +7624,20 @@ async function pushLibrary(opts){
       return true; }
     else if(res.status===401){ flagSessionExpired(); }       // le jeton est bien le courant (vérifié juste au-dessus)
     else if(res.status===428){ social.tosOutdated=true; setLibStatus(''); if(ui.view==='friends') renderFriends(); }
+    // 403 « mot de passe à renouveler » : la modification reste en attente (_libDirty) sans être
+    // réessayée en boucle, libraryReady() étant faux jusqu’au changement, qui relance la synchro.
+    // (les deux formes du refus, comme api() : ce fetch-ci ne passe pas par lui)
+    else if(res.status===403 && isResetRequired(res.status, await res.json().catch(()=>null))){ _libDirty = true; flagPasswordReset(); }
     // 413 : la bibliothèque dépasse la limite du serveur — réessayer n’y changera rien, il faut exporter
     else if(res.status===413){ setLibStatus('tooLarge'); }
     else if(res.status===429 || res.status>=500){ setLibStatus('error'); _libDirty=true; _libRetryMs=Math.min(_libRetryMs*2,120000); }
     else { setLibStatus('error'); }
-  }catch(e){ if(!currentLibrarySession(session)) return false; setLibStatus('offline'); _libDirty = true; _libRetryMs=Math.min(_libRetryMs*2,120000); }
+  }catch(e){ if(!currentLibrarySession(session)) return false;
+    // fetch échoué : « différée » si l’appareil se sait hors ligne (le retour du réseau relance),
+    // « non sauvegardé » sinon (c’est Tome qui manque) ; dans les deux cas on réessaie.
+    setLibStatus(navigator.onLine===false ? 'offline' : 'error'); _libDirty = true; _libRetryMs=Math.min(_libRetryMs*2,120000); }
   finally{
+    clearTimeout(abortTimer);
     if(_libPushing===session){
       _libPushing = false;
       if(_libDirty && navigator.onLine && !_libPushTimer && libraryReady()) scheduleLibPush(_libRetryMs);
@@ -7689,7 +7880,9 @@ function syncLibraryOnLogin(){
   return p;
 }
 async function loadAccountLibrary(){
-  if(!social.me || social.tosOutdated) return false;
+  // mustReset : GET /api/library serait refusé (403), et partait pour rien au démarrage quand /api/me
+  // l’avait déjà dit ; comme pour les mentions légales, la synchro reprend après le changement (#acc-pw).
+  if(!social.me || social.tosOutdated || social.mustReset) return false;
   const session = accountSession();
   if(!currentAccount(session)) return false;
   if(!_libSession || _libSession.id!==session.id) _libRetryDelay = 15000;   // l’attente croissante est par compte
@@ -7737,10 +7930,11 @@ async function loadAccountLibrary(){
       else if((aside.books||[]).some(b=>!isDemoBook(b))) toast('Ta bibliothèque mise de côté sur cet appareil est de retour ✓');
     }
     let d;
-    try{ d = await api('/api/library', { sessionToken: session.token }); }
+    try{ d = await api('/api/library', { sessionToken: session.token, bigResponse: true }); }   // jusqu’à 2 Mo
     catch(e){
       if(!currentLibrarySession(session)) return false;
       if(e.status===428){ social.tosOutdated=true; setLibStatus(''); if(ui.view==='friends') renderFriends(); return false; }
+      if(e.code===RESET_REQUIRED) return false;   // api() a déjà ouvert Mon compte ; la synchro reprend après le changement
       setLibStatus(e.message==='offline' ? 'offline' : 'error'); retryLibrarySync(session, e);
       return false;
     }
@@ -7836,7 +8030,7 @@ async function pushShelf(){
 window.addEventListener('online', ()=>{
   // Connecté mais bibliothèque du compte jamais chargée (la requête a échoué hors ligne) : on la
   // recharge d’abord — rien ne part vers le compte avant.
-  if(social.me && !social.tosOutdated && !libraryReady()){ syncLibraryOnLogin().then(ok=>{ if(ok) pushShelf(); }); return; }
+  if(social.me && !social.tosOutdated && !social.mustReset && !libraryReady()){ syncLibraryOnLogin().then(ok=>{ if(ok) pushShelf(); }); return; }
   if(_libDirty) scheduleLibPush(0);
   if(_shelfDirty) scheduleShelfPush(0);
 });
@@ -8030,7 +8224,30 @@ function notifWhen(ts){
 async function renderAccount(){
   // Rendu dans la vue Mon compte (plus dans un sous-onglet d’Amis) : le conteneur est fixe.
   const el = $('#account-cloud'); if(!el || !social.me) return;
+  // Encart « mot de passe à renouveler » : sans croix, il ne part qu’avec un changement réussi ; le
+  // champ du nouveau mot de passe le cite (aria-describedby), le lecteur d’écran entend le pourquoi
+  // en arrivant sur le champ où flagPasswordReset() a posé le focus.
+  const resetNote = social.mustReset
+    ? `<div class="invite-banner" id="pw-reset-banner">Pour ta sécurité, choisis un nouveau mot de passe avant de continuer</div>` : '';
+  // Code de secours exigé en plus du mot de passe (compte qui en a un) : après une fuite, le
+  // mot de passe peut être connu d’un tiers, le code rangé hors ligne départage (Worker,
+  // handleAccountPassword). Il est remplacé par un nouveau, montré aussitôt.
+  const resetCode = social.mustReset && social.hasRecovery
+    ? `<div class="pw-wrap"><input id="acc-reset-code" aria-label="Code de secours" aria-describedby="pw-reset-code-why" maxlength="64" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Code de secours (TOME-…)"></div>
+    <p id="pw-reset-code-why" style="font-size:13px;color:var(--muted);margin-bottom:10px">Ton code de secours t’est aussi demandé : il prouve que le compte est bien le tien, même si quelqu’un d’autre connaît ton mot de passe. Un nouveau code te sera donné. Tu ne l’as plus ? <a href="${esc(contactHref('Code de secours perdu'))}">Écris à Lucas</a>.</p>` : '';
+  // Repeint pendant un renouvellement exigé (render() du démarrage, exemples retirés à la connexion,
+  // autre onglet…) : la réécriture REMPLACE les champs ; dans un navigateur, le focus posé par
+  // flagPasswordReset() retombait sur la page et la saisie commencée disparaissait. On les reporte
+  // sur les nouveaux champs, sans voler le focus à qui l’a mis ailleurs.
+  const RESET_FIELDS = ['acc-cur', 'acc-new', 'acc-reset-code'];
+  let keep = null;
+  if(social.mustReset){
+    const actif = document.activeElement;
+    keep = { focus: actif ? RESET_FIELDS.find(id => actif===$('#'+id)) || '' : '', values: {} };
+    for(const id of RESET_FIELDS){ const f = $('#'+id); if(f && f.value) keep.values[id] = f.value; }
+  }
   el.innerHTML = `<div class="acct">
+    ${resetNote}
     <h4>Profil</h4>
     <input id="acc-dn" maxlength="40" value="${esc(social.me.displayName)}" placeholder="Nom affiché" aria-label="Nom affiché">
     <!-- La bio n’est jamais privée : le placeholder dit exactement qui la lit, page publique comprise. -->
@@ -8039,8 +8256,9 @@ async function renderAccount(){
     <h4>Mot de passe</h4>
     <div class="pw-wrap"><input id="acc-cur" aria-label="Mot de passe actuel" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
       <button type="button" class="linkish pw-eye" data-pw-noun="le mot de passe actuel" aria-pressed="false" aria-label="Afficher le mot de passe actuel">Afficher</button></div>
-    <div class="pw-wrap"><input id="acc-new" aria-label="Nouveau mot de passe" type="password" maxlength="256" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)">
+    <div class="pw-wrap"><input id="acc-new" aria-label="Nouveau mot de passe" type="password" maxlength="256" autocomplete="new-password" placeholder="Nouveau (8 caractères min.)"${social.mustReset?' aria-describedby="pw-reset-banner"':''}>
       <button type="button" class="linkish pw-eye" data-pw-noun="le nouveau mot de passe" aria-pressed="false" aria-label="Afficher le nouveau mot de passe">Afficher</button></div>
+    ${resetCode}
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
     <h4>Notifications</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Recevoir une alerte quand un ami t’ajoute, aime ou commente une de tes lectures, même quand Tome est fermé. <span id="acc-push-state"></span></p>
@@ -8074,11 +8292,32 @@ async function renderAccount(){
       <button class="btn danger" id="acc-delete">Supprimer définitivement mon compte</button>
     </div>
   </div>`;
+  if(keep){
+    for(const [id, v] of Object.entries(keep.values)){ const f = $('#'+id); if(f) f.value = v; }
+    const f = keep.focus && $('#'+keep.focus); if(f) f.focus();
+  }
   $('#acc-save').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
     try{ const d = await api('/api/account/profile', {method:'POST', body:{displayName:$('#acc-dn').value, bio:frTypo($('#acc-bio').value)}}); social.me=d.user; toast('Profil mis à jour ✓'); render(); }
     catch(err){ toast(netMsg(err)); b.disabled=false; } };
   $('#acc-pw').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
-    try{ await api('/api/account/password', {method:'POST', body:{currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value}}); $('#acc-cur').value=$('#acc-new').value=''; toast('Mot de passe changé, autres appareils déconnectés ✓'); }
+    try{
+      const body = {currentPassword:$('#acc-cur').value, newPassword:$('#acc-new').value};
+      const codeField = social.mustReset && social.hasRecovery ? $('#acc-reset-code') : null;
+      if(codeField) body.recoveryCode = codeField.value;
+      const d = await api('/api/account/password', {method:'POST', body});
+      $('#acc-cur').value=$('#acc-new').value=''; if(codeField) codeField.value='';
+      // Dit aux autres onglets, même si celui-ci ne savait pas l’exigence posée : le serveur la lève
+      // à tout changement réussi, et un onglet qui l’attendait resterait bloqué (resetDoneElsewhere).
+      broadcastResetDone();
+      toast('Mot de passe changé, autres appareils déconnectés ✓');
+      // Renouvellement exigé fait : l’encart s’efface et la bibliothèque, tenue en attente depuis la
+      // connexion (ou depuis le 403), reprend son chemin vers le compte, comme après les mentions légales
+      // (qui, si elles attendent encore, gardent la main : loadAccountLibrary ne part pas sans elles).
+      // Le code de secours donné vient d’être consommé : le nouveau d’abord, seul à l’écran (une modale
+      // à la fois, et il ne sera plus jamais montré), la reprise ensuite.
+      if(social.mustReset){ passwordResetLifted();
+        if(d && d.recoveryCode){ social.hasRecovery = true; await showRecoveryCode(d.recoveryCode, 'Mot de passe changé ✓ Voici ton NOUVEAU code de secours (l’ancien ne fonctionne plus) :'); }
+        render(); if(!social.tosOutdated) syncLibraryOnLogin().then(ok=>{ if(ok){ pushShelf(); refreshReminderTitle(); } }); } }
     catch(err){ toast(netMsg(err)); }
     finally{ b.disabled=false; } };
   $('#acc-rem-save').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
@@ -8113,7 +8352,7 @@ async function renderAccount(){
       await showRecoveryCode(d.recoveryCode); renderAccount(); }
     catch(err){ toast(netMsg(err)); b.disabled=false; } };
   $('#acc-export').onclick = async (e)=>{ const b=e.currentTarget; if(b.disabled)return; b.disabled=true;
-    try{ const d = await api('/api/account/export'); const full={...d};
+    try{ const d = await api('/api/account/export', { bigResponse: true }); const full={...d};   // bibliothèque comprise : des Mo possibles
       // « Mes données » ne joint la bibliothèque locale que si c’est bien celle de CE compte,
       // chargée : sur un appareil partagé, celle d’un autre compte n’a rien à faire dans ce fichier.
       if(libraryReady()) full.localLibrary = state.books;
@@ -8132,7 +8371,11 @@ async function renderAccount(){
     try{ await api('/api/account/logout-all', {method:'POST'}); }catch(_){ ok = false; }
     if(!currentAccount(session)) return;                     // un autre onglet a changé de session entre-temps : ne pas effacer SON jeton
     resetLibrarySync(); _socUserToken='';
-    try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render();
+    // mustReset et l’annonce tiennent à la session qui se ferme (route permise même en attente de
+    // renouvellement : c’est même le bon réflexe si le compte a pu être pris)
+    // setLibStatus('') : « Sauvegarde en attente » (retouche faite pendant l’attente) ne vaut plus
+    // pour une session fermée, et rien d’autre ne l’effacerait
+    try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; social.mustReset=false; social.announce=null; setLibStatus(''); setFriendsBadge(0); render();
     toast(ok ? 'Déconnecté de tous tes appareils ✓' : 'Déconnecté ici. Les autres appareils n’ont pas pu être joints'); };
   $('#acc-delete').onclick = async ()=>{
     if(!await uiConfirm({title:'Supprimer ton compte ?', message:'Action IRRÉVERSIBLE. Ton profil, tes amis, ta bibliothèque privée sauvegardée et ton étagère partagée seront effacés du serveur. Ta bibliothèque locale reste sur cet appareil.', okLabel:'Continuer', danger:true})) return;
@@ -8149,10 +8392,12 @@ async function renderAccount(){
       const mine = !!(state.meta && state.meta.ownerId===session.id);
       if(mine){ state.meta.ownerId = null; state.meta.ownerName = null; state.meta.libRev = 0; state.meta.deletedBooks = {}; state.meta.syncFp = normalizeSyncFp(null); social.libRev = 0; libPersist(); }
       disownAside(session.id); disownPreRestore(session.id);
-      try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; setFriendsBadge(0); render();
+      try{ localStorage.removeItem(SOC_TOKEN); }catch(_){} social.me=null; social.view=null; social.mustReset=false; social.announce=null; setFriendsBadge(0); render();
       toast(mine && state.books.some(b=>!isDemoBook(b)) ? 'Compte supprimé. Ta bibliothèque reste sur cet appareil, sans compte' : 'Compte supprimé.'); }
     catch(err){ toast(netMsg(err)); } };
-  // liste des bloqués
+  // liste des bloqués ; pas en attente de renouvellement : la route serait refusée (403), la liste
+  // reviendra avec le render() qui suit le changement de mot de passe
+  if(social.mustReset){ $('#acc-blocks').innerHTML = `<p class="friends-empty" style="padding:8px 0">Visible après le changement de mot de passe.</p>`; return; }
   try{
     const d = await api('/api/blocks');
     $('#acc-blocks').innerHTML = d.blocked.length
@@ -8329,8 +8574,10 @@ async function _processInvite(uname){
     toast(r.status==='accepted' ? 'Vous êtes maintenant amis ✓' : 'Demande envoyée ✓');
     if(social.tab==='friends') loadFriendLists();
   }catch(e){
-    // hors ligne / serveur injoignable : l’invitation reste en attente pour la prochaine ouverture
-    toast(e.message==='offline' ? 'Pas de connexion. L’invitation est gardée pour plus tard.' : netMsg(e));
+    // hors ligne / serveur injoignable ou trop lent (aucun statut) : l’invitation reste en attente
+    // pour la prochaine ouverture, et on le dit dans les deux cas
+    toast(e.message==='offline' ? 'Pas de connexion. L’invitation est gardée pour plus tard.'
+      : !e.status ? 'Tome ne répond pas. L’invitation est gardée pour plus tard.' : netMsg(e));
   }
 }
 function renderAuth(box, mode, errMsg=''){
@@ -8395,9 +8642,15 @@ function renderAuth(box, mode, errMsg=''){
       const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
       resetLibrarySync(); localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; _socUserToken = d.token; social.tosOutdated = mode!=='signup'; social.tab='feed'; social.view=null;
       social.sessionExpired = false;   // la session est neuve : plus rien à expliquer au prochain passage
+      // ni rien à renouveler, sauf si CETTE connexion le dit (plus bas) : un drapeau resté d’une
+      // session précédente tiendrait la bibliothèque en attente et rendrait flagPasswordReset muet
+      social.mustReset = false;
       try{ localStorage.setItem('tome-welcomed','1'); }catch(_){}   // ne plus montrer la page d’accueil
       await socRefresh(); // récupère aussi tosOutdated AVANT toute sauvegarde privée
       if(stripDemo()) toast('Exemples retirés. Ton compte démarre avec tes vrais livres.');
+      // Mot de passe à renouveler : la connexion a réussi mais toute autre route répondrait 403.
+      // Droit au champ, la bibliothèque suivra le changement (voir #acc-pw).
+      if(d.mustReset){ flagPasswordReset(); return; }
       if(!social.tosOutdated) syncLibraryOnLogin().then(()=>{ pushShelf(); refreshReminderTitle(); });
       // le code AVANT renderFriends : sinon la confirmation d’invitation (#invite) écraserait le
       // dialogue du code (une seule modale à la fois) — l’invitation s’ouvrira après « C’est noté »
@@ -8464,6 +8717,7 @@ function renderRecover(box, errMsg=''){
       const d = await api('/api/recover', {method:'POST', body:{username, code, newPassword}});
       resetLibrarySync(); localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; _socUserToken = d.token; social.tosOutdated = true; social.tab='feed'; social.view=null;
       social.sessionExpired = false;
+      social.mustReset = false;   // le mot de passe vient d’être choisi ; si le serveur l’exige encore, son 403 le redira
       await socRefresh();
       if(!social.tosOutdated) syncLibraryOnLogin().then(()=>pushShelf());
       // même ordre qu’à l’inscription : le code d’abord, l’onglet Amis (et une éventuelle invitation) ensuite
@@ -8547,6 +8801,10 @@ function showPledge(){ openDialog({title:'Toujours gratuit', message:FREE_PLEDGE
 // Journal des versions : tenu à la main depuis l’historique git, une entrée par mise en ligne
 // qui change quelque chose pour le lecteur. Rien d’inventé, rien d’embelli (cf. DESIGN.md).
 const CHANGELOG = `Ce qui a changé dans Tome, du plus récent au plus ancien.
+
+23 septembre 2026
+Le ménage de nuit du serveur ne tournait plus depuis le 3 septembre : les adresses IP n’étaient plus effacées sous 48 heures comme promis, ni les sessions expirées. C’est réparé, et une panne de ce genre se voit désormais le jour même.
+Quand le serveur ne répond pas, Tome ne reste plus bloqué : au bout de quinze secondes, il le dit et tu peux réessayer. Un court message peut désormais s’afficher en haut de l’app pour prévenir de quelque chose d’important.
 
 20 septembre 2026, le soir
 La recherche retrouve les livres : elle ne ramène plus de disques ni de films de la BnF, cherche par titre et par auteur, et trouve un livre par son code-barres même quand la BnF ne connaît que son ancien ISBN. Une collection d’éditeur comme « Folio » n’est plus prise pour une série.
@@ -9167,9 +9425,14 @@ async function socLogout(){
   const hasReal = (state.books||[]).some(b=>!isDemoBook(b));
   if(!await uiConfirm({title:'Se déconnecter ?', message: hasReal ? 'Tu choisiras ensuite si ta bibliothèque reste visible sur cet appareil.' : 'Ta bibliothèque reste sur cet appareil.', okLabel:'Se déconnecter'})) return;
   if(_libDirty || _libPushing){
-    toast('Envoi des dernières modifications…', {ms:15000});
+    // En attente d’un nouveau mot de passe, rien ne peut partir (403 assuré) : on ne l’annonce pas,
+    // l’avertissement qui suit dit pourquoi elles restent ici.
+    if(!social.mustReset) toast('Envoi des dernières modifications…', {ms:15000});
     await flushLibrary();
-    if(_libDirty && !await uiConfirm({title:'Modifications non envoyées', message:'Pas de connexion. Te déconnecter quand même ? Elles resteront sur cet appareil seulement.', okLabel:'Quand même', danger:true})) return;
+    // La vraie raison de l’échec : « pas de connexion » n’est qu’un cas parmi trois (Tome muet ou
+    // trop lent alors que le réseau va bien ; compte bloqué en attente d’un nouveau mot de passe).
+    const why = social.mustReset ? 'Ton compte attend un nouveau mot de passe.' : navigator.onLine===false ? 'Pas de connexion.' : 'Tome ne répond pas.';
+    if(_libDirty && !await uiConfirm({title:'Modifications non envoyées', message:why+' Te déconnecter quand même ? Elles resteront sur cet appareil seulement.', okLabel:'Quand même', danger:true})) return;
   }
   // Appareil partagé : déconnecté, la bibliothèque restait lisible et modifiable par le suivant, sans
   // mot de passe — et ses retouches repartaient sur le compte à la reconnexion. On propose de la
@@ -9189,6 +9452,7 @@ async function socLogout(){
   try{ localStorage.removeItem(SOC_TOKEN); }catch(_){}
   social.me=null; social.view=null; social.libRev=0; social.todayFeed=null; social.todayFeedAt=0; social.todayFeedUser=''; social.todayFeedError=''; setLibStatus('');
   social.sessionExpired=false;   // partir de son plein gré n’est pas une session perdue : pas de message d’expiration
+  social.mustReset=false; social.announce=null;   // l’un et l’autre tiennent à la session qui se ferme
   setFriendsBadge(0);
   if(retirer){ setAsideBeforeWipe(owner); replaceState({}); libPersist(); clearSelection(); toast('Bibliothèque retirée de cet appareil, elle reviendra à ta prochaine connexion ici', {ms:6000}); }
   render();   // Mon compte repasse au formulaire de connexion, l’avatar de l’en-tête à la silhouette
@@ -9305,7 +9569,11 @@ if(_loaded.notice){
   }
 }
 // restaure la session sociale si un token existe → rafraîchit la vue Amis + synchronise la biblio du compte
-if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin().then(()=>pushShelf()); } if(ui.view==='friends' || ui.view==='account') render(); else if(ui.view==='today') renderToday();
+// Mot de passe à renouveler (/api/me) : flagPasswordReset() vient de peindre Mon compte et d’y poser
+// le focus ; un second rendu réécrirait les champs pour rien (renderAccount reporte le focus, mais
+// autant ne pas repeindre). loadAccountLibrary, lui, ne part pas tant que l’exigence tient.
+if(socToken()) socRefresh().then(()=>{ if(social.me){ syncLibraryOnLogin().then(()=>pushShelf()); }
+  if(!social.mustReset){ if(ui.view==='friends' || ui.view==='account') render(); else if(ui.view==='today') renderToday(); }
   paintPPCta(); });   // page publique ouverte : son appel à l’action dépend de la session, qui vient d’arriver
 
 // Page d’accueil : présentée aux visiteurs qui arrivent sans compte et sans bibliothèque à eux.
@@ -9407,7 +9675,7 @@ if(location.search.includes('selftest')){
   assert('insécables SEARCH_HINT', !/[^\u00A0\u202F] [?!»]/.test(SEARCH_HINT) && !/« /.test(SEARCH_HINT));
   assert('plur', plur(1,'livre')==='1\u00A0livre' && plur(3,'livre')==='3\u00A0livres' && plur(2,'livre existe','livres existent')==='2\u00A0livres existent');
   assert('fmtPct/fmtRatio/fmtDec', fmtPct(42)==='42\u202F%' && fmtRatio(3,10)==='3\u00A0/\u00A010' && fmtDec(3.5)==='3,5');
-  assert('netMsg', netMsg({message:'offline'}).startsWith('Pas de connexion') && netMsg({status:429, message:'x'}).startsWith('Trop de demandes') && netMsg({status:503, message:'x'}).startsWith('Tome a un souci') && netMsg({status:400, message:'Pseudo pris'})==='Pseudo pris');
+  assert('netMsg', netMsg({message:'offline'}).startsWith('Pas de connexion') && netMsg({message:'timeout'}).startsWith('Tome met trop de temps') && netMsg({message:'network'}).startsWith('Impossible de joindre Tome') && netMsg({status:429, message:'x'}).startsWith('Trop de demandes') && netMsg({status:503, message:'x'}).startsWith('Tome a un souci') && netMsg({status:400, message:'Pseudo pris'})==='Pseudo pris');
   const dd=normalizeData({books:[{id:'X',title:'A'},{id:'X',title:'B'}], lists:[{id:'L',name:'l',bookIds:['X','ghost']}]});
   assert('normalizeData dedup ids', dd.books[0].id!==dd.books[1].id);
   assert('normalizeData purge ghost bookIds', dd.lists[0].bookIds.length===1);

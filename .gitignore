@@ -8,3 +8,16 @@ Thumbs.db
 
 # Canevas de maquettes : artefact volumineux, regénéré par la skill design
 design/*-design.html
+
+# Claude Code : les réglages PERSONNELS restent locaux ; .claude/settings.json et .claude/hooks/
+# sont versionnés exprès (garde-fous partagés contre toute écriture en production)
+.claude/settings.local.json
+.claude/*.local.json
+
+# Secrets et environnement : jamais dans l'historique
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+.wrangler/
+Secrets/
