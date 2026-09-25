@@ -27,15 +27,6 @@
         "--local"
       ],
       "port": 8787
-    },
-    {
-      "name": "elan",
-      "runtimeExecutable": "cmd",
-      "runtimeArgs": [
-        "/c",
-        "cd /d C:/Users/lucas/Desktop/Elan && npm run dev"
-      ],
-      "port": 3000
     }
   ]
 }
