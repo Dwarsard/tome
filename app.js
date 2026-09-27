@@ -338,6 +338,42 @@ function toast(msg, opts){
   t.addEventListener('mouseenter', pause); t.addEventListener('mouseleave', reprise);
   t.addEventListener('focusin', pause); t.addEventListener('focusout', reprise);
 }
+/* ---------- Filet global : une action qui échoue ne reste jamais muette ---------- */
+// Une promesse rejetée sans catch, ou une exception dans un gestionnaire, laissait un bouton
+// inerte sans un mot. Le filet ne parle QUE si l’échec suit de près un geste (3 s) : une tâche de
+// fond qui échoue (synchronisation, couvertures) a déjà son propre signal (bandeau de sauvegarde,
+// pastille hors ligne) et ne doit pas faire surgir un message au hasard. Un seul message par
+// rafale de 5 s. Les 20 dernières erreurs restent lisibles dans window.__tomeErreurs, pour un
+// signalement ; la console les montre toujours (pas de preventDefault).
+const FILET_GESTE_MS = 3000, FILET_RAFALE_MS = 5000;
+let _filetGeste = 0, _filetDernier = 0;
+['pointerdown','keydown','submit','change'].forEach(type => document.addEventListener(type, ()=>{ _filetGeste = Date.now(); }, true));
+function filetErreur(err, source){
+  const nom = (err && err.name) || '';
+  const msg = String((err && err.message) || err || '');
+  if(nom==='AbortError') return;                        // recherche remplacée par la frappe suivante : voulu
+  if(/ResizeObserver loop/i.test(msg)) return;          // avertissement bénin des navigateurs
+  try{
+    const journal = window.__tomeErreurs = window.__tomeErreurs || [];
+    journal.push({ quand:new Date().toISOString(), source, nom, message:msg.slice(0,300) });
+    if(journal.length>20) journal.shift();
+  }catch(_){ }
+  const t = Date.now();
+  if(t - _filetGeste > FILET_GESTE_MS) return;          // pas de geste récent : échec de fond, signalé ailleurs
+  if(t - _filetDernier < FILET_RAFALE_MS) return;       // une rafale = un seul message
+  _filetDernier = t;
+  if(navigator.onLine===false) toast('Action impossible hors ligne. Réessaie une fois la connexion revenue.');
+  else toast('Cette action n’a pas abouti. Réessaie ; si ça recommence, recharge la page.', { label:'Recharger', onAction:()=>location.reload() });
+}
+window.addEventListener('unhandledrejection', e => filetErreur(e && e.reason, 'promesse'));
+window.addEventListener('error', e => {
+  // Les échecs de chargement (images, polices) ne remontent pas jusqu’à window : seules les
+  // exceptions arrivent ici. Celles d’un autre domaine (extension du navigateur) n’ont pas de
+  // détail (« Script error. ») ou viennent d’un autre fichier : ce ne sont pas celles de Tome.
+  if(!e || (!e.error && /^Script error\.?$/.test(e.message||''))) return;
+  if(e.filename && !String(e.filename).startsWith(location.origin)) return;
+  filetErreur(e.error || e.message, 'exception');
+});
 // Alt+Z = l’action du toast courant (Annuler, Exporter…), même une modale ouverte ou depuis un
 // champ : le bouton n’est visible que quelques secondes, le trouver à la tabulation prend plus.
 document.addEventListener('keydown', e=>{
@@ -8801,6 +8837,9 @@ function showPledge(){ openDialog({title:'Toujours gratuit', message:FREE_PLEDGE
 // Journal des versions : tenu à la main depuis l’historique git, une entrée par mise en ligne
 // qui change quelque chose pour le lecteur. Rien d’inventé, rien d’embelli (cf. DESIGN.md).
 const CHANGELOG = `Ce qui a changé dans Tome, du plus récent au plus ancien.
+
+27 septembre 2026
+Quand une action échoue sans prévenir, Tome le dit désormais et propose de recharger la page, au lieu de laisser un bouton sans réponse.
 
 23 septembre 2026
 Le ménage de nuit du serveur ne tournait plus depuis le 3 septembre : les adresses IP n’étaient plus effacées sous 48 heures comme promis, ni les sessions expirées. C’est réparé, et une panne de ce genre se voit désormais le jour même.
