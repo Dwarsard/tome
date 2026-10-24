@@ -1,4 +1,17 @@
 'use strict';
+// App iPhone (coque Capacitor, fichiers EMBARQUÉS) : WKWebView sert la page sous capacitor://localhost.
+// Test synchrone, valable dès le chargement (API_BASE et scanSupported sont évalués au premier niveau) ;
+// sur le web il vaut toujours false : aucune branche native ne s'y exécute.
+const IS_NATIVE_APP = location.protocol === 'capacitor:';
+// Adresse publique de Tome : liens partagés, QR d'invitation, pages servies par le Worker.
+const SITE_URL = 'https://montome.fr';
+const PUBLIC_ORIGIN = IS_NATIVE_APP ? SITE_URL : location.origin;
+// Plugin natif par son nom JS, ou null : hors de l'app, ou plugin absent de la compilation.
+function capPlugin(name){
+  if(!IS_NATIVE_APP) return null;
+  const c = window.Capacitor;
+  return (c && c.Plugins && c.Plugins[name]) || null;
+}
 /* =============== Constantes & helpers =============== */
 const LS_KEY = 'tome-v1';
 const LEGACY_KEYS = ['signet-v1'];
@@ -28,6 +41,14 @@ const STORAGE_BLOCKED = (()=>{
     return true;
   }
 })();
+// App iPhone : copie de tome-v1 dans un fichier (Library/tome/bibliotheque.json), relue si iOS a
+// vidé le stockage de la vue web. Capturé AVANT load() : le stockage était-il vide au lancement ?
+const NATIVE_LS_WAS_EMPTY = IS_NATIVE_APP && !STORAGE_BLOCKED && (()=>{ try{ return localStorage.getItem(LS_KEY)===null; }catch(_){ return false; } })();
+// La copie s'écrit d'abord dans MIRROR_TMP, puis prend la place de la principale (rename) : une
+// écriture coupée (disque plein, app tuée) ne touche jamais la dernière copie complète.
+const MIRROR = { path:'tome/bibliotheque.json', directory:'LIBRARY' }, MIRROR_TMP = 'tome/bibliotheque.tmp.json';
+const MIRROR_FLAG = 'tome-mirror-restored';
+let _mirrorReady = false, _mirrorTimer = 0, _mirrorLast = null, _mirrorBusy = false, _mirrorAgain = false;
 const TYPE_LABEL = {livre:'Livre', bd:'BD', manga:'Manga'};
 const STATUS_LABEL = {wishlist:'À lire', reading:'En cours', read:'Lu', abandoned:'Abandonné'};
 const MOODS = ['entraînant','sombre','drôle','émouvant','réconfortant','tendu','réflexif','mélancolique','angoissant','inspirant','poétique','haletant'];
@@ -363,7 +384,7 @@ function filetErreur(err, source){
   if(t - _filetDernier < FILET_RAFALE_MS) return;       // une rafale = un seul message
   _filetDernier = t;
   if(navigator.onLine===false) toast('Action impossible hors ligne. Réessaie une fois la connexion revenue.');
-  else toast('Cette action n’a pas abouti. Réessaie ; si ça recommence, recharge la page.', { label:'Recharger', onAction:()=>location.reload() });
+  else toast(IS_NATIVE_APP ? 'Cette action n’a pas abouti. Réessaie\u00a0; si ça recommence, relance l’app.' : 'Cette action n’a pas abouti. Réessaie ; si ça recommence, recharge la page.', { label:'Recharger', onAction:()=>location.reload() });
 }
 window.addEventListener('unhandledrejection', e => filetErreur(e && e.reason, 'promesse'));
 window.addEventListener('error', e => {
@@ -797,6 +818,7 @@ function save(skipCount){
     state.meta = state.meta || {changes:0, lastExport:null};
     if(!skipCount) state.meta.changes++;
     localStorage.setItem(LS_KEY, JSON.stringify(state));
+    if(IS_NATIVE_APP) scheduleNativeMirror();   // App iPhone : copie de secours hors de la vue web
     setSaveBroken(false); // une écriture a réussi : on lève l’alerte
     // toute mutation de données peut changer la série de jours — les chemins rapides
     // (patchCard, actions rapides) ne repassent pas par render(), donc on rafraîchit ici
@@ -942,7 +964,7 @@ const SUPPORT_URL = '';
 const CONTACT_EMAIL = 'lucas.marroig@essec.edu';
 function contactHref(sujet){
   // Le corps ne contient que ce qui aide à comprendre un souci : version et appareil, jamais de données de lecture.
-  const corps = `\n\n—\nTome ${location.host} · ${navigator.userAgent.replace(/\).*$/, ')')}`;
+  const corps = `\n\n—\nTome ${IS_NATIVE_APP ? 'app iPhone' : location.host} · ${navigator.userAgent.replace(/\).*$/, ')')}`;
   return `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
 }
 // Avis depuis l'app : même canal que les signalements (table reports, type « avis »), lisible par
@@ -950,7 +972,7 @@ function contactHref(sujet){
 async function sendFeedback(){
   const txt = await openDialog({
     title:'Ton avis sur Tome',
-    message:'Ce qui te manque, ce qui coince, ce que tu aimes : tout est bon à prendre. Ton message part au responsable du site, avec l\u2019écran d\u2019où tu écris. Rien d\u2019autre.',
+    message:'Ce qui te manque, ce qui coince, ce que tu aimes : tout est bon à prendre. Ton message part au responsable '+(IS_NATIVE_APP ? 'de Tome' : 'du site')+', avec l\u2019écran d\u2019où tu écris. Rien d\u2019autre.',
     input:{ multiline:true, placeholder:'Je trouve que\u2026' },
     actions:[{label:'Annuler', value:null, cancel:true},{label:'Envoyer', returnsInput:true, default:true}],
   });
@@ -1186,6 +1208,8 @@ async function setGoal(year){
 function applyTheme(t){
   document.documentElement.dataset.theme = t;
   $('#meta-theme').setAttribute('content', t==='light' ? '#f7f6f2' : '#15120d');
+  // App iPhone : la barre d'état ne lit pas meta theme-color ; plugin SystemBars du cœur Capacitor
+  if(IS_NATIVE_APP){ const sb = capPlugin('SystemBars'); if(sb) try{ Promise.resolve(sb.setStyle({ style: t==='light' ? 'LIGHT' : 'DARK' })).catch(()=>{}); }catch(_){ } }
   // Un interrupteur nommé par son état (« Thème sombre », enfoncé ou non) plutôt qu’un « Changer
   // de thème » qui ne dit pas où l’on est.
   const bt = $('#btn-theme');
@@ -3549,9 +3573,52 @@ async function fetchSynopsis(b){
 
 /* =============== Scanner ISBN (caméra) =============== */
 let scanStream = null, scanTimer = null, scanPending = false;
-const scanSupported = 'BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+// App iPhone : WebKit n'a pas BarcodeDetector ; le plugin natif (Vision) a son propre écran.
+const NATIVE_SCAN = !!capPlugin('CapacitorBarcodeScanner');
+const SCAN_HINT = { ISBN:9, QR:0 };   // OSBarcodeLib : 9 = EAN-13, 0 = QR
+const scanSupported = NATIVE_SCAN || ('BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 if(scanSupported) $('#btn-scan').hidden = false;
+// App iPhone : un scan natif rend le texte lu, ou '' (annulé, refusé, échec : le toast est déjà donné).
+// Le décodage natif exige hint, scanInstructions, scanButton, cameraDirection et scanOrientation :
+// le JS du plugin, qui remplirait des défauts, n'est pas chargé dans la page.
+async function nativeScan(hint){
+  const sc = capPlugin('CapacitorBarcodeScanner');
+  if(!sc) return '';
+  try{
+    const r = await sc.scanBarcode({ hint,
+      scanInstructions: hint===SCAN_HINT.QR ? 'Vise le QR code de ton ami' : 'Vise le code-barres au dos du livre',
+      scanButton:false, scanText:'', cameraDirection:1, scanOrientation:1,
+      cancelButtonAccessibilityLabel:'Annuler', torchButtonOnAccessibilityLabel:'Allumer la lampe', torchButtonOffAccessibilityLabel:'Éteindre la lampe' });
+    return String((r && r.ScanResult) || '').trim();
+  }catch(e){
+    const code = e && e.code;
+    if(code==='OS-PLUG-BARC-0006') return '';   // annulé par l'utilisateur : rien à dire
+    // au tout premier refus, l'alerte native (traduite dans la coque) peut précéder ce toast
+    if(code==='OS-PLUG-BARC-0007') toast('Accès à l’appareil photo refusé. Autorise-le dans Réglages › Tome');
+    else toast('Caméra indisponible ou refusée');
+    return '';
+  }
+}
+function onIsbnScanned(isbn){
+  stopScan();
+  $('#search-q').value = isbn;
+  _lastQ = isbn;
+  toast('Code-barres lu ✓');
+  doSearch(isbn);
+}
 async function startScan(){
+  if(NATIVE_SCAN){
+    if(scanPending) return;
+    scanPending = true;
+    try{
+      const raw = await nativeScan(SCAN_HINT.ISBN);
+      if(!raw || !$('#ov-search').classList.contains('open')) return;
+      // le plugin rend aussi des UPC et des EAN-13 qui ne sont pas des ISBN : même filtre que le web
+      if(/^97[89]\d{10}$/.test(raw)) onIsbnScanned(raw);
+      else toast('Ce code n’est pas un ISBN. Vise celui qui commence par 978');
+    }finally{ scanPending = false; }
+    return;
+  }
   if(scanStream || scanPending) return;
   scanPending = true;
   let stream;
@@ -3579,15 +3646,7 @@ async function startScan(){
     try{
       const codes = await detector.detect(video);
       const hit = codes.find(c=>/^97[89]\d{10}$/.test(c.rawValue));
-      if(hit){
-        const isbn = hit.rawValue;
-        stopScan();
-        $('#search-q').value = isbn;
-        _lastQ = isbn;
-        toast('Code-barres lu ✓');
-        doSearch(isbn);
-        return;
-      }
+      if(hit){ onIsbnScanned(hit.rawValue); return; }
       // code-barres lu mais pas un ISBN : on guide sans couper le scan (ni répéter le message)
       if(codes.length && Date.now() - badScanAt > 4000){
         badScanAt = Date.now();
@@ -3825,7 +3884,7 @@ function renderStudyEditor(b, focus=''){
     <div class="study-actions">
       <button class="btn primary" data-study-review="${c.due?'due':'all'}">${ic('play',13)} ${c.due?`Réviser ${plur(Math.min(c.due,20),'carte')}${c.due>20?` sur ${c.due}`:''}`:'S’entraîner'}</button>
       <button class="btn" data-study-export="md">${ic('download',14)} Texte (.md)</button>
-      <button class="btn" data-study-export="print">${ic('print',14)} Imprimer / PDF</button>
+      ${IS_NATIVE_APP ? '' : `<button class="btn" data-study-export="print">${ic('print',14)} Imprimer / PDF</button>`}
       <button class="btn" data-study-back>← Revenir au livre</button>
     </div>
     <details class="study-section" open><summary>Intention et résumé</summary><div class="study-inside">
@@ -3870,7 +3929,7 @@ function studyMarkdown(b){
   return lines.filter((x,i,a)=>x!=='' || a[i-1]!=='').join('\n').trim()+'\n';
 }
 function studyFilename(b,ext){ const base=('fiche-'+fullTitle(b)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').slice(0,90).toLowerCase(); return (base||'fiche-tome')+'.'+ext; }
-function exportStudyMarkdown(b){ downloadBlob('\uFEFF'+studyMarkdown(b),'text/markdown;charset=utf-8',studyFilename(b,'md')); toast('Fiche texte (.md) téléchargée ✓'); }
+function exportStudyMarkdown(b){ downloadBlob('\uFEFF'+studyMarkdown(b),'text/markdown;charset=utf-8',studyFilename(b,'md')); if(!IS_NATIVE_APP) toast('Fiche texte (.md) téléchargée ✓'); }
 function studyPrintHTML(b){
   const s=b.study||emptyStudy(), block=(title,html)=>html?`<h2>${esc(title)}</h2>${html}`:'';
   const paras=x=>esc(x).replace(/\n/g,'<br>');
@@ -4137,7 +4196,7 @@ function openDetail(id, opts={}){
   const aAcheter = b.status==='wishlist' || b.status==='abandoned';
   const buyLinks = [
     aAcheter ? `<a class="btn buy" data-buy="amazon" href="${esc(amazonUrl(b,false))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Ouvrir sur Amazon">${ic('cart',16)} Acheter<span class="sr-only"> (nouvelle fenêtre)</span></a>` : '',
-    aAcheter ? `<a class="btn buy" data-buy="kindle" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle<span class="sr-only"> (nouvelle fenêtre)</span></a>` : '',
+    aAcheter && !IS_NATIVE_APP ? `<a class="btn buy" data-buy="kindle" href="${esc(amazonUrl(b,true))}" target="_blank" rel="noopener nofollow${AMAZON_TAG?' sponsored':''}" title="Édition Kindle sur Amazon">${ic('device',16)} Lire sur Kindle<span class="sr-only"> (nouvelle fenêtre)</span></a>` : '',
     social.me ? `<button type="button" class="btn buy" data-reco="${esc(b.id)}" title="Recommander ce livre à un ami">${ic('share',16)} Recommander</button>` : '',
     !isDemoBook(b) ? `<a class="btn buy" href="/livre/${esc(bookSlugOf(b))}" title="La page publique de ce livre sur Tome (avis des lecteurs)">${ic('link',16)} Page du livre</a>` : ''
   ].filter(Boolean).join('');
@@ -5253,7 +5312,52 @@ function showRecap(year){
 }
 
 /* =============== Export / import =============== */
-function downloadBlob(content, type, filename){
+// App iPhone : <a download> n'y livre rien. Le fichier est écrit dans Documents (visible dans
+// Fichiers › Sur mon iPhone › Tome) puis, pour un geste de l'utilisateur, la feuille de partage
+// s'ouvre. Renvoie le nom réellement écrit (une chaîne non vide, donc vraie), false en cas d'échec.
+// `content` est déjà figé par l'appelant : rien n'est relu dans `state` après le premier await.
+function safeFileName(n){
+  const s = String(n||'').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]/g, '-');
+  return s || 'tome.txt';
+}
+async function nativeSaveFile(content, filename, o={}){
+  const fs = capPlugin('Filesystem');
+  if(!fs){ toast('Enregistrement impossible dans cette version de l’app'); return false; }
+  const dir = o.directory || 'DOCUMENTS';
+  let path = dir==='CACHE' ? 'partage/'+safeFileName(filename) : safeFileName(filename);
+  // Documents : writeFile remplacerait sans un mot un fichier du même nom, et les copies de secours
+  // ne portent que la date du jour (deux imports ou deux restaurations dans la journée). Comme le
+  // navigateur du site, on ne réécrit jamais : nom.json, puis nom-2.json, nom-3.json… stat rejette
+  // quand le nom est libre (OS-PLUG-FILE-0008) ; toute autre erreur garde ce nom, comme avant.
+  if(dir==='DOCUMENTS' && typeof fs.stat==='function'){
+    const m = path.match(/^(.*?)(\.[^.]*)?$/), base = m[1], ext = m[2] || '';
+    for(let i=2; i<100; i++){
+      try{ await fs.stat({ path, directory:dir }); }catch(_){ break; }
+      path = base+'-'+i+ext;
+    }
+  }
+  let uri = '';
+  try{
+    const r = await fs.writeFile({ path, data:content, directory:dir, recursive:true, ...(o.dataUrl ? {} : {encoding:'utf8'}) });
+    uri = (r && r.uri) || '';
+  }catch(_){ toast('Enregistrement impossible sur cet appareil'); return false; }
+  const sh = o.share && uri ? capPlugin('Share') : null;
+  if(sh){ try{ await sh.share({ files:[uri], ...(o.text ? {text:o.text} : {}) }); }catch(_){ /* partage annulé */ } }
+  if(!o.quiet) toast('Enregistré dans Fichiers › Tome ✓');
+  return path;
+}
+// App iPhone : lien partagé par la feuille native. false si le plugin manque (l'appelant reprend
+// alors le chemin du web, presse-papiers compris) ; une annulation n'est pas une erreur.
+async function nativeShareLink(o){
+  const sh = capPlugin('Share');
+  if(!sh) return false;
+  try{ await sh.share(o); }catch(_){ /* partage annulé */ }
+  return true;
+}
+// opts.fallback : copie de secours d'office (avant un import ou un effacement) : dans l'app, ni
+// feuille de partage ni toast, l'appelant dit lui-même ce qui s'est passé.
+function downloadBlob(content, type, filename, opts){
+  if(IS_NATIVE_APP) return nativeSaveFile(content, filename, { share: !(opts && opts.fallback), quiet: !!(opts && opts.fallback) });
   const blob = new Blob([content], {type});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -5261,8 +5365,9 @@ function downloadBlob(content, type, filename){
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
 }
-function downloadJSON(obj, filename){
-  downloadBlob(typeof obj==='string' ? obj : JSON.stringify(obj, null, 2), 'application/json', filename);
+// Renvoie ce que rend downloadBlob : undefined sur le web, une promesse (nom écrit, ou false) dans l'app.
+function downloadJSON(obj, filename, opts){
+  return downloadBlob(typeof obj==='string' ? obj : JSON.stringify(obj, null, 2), 'application/json', filename, opts);
 }
 const TOME_CSV_HEADERS = [
   'Tome CSV Version','Tome ID','Title','Authors','Type','Status','Rating','Favorite',
@@ -5293,7 +5398,17 @@ function bookToTomeCSVRow(b){
 function buildTomeCSV(books){
   return '\uFEFF'+[TOME_CSV_HEADERS, ...books.map(bookToTomeCSVRow)].map(row=>row.map(csvCell).join(',')).join('\r\n');
 }
+// App iPhone : l'export attend l'écriture du fichier ; un échec laisse le rappel d'export compter
+// (changes et lastExport intacts), seule sauvegarde des lecteurs sans compte.
+async function nativeExportJSON(){
+  if(!await downloadJSON(withoutSyncBase(state), `tome-export-${today()}.json`)) return;
+  state.meta.changes = 0;
+  state.meta.lastExport = today();
+  save(true);
+  refreshDataPanel();
+}
 $('#btn-export').addEventListener('click', ()=>{
+  if(IS_NATIVE_APP){ nativeExportJSON(); return; }
   downloadJSON(withoutSyncBase(state), `tome-export-${today()}.json`);   // la base de fusion est propre à l’appareil : elle ne sort pas
   state.meta.changes = 0;
   state.meta.lastExport = today();
@@ -5303,7 +5418,7 @@ $('#btn-export').addEventListener('click', ()=>{
 });
 $('#btn-export-csv').addEventListener('click', ()=>{
   downloadBlob(buildTomeCSV(state.books), 'text/csv;charset=utf-8', `tome-livres-${today()}.csv`);
-  toast(`${plur(state.books.length,'livre exporté','livres exportés')} en CSV. Le JSON reste la sauvegarde complète`);
+  if(!IS_NATIVE_APP) toast(`${plur(state.books.length,'livre exporté','livres exportés')} en CSV. Le JSON reste la sauvegarde complète`);
 });
 /* =============== Import CSV (Tome / Goodreads / StoryGraph) =============== */
 // Parseur CSV maison, tolérant RFC-4180 (guillemets, virgules et retours-ligne dans les champs, BOM)
@@ -5585,7 +5700,11 @@ async function importCSV(text){
     // Remplacement : backup d’abord (réutilise le mécanisme d’import JSON)
     const prev = JSON.stringify(state);
     let backedUp=false; try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp=true; }catch(_){}
-    if(!backedUp && state.books.length) downloadJSON(JSON.stringify(withoutSyncBase(state)), `tome-sauvegarde-avant-import-${today()}.json`);
+    if(!backedUp && state.books.length){
+      const p = downloadJSON(JSON.stringify(withoutSyncBase(state)), `tome-sauvegarde-avant-import-${today()}.json`, {fallback:true});
+      // App iPhone : sans copie écrite, rien n'est effacé (le retour précède markBooksDeleted)
+      if(IS_NATIVE_APP && !(await p)){ toast('Copie de secours impossible\u00a0: rien n’a été remplacé'); return; }
+    }
     // Effacement explicite, doublement confirmé : marqué, sinon un autre appareil ramènerait tout.
     markBooksDeleted(state.books);
     state.books = []; state.lists = []; state.goals = {}; state.series = {}; state.smartCollections = [];
@@ -5659,8 +5778,9 @@ $('#import-file').addEventListener('change', e => {
       let backedUp = false;
       try{ localStorage.setItem(LS_KEY+'-backup', prev); backedUp = true; }catch(_){ }
       if(!backedUp && state.books.length){
-        downloadJSON(JSON.stringify(withoutSyncBase(state)), `tome-sauvegarde-avant-import-${today()}.json`);
-        toast('Stockage plein : ancienne bibliothèque téléchargée en secours');
+        const p = downloadJSON(JSON.stringify(withoutSyncBase(state)), `tome-sauvegarde-avant-import-${today()}.json`, {fallback:true});
+        if(IS_NATIVE_APP && !(await p)){ toast('Copie de secours impossible\u00a0: rien n’a été remplacé'); return; }
+        toast(IS_NATIVE_APP ? 'Stockage plein\u00a0: ancienne bibliothèque enregistrée en secours dans Fichiers › Tome' : 'Stockage plein : ancienne bibliothèque téléchargée en secours');
       }
       replaceLocalLibrary(clean);   // sans marqueur : un import n’est pas une suppression, la fusion ramène le reste
       if(save()){ render(); toast('Import réussi ✓'); }
@@ -5813,9 +5933,11 @@ async function exportBeforeRestore(){
     choices:[{ label:'Exporter ma bibliothèque', value:'export', variant:'primary', default:true }] });
   if(pick!=='export') return false;
   const before = JSON.stringify(withoutSyncBase(state)), file = `tome-avant-restauration-${today()}.json`;
-  downloadJSON(before, file);
-  if(!await uiConfirm({ title:'Export téléchargé. Restaurer maintenant ?',
-    message:`Vérifie d’abord que le fichier ${file} est bien dans tes téléchargements : ta bibliothèque actuelle n’existera plus que là. Pour la reprendre, ce sera « Importer (JSON) », dans Mon compte › Mes données.`,
+  // App iPhone : le nom vraiment écrit (…-2.json si une restauration du jour a déjà laissé le sien)
+  let shown = file;
+  if(IS_NATIVE_APP){ const w = await downloadJSON(before, file); if(!w) return false; if(typeof w==='string') shown = w; } else downloadJSON(before, file);
+  if(!await uiConfirm({ title: IS_NATIVE_APP ? 'Export enregistré. Restaurer maintenant\u00a0?' : 'Export téléchargé. Restaurer maintenant ?',
+    message:`Vérifie d’abord que le fichier ${shown} est bien ${IS_NATIVE_APP ? 'dans Fichiers › Sur mon iPhone › Tome' : 'dans tes téléchargements'} : ta bibliothèque actuelle n’existera plus que là. Pour la reprendre, ce sera « Importer (JSON) », dans Mon compte › Mes données.`,
     okLabel:'Restaurer', danger:true })) return false;
   if(JSON.stringify(withoutSyncBase(state))!==before){ toast('Ta bibliothèque a changé entre-temps : relance la restauration'); return false; }
   return true;
@@ -5837,6 +5959,7 @@ $('#btn-restore').addEventListener('click', async ()=>{
   const avail = copies.filter(c=>c.mine), foreign = copies.filter(c=>!c.mine);
   const corrupt = localStorage.getItem(LS_KEY+'-corrupt');
   if(!avail.length && corrupt){
+    if(IS_NATIVE_APP){ if(await downloadJSON(corrupt, `tome-donnees-brutes-${today()}.json`, {fallback:true})) toast('Copie brute enregistrée dans Fichiers › Tome\u00a0: à réparer à la main puis réimporter'); return; }
     downloadJSON(corrupt, `tome-donnees-brutes-${today()}.json`);
     toast('Copie brute téléchargée : à réparer à la main puis réimporter'); return;
   }
@@ -6106,7 +6229,7 @@ async function showPublicBook(slug){
     ${b.synopsis ? `<div class="pp-sec">Résumé</div><p class="pb-synopsis">${esc(b.synopsis)}</p>${b.source==='openlibrary' ? `<p class="pb-source">Résumé : <a href="https://openlibrary.org/isbn/${esc(b.isbn||'')}" target="_blank" rel="noopener">Open Library</a></p>` : b.source==='googlebooks' ? `<p class="pb-source">Résumé : <a href="https://books.google.com/books?vid=ISBN${esc(b.isbn||'')}" target="_blank" rel="noopener">Google Books</a></p>` : ''}` : ''}
     <div class="pp-sec">${reviews.length ? `Avis des lecteurs` : 'Avis'}</div>
     ${reviews.length ? `<div class="pb-reviews">${reviews.map(r=>`<article class="pb-review">
-        <div class="pb-review-head">${avatarHTML(r.displayName,'sm')}<a class="pb-review-who" href="/@${esc(r.username)}"><b>${esc(r.displayName)}</b> <span>@${esc(r.username)}</span></a>
+        <div class="pb-review-head">${avatarHTML(r.displayName,'sm')}<a class="pb-review-who" href="${IS_NATIVE_APP ? SITE_URL : ''}/@${esc(r.username)}"><b>${esc(r.displayName)}</b> <span>@${esc(r.username)}</span></a>
           ${r.rating ? `<span class="pb-review-stars">${starsTxt(r.rating)}</span>` : ''}${r.readDate ? `<time class="pb-review-when">${esc(r.readDate.slice(0,4))}</time>` : ''}</div>
         <p class="pb-review-txt">${esc(r.review)}</p>
         <button type="button" class="linkish pb-report" data-pb-report="${esc(r.username)}|${esc(b.key)}">\u2690 Signaler</button>
@@ -6119,7 +6242,7 @@ async function showPublicBook(slug){
     </section>`;
   body.onclick = async e=>{
     const share = e.target.closest('[data-pb-share]');
-    if(share){ const url = location.origin + '/livre/' + b.slug; if(navigator.share){ try{ await navigator.share({ title:b.title, url }); return; }catch(_){ } }
+    if(share){ const url = PUBLIC_ORIGIN + '/livre/' + b.slug; if(IS_NATIVE_APP && await nativeShareLink({ title:b.title, url })) return; if(navigator.share){ try{ await navigator.share({ title:b.title, url }); return; }catch(_){ } }
       try{ await navigator.clipboard.writeText(url); toast('Lien de la page copié ✓'); }catch(_){ } return; }
     const rep = e.target.closest('[data-pb-report]');
     if(rep){ reportContent('review', rep.dataset.pbReport); return; }
@@ -6304,7 +6427,6 @@ function wrapText(ctx, text, x, y, maxW, lineH, maxLines){
 }
 // Aperçu + partage d’une carte générée. Sur mobile, navigator.share({files}) ouvre la feuille
 // native (Instagram, WhatsApp…) — LE canal viral ; sinon repli sur le téléchargement.
-const SITE_URL = 'https://montome.fr';
 let _cardUrl = ''; // blob-URL de l’aperçu courant, révoquée à la génération suivante
 // Une carte à la fois : polices, couverture et canvas prennent plusieurs secondes sur mobile,
 // et sans retour visible un second tap relançait tout (deux aperçus empilés). Le bouton
@@ -6333,15 +6455,18 @@ function presentCard(cv, filename, shareText){
     // aperçu en data: (la CSP img-src autorise data: mais pas blob:) ; le blob sert au partage/téléchargement
     const dataUrl = cv.toDataURL('image/png');
     const file = new File([blob], filename, {type:'image/png'});
-    const canNative = !!(navigator.canShare && navigator.canShare({files:[file]}));
+    // App iPhone : partage par les plugins (Filesystem écrit l'image, Share ouvre la feuille, qui
+    // propose aussi « Enregistrer l’image » et « Enregistrer dans Fichiers ») ; <a download> n'y livre rien.
+    const canNative = IS_NATIVE_APP ? !!(capPlugin('Share') && capPlugin('Filesystem')) : !!(navigator.canShare && navigator.canShare({files:[file]}));
     $('#card-body').innerHTML = `
       <img class="card-preview" src="${dataUrl}" alt="Aperçu de la carte">
       <div class="card-actions">
         ${canNative ? `<button class="btn primary" id="card-share">${ic('share',16)} Partager</button>` : ''}
-        <button class="btn ${canNative?'':'primary'}" id="card-dl">${ic('download',16)} Télécharger</button>
+        <button class="btn ${canNative?'':'primary'}" id="card-dl"${IS_NATIVE_APP ? ' hidden' : ''}>${ic('download',16)} Télécharger</button>
       </div>
       <p class="card-hint">En story, en message… l’adresse de Tome est sur l’image </p>`;
     if(canNative) $('#card-share').addEventListener('click', async ()=>{
+      if(IS_NATIVE_APP){ await nativeSaveFile(dataUrl, filename, { directory:'CACHE', dataUrl:true, share:true, quiet:true, text:shareText }); return; }
       try{ await navigator.share({ files:[file], title:'Tome', text:shareText }); }catch(_){ /* partage annulé */ }
     });
     $('#card-dl').addEventListener('click', ()=>{
@@ -6390,7 +6515,8 @@ document.addEventListener('click', e => {
   if(!buy) return;
   try{
     const kind = buy.dataset.buy === 'amazon' ? 'amazon' : 'kindle';
-    const blob = new Blob([JSON.stringify({ kind })], { type:'application/json' });
+    // App iPhone : text/plain fait une requête simple, sans pré-vol (le Worker ignore le Content-Type)
+    const blob = new Blob([JSON.stringify({ kind })], { type: IS_NATIVE_APP ? 'text/plain' : 'application/json' });
     navigator.sendBeacon(API_BASE + '/api/out', blob);
   }catch(_){ }
 });
@@ -6903,7 +7029,8 @@ function applyHashView(hash){
 /* =============== PWA =============== */
 let installEvt = null;
 const installButtons = () => [$('#btn-install'), $('#btn-install-welcome')].filter(Boolean);
-const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+// App iPhone : déjà installée par définition, aucune invite d'installation.
+const isStandalone = () => IS_NATIVE_APP || window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 const isIOSDevice = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function refreshInstallButtons(){
   const canHelpInstall = !isStandalone() && (installEvt || isIOSDevice());
@@ -6962,7 +7089,8 @@ function showUpdateBar(reg){
     else location.reload();
   };
 }
-if('serviceWorker' in navigator){
+// App iPhone : fichiers embarqués, hors ligne acquis ; pas de service worker (ni bandeau de version).
+if(!IS_NATIVE_APP && 'serviceWorker' in navigator){
   addEventListener('load', async ()=>{
     try{
       const reg = await navigator.serviceWorker.register('/sw.js');
@@ -6984,6 +7112,90 @@ if('serviceWorker' in navigator){
     if(!_hadController){ _hadController = true; return; } // 1re prise de contrôle (clients.claim) : ne pas recharger
     _swRefreshing = true; location.reload();
   });
+}
+/* ---------- App iPhone : copie de secours de la bibliothèque hors de la vue web ----------
+   iOS peut vider le stockage d'une vue web quand l'appareil manque de place. tome-v1 est recopié
+   (save() et libPersist()) dans Library/tome/bibliotheque.json, que Fichiers ne montre pas, et relu
+   au lancement si le stockage est revenu vide. Ni le jeton de session (une reconnexion suffit), ni
+   les copies tome-v1-* (mises de côté, sauvegardes). Déclarations en tête de fichier. */
+function mirrorHasRealBook(books){ return Array.isArray(books) && books.some(b=>!isDemoBook(b)); }
+function scheduleNativeMirror(){
+  if(!IS_NATIVE_APP || !_mirrorReady) return;
+  // Plus aucun livre réel (retrait, changement de compte, remise à zéro) : écrit tout de suite, sans
+  // quoi une fermeture dans les 2 s laisserait l'ancienne bibliothèque dans la copie.
+  if(!mirrorHasRealBook(state.books)){ clearTimeout(_mirrorTimer); _mirrorTimer = 0; writeNativeMirror(); return; }
+  clearTimeout(_mirrorTimer);
+  _mirrorTimer = setTimeout(writeNativeMirror, 2000);
+}
+// Écriture en deux temps : le temporaire d'abord (coupé par un disque plein ou une app tuée, il
+// laisse la copie principale intacte), puis rename, qui supprime la principale et déplace le
+// temporaire à sa place ; entre les deux, le lancement relit le temporaire (startNativeMirror).
+// Une seule écriture à la fois : deux écritures croisées partagent le temporaire, et le rename de
+// l'une installerait le fichier à moitié écrit de l'autre. Un appel qui tombe pendant une écriture
+// la fait reprendre ensuite, avec le stockage du moment.
+async function writeNativeMirror(){
+  _mirrorTimer = 0;
+  const fs = capPlugin('Filesystem');
+  if(!fs) return;
+  if(_mirrorBusy){ _mirrorAgain = true; return; }
+  _mirrorBusy = true;
+  try{
+    do{
+      _mirrorAgain = false;
+      try{
+        const raw = localStorage.getItem(LS_KEY);
+        if(raw==null || raw===_mirrorLast) continue;
+        await fs.writeFile({ path:MIRROR_TMP, directory:MIRROR.directory, data:raw, encoding:'utf8', recursive:true });
+        await fs.rename({ from:MIRROR_TMP, to:MIRROR.path, directory:MIRROR.directory, toDirectory:MIRROR.directory });
+        _mirrorLast = raw;
+      }catch(_){ }
+    }while(_mirrorAgain);
+  }finally{ _mirrorBusy = false; }
+}
+// Contenu d'une copie s'il se lit ET s'analyse, sinon null.
+async function readNativeMirror(fs, path){
+  try{
+    const raw = (await fs.readFile({ path, directory:MIRROR.directory, encoding:'utf8' })).data;
+    return typeof raw==='string' ? { raw, copie: JSON.parse(raw) } : null;
+  }catch(_){ return null; }
+}
+async function startNativeMirror(){
+  const fs = capPlugin('Filesystem');
+  if(!fs || STORAGE_BLOCKED) return;
+  let flag = null;
+  try{ flag = sessionStorage.getItem(MIRROR_FLAG); }catch(_){ }
+  if(flag && mirrorHasRealBook(state.books)){
+    // second lancement après une restauration : on le dit, une fois (après le premier rendu)
+    setTimeout(()=>toast('Ta bibliothèque a été restaurée depuis la copie de secours de l’app ✓', {ms:6000}), 600);
+    try{ sessionStorage.removeItem(MIRROR_FLAG); }catch(_){ }
+  }else if(flag){
+    // Restauration écrite puis stockage de nouveau vide au rechargement : pas de second
+    // rechargement, et la copie reste intacte (l'écriture n'est pas activée pour cette session).
+    return;
+  }else if(NATIVE_LS_WAS_EMPTY){
+    // Le temporaire ne sert que si la principale est absente ou illisible (rename coupé entre la
+    // suppression et le déplacement) ; jamais quand elle se lit, même sans aucun livre réel.
+    const lu = (await readNativeMirror(fs, MIRROR.path)) || (await readNativeMirror(fs, MIRROR_TMP));
+    const raw = lu ? lu.raw : null, copie = lu ? lu.copie : null;
+    if(copie && mirrorHasRealBook(copie.books) && !mirrorHasRealBook(state.books)){
+      try{
+        localStorage.setItem(LS_KEY, raw);
+        localStorage.setItem('tome-welcomed', '1');   // sinon la page d'accueil réapparaît
+        if(localStorage.getItem(LS_KEY)===raw){
+          sessionStorage.setItem(MIRROR_FLAG, '1');
+          location.reload();
+          return;   // l'écriture de la copie attend le prochain lancement
+        }
+      }catch(_){ }
+    }
+  }
+  _mirrorReady = true;
+  scheduleNativeMirror();
+}
+if(IS_NATIVE_APP){
+  startNativeMirror();
+  // passage en arrière-plan : la copie en attente part tout de suite (l'app peut ne jamais revenir)
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden && _mirrorTimer){ clearTimeout(_mirrorTimer); writeNativeMirror(); } });
 }
 if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
 
@@ -7073,7 +7285,9 @@ document.addEventListener('keydown', e => {
 // API servie par la même origine (Worker Tome-Social + assets statiques) : chemin relatif.
 // Exception : launcher de dev `tome` (port 8791) sans API → Worker séparé sur 8787
 // (`npx wrangler dev` dans Tome-Social sert app + API sur 8787, même origine).
-const API_BASE = (location.port==='8791') ? 'http://localhost:8787' : '';
+// App iPhone : la page vit sous capacitor://localhost, l'API reste sur l'adresse publique (CORS
+// ouvert à cette seule origine par le Worker). Toujours https://montome.fr, sans www ni http.
+const API_BASE = IS_NATIVE_APP ? SITE_URL : ((location.port==='8791') ? 'http://localhost:8787' : '');
 const SOC_TOKEN = 'tome-social-token';
 // Invitation en attente : conservée jusqu’à ce que la demande d’ami parte VRAIMENT (une
 // invitation perdue = un utilisateur perdu — c’est le seul canal d’acquisition). Expire à 7 jours.
@@ -7460,7 +7674,13 @@ function backupLocal(suffix){ try{ localStorage.setItem(LS_KEY+suffix, localStor
 // existe de vraies données, on télécharge l’état courant pour qu’aucun effacement ne soit définitif.
 function wipeFallback(){
   if((state.books||[]).some(b=>!isDemoBook(b))){
-    try{ downloadJSON(withoutSyncBase(state), `tome-sauvegarde-${today()}.json`); toast('Stockage plein : ancienne bibliothèque téléchargée en secours', {ms:7000}); }catch(_){ }
+    // App iPhone : risque résiduel assumé, l'effacement n'attend pas l'écriture native (les appelants
+    // sont synchrones) ; le contenu est figé au moment de l'appel, l'écriture n'échoue que disque plein.
+    try{
+      const p = downloadJSON(withoutSyncBase(state), `tome-sauvegarde-${today()}.json`, {fallback:true});
+      if(IS_NATIVE_APP) Promise.resolve(p).then(ok => toast(ok ? 'Stockage plein\u00a0: ancienne bibliothèque enregistrée en secours dans Fichiers › Tome' : 'Stockage plein\u00a0: la copie de secours n’a pas pu être enregistrée', {ms:7000}));
+      else toast('Stockage plein : ancienne bibliothèque téléchargée en secours', {ms:7000});
+    }catch(_){ }
   }
 }
 function backupBeforeWipe(suffix){ if(!backupLocal(suffix)) wipeFallback(); }
@@ -7541,7 +7761,8 @@ function libTag(rev, base){
   if(rev!=null){ state.meta.libRev = rev; social.libRev = rev; }
   if(base) state.meta.syncFp = { ...emptySyncBase(), ...base, rev: (+state.meta.libRev) || 0 };
 }
-function libPersist(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(_){ } }
+// App iPhone : la copie de secours suit aussi ces écritures (retrait, changement de compte, chargement du compte)
+function libPersist(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); if(IS_NATIVE_APP) scheduleNativeMirror(); }catch(_){ } }
 // Ce que la fusion compare d’une liste, d’une note de série, d’une collection. Les livres d’une liste
 // n’y sont pas : ils restent unis (pas de marqueur de retrait — les départager ferait d’un import
 // ancien sur un appareil un retrait sur tous les autres).
@@ -8296,12 +8517,13 @@ async function renderAccount(){
       <button type="button" class="linkish pw-eye" data-pw-noun="le nouveau mot de passe" aria-pressed="false" aria-label="Afficher le nouveau mot de passe">Afficher</button></div>
     ${resetCode}
     <button class="btn" id="acc-pw">Changer le mot de passe</button>
-    <h4>Notifications</h4>
+    ${IS_NATIVE_APP /* App iPhone : ni Web Push ni rappel par notification dans WKWebView. Bloc caché, pas
+      retiré : les gestionnaires de #acc-push et #acc-rem trouvent toujours leurs éléments. */ ? '<div hidden>' : ''}<h4>Notifications</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Recevoir une alerte quand un ami t’ajoute, aime ou commente une de tes lectures, même quand Tome est fermé. <span id="acc-push-state"></span></p>
     <div class="data-actions"><button class="btn" id="acc-push">${ic('bell',16)} Activer les notifications</button></div>
     <h4>Rappel de lecture</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Un mot chaque jour à l’heure choisie, avec ta lecture en cours. Nécessite les notifications ci-dessus.</p>
-    <div class="data-actions"><select id="acc-rem" aria-label="Heure du rappel">${[['','Aucun rappel'],...Array.from({length:18},(_,i)=>[String(i+6),`${i+6} h`])].map(([v,l])=>`<option value="${v}"${String(social.me.reminderHour??'')===v?' selected':''}>${l}</option>`).join('')}</select><button class="btn" id="acc-rem-save">Enregistrer le rappel</button></div>
+    <div class="data-actions"><select id="acc-rem" aria-label="Heure du rappel">${[['','Aucun rappel'],...Array.from({length:18},(_,i)=>[String(i+6),`${i+6} h`])].map(([v,l])=>`<option value="${v}"${String(social.me.reminderHour??'')===v?' selected':''}>${l}</option>`).join('')}</select><button class="btn" id="acc-rem-save">Enregistrer le rappel</button></div>${IS_NATIVE_APP ? '</div>' : ''}
     <h4>Code de secours</h4>
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">La seule façon de récupérer ton compte si tu oublies ton mot de passe (aucun email n’est collecté). ${social.hasRecovery?'Un code est actif : le régénérer invalide l’ancien.':'<b>Aucun code actif</b>. Génère-le maintenant.'}</p>
     <div class="pw-wrap"><input id="acc-rec" aria-label="Mot de passe actuel (pour générer le code de secours)" type="password" maxlength="256" autocomplete="current-password" placeholder="Mot de passe actuel">
@@ -8320,7 +8542,7 @@ async function renderAccount(){
       <button class="btn" id="acc-logoutall">Se déconnecter partout</button>
       <button class="btn" id="acc-legal">${ic('doc',15)} Mentions légales</button>
       <button class="btn" id="acc-pledge">${ic('heart',15)} Toujours gratuit</button>
-      ${SUPPORT_URL ? `<a class="btn" id="acc-support" href="${SUPPORT_URL}" target="_blank" rel="noopener">\u2665 Soutenir Tome</a>` : ''}
+      ${SUPPORT_URL && !IS_NATIVE_APP ? `<a class="btn" id="acc-support" href="${SUPPORT_URL}" target="_blank" rel="noopener">\u2665 Soutenir Tome</a>` : ''}
     </div>
     <h4 style="color:var(--red)">Suppression du compte</h4>
     <div class="danger-zone">
@@ -8392,9 +8614,8 @@ async function renderAccount(){
       // « Mes données » ne joint la bibliothèque locale que si c’est bien celle de CE compte,
       // chargée : sur un appareil partagé, celle d’un autre compte n’a rien à faire dans ce fichier.
       if(libraryReady()) full.localLibrary = state.books;
-      const blob=new Blob([JSON.stringify(full,null,2)],{type:'application/json'}); const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob); a.download='tome-mes-donnees-'+social.me.username+'.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-      toast('Données exportées ✓'); }
+      const r = downloadBlob(JSON.stringify(full,null,2), 'application/json', 'tome-mes-donnees-'+social.me.username+'.json');
+      if(IS_NATIVE_APP) await r; else toast('Données exportées ✓'); }
     catch(err){ toast(netMsg(err)); }
     finally{ b.disabled=false; } };
   $('#acc-legal').onclick = ()=>openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]});
@@ -8448,7 +8669,7 @@ async function renderAccount(){
 // Reste affiché jusqu’à confirmation explicite ; copie et téléchargement proposés.
 async function showRecoveryCode(code, intro){
   // Le code n’est plus dans le message : il passe par cfg.code (bloc .dlg-code, gros et en mono).
-  const msg = `${intro||''}${intro?'\n\n':''}C’est la SEULE façon de récupérer ton compte si tu oublies ton mot de passe : aucun email n’est collecté. Copie-le ou télécharge-le, puis range-le en lieu sûr : il ne sera plus jamais affiché.`;
+  const msg = `${intro||''}${intro?'\n\n':''}C’est la SEULE façon de récupérer ton compte si tu oublies ton mot de passe : aucun email n’est collecté. ${IS_NATIVE_APP ? 'Copie-le ou enregistre-le' : 'Copie-le ou télécharge-le'}, puis range-le en lieu sûr : il ne sera plus jamais affiché.`;
   // Sortie conditionnée à une mise à l’abri : un code perdu ici l’est définitivement (le dialogue
   // ne se rouvre jamais et il n’existe aucune autre voie de récupération).
   let saved = false;
@@ -8457,12 +8678,12 @@ async function showRecoveryCode(code, intro){
     // téléchargement. Échap/clic-fond renvoient null → on réaffiche.
     const v = await openDialog({ title:'Ton code de secours', message: msg, code, actions:[
       {label:'Copier', value:'copy', variant:'primary', default:true},
-      {label:'Télécharger', value:'dl'},
+      {label: IS_NATIVE_APP ? 'Enregistrer' : 'Télécharger', value:'dl'},
       {label:'C’est noté ✓', value:'ok'},
     ]});
     if(v==='ok'){
       if(saved) return;
-      toast('Copie ou télécharge d’abord ton code');
+      toast(IS_NATIVE_APP ? 'Copie ou enregistre d’abord ton code' : 'Copie ou télécharge d’abord ton code');
       continue;
     }
     if(v==='copy'){
@@ -8474,10 +8695,8 @@ async function showRecoveryCode(code, intro){
     }
     else if(v==='dl'){
       const txt = `Code de secours Tome\nPseudo : ${social.me?social.me.username:''}\n\n${code}\n\nCe code permet de récupérer ton compte en cas d’oubli du mot de passe.\nGarde ce fichier en lieu sûr. L’utiliser en génère un nouveau.\n${SITE_URL}\n`;
-      const blob = new Blob([txt], {type:'text/plain'});
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tome-code-de-secours.txt';
-      a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000); toast('Fichier téléchargé ✓');
-      saved = true;
+      const r = downloadBlob(txt, 'text/plain', 'tome-code-de-secours.txt');
+      if(IS_NATIVE_APP) saved = (await r) || saved; else { toast('Fichier téléchargé ✓'); saved = true; }
     }
     // v === null (Échap / clic-fond) : on boucle → le dialogue se réaffiche
   }
@@ -8487,7 +8706,8 @@ async function showRecoveryCode(code, intro){
 // aucun nouveau point d’entrée serveur (la demande passe par /api/friends/request).
 async function shareInvite(){
   if(!social.me) return;
-  const url = location.origin + location.pathname + '#invite/' + encodeURIComponent(social.me.username);
+  const url = inviteUrl();
+  if(IS_NATIVE_APP && await nativeShareLink({ title:'Tome', text:'Rejoins-moi sur Tome pour partager nos lectures !', url })) return;
   if(navigator.share){
     try{ await navigator.share({ title:'Tome', text:'Rejoins-moi sur Tome pour partager nos lectures !', url }); return; }
     catch(e){ if(e && e.name==='AbortError') return; /* sinon : repli presse-papiers */ }
@@ -8499,16 +8719,19 @@ async function shareInvite(){
 //      mon lien, le scan du code d'un ami, et la « poignée de main » en direct : tant que la modale
 //      est ouverte, les demandes entrantes s'affichent pour être acceptées d'un geste. ----
 let _qrPoll = 0, _qrKnown = null, _qrStream = null, _qrTimer = null;
-function inviteUrl(){ return location.origin + location.pathname + '#invite/' + encodeURIComponent(social.me.username); }
+let _qrNativeBusy = false; // App iPhone : un seul écran de scan natif à la fois
+// App iPhone : l'adresse de la page (capacitor://localhost) ne dit rien à l'ami, le lien vise le site.
+function inviteUrl(){ return IS_NATIVE_APP ? SITE_URL + '/#invite/' + encodeURIComponent(social.me.username) : location.origin + location.pathname + '#invite/' + encodeURIComponent(social.me.username); }
 async function openFriendQR(){
   if(!social.me) return;
   const url = inviteUrl();
   $('#qr-user').textContent = social.me.username;
   try{ window.tomeQR.draw($('#qr-canvas'), url, { scale:6, margin:3, dark:'#141311', light:'#ffffff' }); }
   catch(e){ toast('QR indisponible sur cet appareil'); }
-  $('#qr-share').hidden = !navigator.share;
+  $('#qr-share').hidden = IS_NATIVE_APP ? !capPlugin('Share') : !navigator.share;
   $('#qr-scan').hidden = true;
-  if('BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+  if(NATIVE_SCAN) $('#qr-scan').hidden = false;   // App iPhone : écran de scan natif (Vision)
+  else if('BarcodeDetector' in window && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
     try{ const f = await BarcodeDetector.getSupportedFormats(); $('#qr-scan').hidden = !f.includes('qr_code'); }catch(_){ }
   }
   // Safari iOS n’a pas BarcodeDetector : sans « Scanner son QR », la modale n’expliquait plus
@@ -8550,7 +8773,29 @@ $('#qr-live').addEventListener('click', async e=>{
     toast('Vous êtes maintenant amis ✓'); const row = b.closest('.frow'); if(row) row.remove(); socRefresh(); loadFriendLists(); }
   catch(err){ b.disabled = false; toast(netMsg(err)); }
 });
+// Lien d'invitation lu dans un QR (scanner web ou natif). false : ce n'est pas une invitation Tome.
+function onInviteScanned(raw){
+  const m = String(raw||'').match(/#invite\/([a-z0-9_.-]{3,20})/i);
+  if(!m) return false;
+  stopQRScan();
+  const who = m[1].toLowerCase();
+  if(who === social.me.username){ toast('C’est ton propre code'); return true; }
+  closeOverlays();
+  social.invite = who; processInvite();   // confirmation puis demande d'ami
+  return true;
+}
 async function startQRScan(){
+  if(NATIVE_SCAN){
+    // App iPhone : le plugin ouvre son propre écran plein cadre et rend le texte lu
+    if(_qrNativeBusy) return;
+    _qrNativeBusy = true;
+    try{
+      const raw = await nativeScan(SCAN_HINT.QR);
+      if(!raw || !$('#ov-qr').classList.contains('open') || !social.me) return;
+      if(!onInviteScanned(raw)) toast('Ce QR code n’est pas une invitation Tome');
+    }finally{ _qrNativeBusy = false; }
+    return;
+  }
   if(_qrStream) return;
   let stream;
   try{ stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } }); }
@@ -8564,16 +8809,7 @@ async function startQRScan(){
   _qrTimer = setInterval(async ()=>{
     try{
       const codes = await det.detect(video);
-      for(const c of codes){
-        const m = String(c.rawValue||'').match(/#invite\/([a-z0-9_.-]{3,20})/i);
-        if(!m) continue;
-        stopQRScan();
-        const who = m[1].toLowerCase();
-        if(who === social.me.username){ toast('C’est ton propre code'); return; }
-        closeOverlays();
-        social.invite = who; processInvite();   // confirmation puis demande d'ami
-        return;
-      }
+      for(const c of codes){ if(onInviteScanned(String(c.rawValue||''))) return; }
     }catch(_){ }
   }, 300);
 }
@@ -8676,6 +8912,8 @@ function renderAuth(box, mode, errMsg=''){
       // qu'il y a des lectures à montrer. Un formulaire plus court, une décision mieux informée.
       const body = mode==='login' ? {username, password} : {username, password, displayName, consent:true, shareMode:'none'};
       const d = await api(mode==='login'?'/api/login':'/api/signup', {method:'POST', body});
+      // App iPhone : une page d'erreur (portail Wi-Fi, défi Cloudflare) ne doit pas passer pour une session
+      if(IS_NATIVE_APP && !(typeof d.token==='string' && d.token)) throw new Error('Réponse inattendue de Tome. Réessaie dans un instant.');
       resetLibrarySync(); localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; _socUserToken = d.token; social.tosOutdated = mode!=='signup'; social.tab='feed'; social.view=null;
       social.sessionExpired = false;   // la session est neuve : plus rien à expliquer au prochain passage
       // ni rien à renouveler, sauf si CETTE connexion le dit (plus bas) : un drapeau resté d’une
@@ -8751,6 +8989,7 @@ function renderRecover(box, errMsg=''){
     $('#rec-submit').textContent = '…'; $('#rec-submit').disabled = true;
     try{
       const d = await api('/api/recover', {method:'POST', body:{username, code, newPassword}});
+      if(IS_NATIVE_APP && !(typeof d.token==='string' && d.token)) throw new Error('Réponse inattendue de Tome. Réessaie dans un instant.');
       resetLibrarySync(); localStorage.setItem(SOC_TOKEN, d.token); social.me = d.user; _socUserToken = d.token; social.tosOutdated = true; social.tab='feed'; social.view=null;
       social.sessionExpired = false;
       social.mustReset = false;   // le mot de passe vient d’être choisi ; si le serveur l’exige encore, son 403 le redira
@@ -8891,7 +9130,37 @@ Onglet Amis, sélection multiple, collections, import CSV Goodreads et StoryGrap
 
 10 août 2026
 Première version : un journal de lecture pour les livres, les BD et les mangas.`;
-function showVersions(){ openDialog({title:'Journal des versions', message:CHANGELOG, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
+function showVersions(){ if(IS_NATIVE_APP) return showVersionsApp(); openDialog({title:'Journal des versions', message:CHANGELOG, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
+// App iPhone : sans Mac, pas d'inspecteur web ; le journal des versions mène à un diagnostic lisible
+// et copiable (plateforme, serveur, plugins, réseau, dernières erreurs). Jamais de jeton ni de lecture.
+async function showVersionsApp(){
+  const v = await openDialog({title:'Journal des versions', message:CHANGELOG, actions:[{label:'Diagnostic de l’app', value:'diag'}, {label:'Fermer', value:null, cancel:true, default:true}]});
+  if(v==='diag') return showDiagnostic();
+}
+function diagnosticText(){
+  const oui = b => b ? 'oui' : 'non';
+  const lignes = [
+    `Plateforme\u00a0: app iPhone (${location.origin})`,
+    `Serveur\u00a0: ${API_BASE}`,
+    `Scanner\u00a0: ${oui(capPlugin('CapacitorBarcodeScanner'))}`,
+    `Partage\u00a0: ${oui(capPlugin('Share'))}`,
+    `Fichiers\u00a0: ${oui(capPlugin('Filesystem'))}`,
+    `Barre d’état\u00a0: ${oui(capPlugin('SystemBars'))}`,
+    `Copie de secours\u00a0: ${_mirrorReady ? 'active' : 'inactive'}`,
+    `Réseau\u00a0: ${navigator.onLine===false ? 'hors ligne' : 'en ligne'}`,
+  ];
+  let erreurs = [];
+  try{ erreurs = (window.__tomeErreurs || []).slice(-5); }catch(_){ }
+  if(erreurs.length) lignes.push('Dernières erreurs\u00a0:', ...erreurs.map(e => `${e.quand} · ${e.source} · ${e.message}`));
+  else lignes.push('Dernières erreurs\u00a0: aucune');
+  return lignes.join('\n');
+}
+async function showDiagnostic(){
+  const txt = diagnosticText();
+  const v = await openDialog({title:'Diagnostic de l’app', message:txt, actions:[{label:'Copier', value:'copy'}, {label:'Fermer', value:null, cancel:true, default:true}]});
+  if(v!=='copy') return;
+  try{ await navigator.clipboard.writeText(txt); toast('Diagnostic copié ✓'); }catch(_){ toast('Copie impossible sur cet appareil'); }
+}
 const LEGAL_TEXT = `Tome Social : mentions légales et confidentialité.
 
 Responsable de traitement et directeur de la publication : Lucas Marroig (lucas.marroig@essec.edu).
@@ -9233,7 +9502,7 @@ async function renderMyShare(){
     <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Une page lisible par tous, à mettre dans une bio Instagram ou TikTok. Elle n’affiche que ce que tu partages ci-dessus, <b>jamais</b> ta bibliothèque privée. Désactivée par défaut.</p>
     <div class="data-actions">
       <button class="btn ${social.publicProfile?'':'primary'}" id="acc-pub">${social.publicProfile?'Rendre ma page privée':'Publier ma page'}</button>
-      ${social.publicProfile?`<button class="btn" id="acc-pub-copy">${ic('link',16)} Copier le lien</button><a class="btn" id="acc-pub-open" href="/@${esc(social.me.username)}" target="_blank" rel="noopener">Voir ma page publique ↗</a>`:''}
+      ${social.publicProfile?`<button class="btn" id="acc-pub-copy">${ic('link',16)} Copier le lien</button><a class="btn" id="acc-pub-open" href="${IS_NATIVE_APP ? SITE_URL : ''}/@${esc(social.me.username)}" target="_blank" rel="noopener">Voir ma page publique ↗</a>`:''}
     </div>`;
   // Le réglage s’applique au changement : cocher une case EST le geste, personne n’allait
   // chercher le bouton en dessous (on cochait « Rien » en croyant s’être caché).
@@ -9309,7 +9578,7 @@ function bindPublicPageActions(rerender){
     catch(err){ toast(netMsg(err)); b.disabled=false; } };
   const pubCopy = $('#acc-pub-copy');
   if(pubCopy) pubCopy.onclick = async ()=>{
-    const url = location.origin + '/@' + social.me.username;
+    const url = PUBLIC_ORIGIN + '/@' + social.me.username;
     try{ await navigator.clipboard.writeText(url); toast('Lien copié ✓'); }
     catch(_){ openDialog({title:'Ma page publique', message:url, actions:[{label:'Fermer', value:null, cancel:true, default:true}]}); }
   };
@@ -9644,6 +9913,8 @@ else if(_pubBook) showPublicBook(_pubBook); // visiteur arrivé sur la page d’
 
 /* =============== Page d’accueil publique =============== */
 function showWelcome(){ const w=$('#welcome'); if(!w) return; w.hidden=false; document.body.classList.add('welcome-open');
+  // App iPhone : ni sommaire, ni étagère, ni colophon ; restent la barre, le héros et le pied de page
+  if(IS_NATIVE_APP) for(const s of ['.lp-sommaire','.lp-etagere','.lp-colo-frame']){ const el = w.querySelector(s); if(el) el.hidden = true; }
   try{ window.scrollTo(0,0); }catch(_){}
   // invité par un ami : le dire ici, sur la page qui explique le produit
   const who = social.invite || loadPendingInvite();
@@ -9671,6 +9942,16 @@ $('#welcome').addEventListener('click', e=>{
   // habitée plutôt qu’un écran nu (le bandeau « Tout effacer » permet de repartir à zéro).
   if(a==='try' && !state.books.length) startDemo();
 });
+// App iPhone : /confidentialite et /cgu sont des pages du Worker, absentes des fichiers embarqués
+// (le lien ouvrirait une page vide). Elles s'ouvrent dans les dialogues habituels, mêmes textes.
+if(IS_NATIVE_APP) document.addEventListener('click', e=>{
+  const t = e.target; if(!t || !t.closest) return;
+  const conf = t.closest('a[href="/confidentialite"]'), cgu = !conf && t.closest('a[href="/cgu"]');
+  if(!conf && !cgu) return;
+  e.preventDefault();
+  if(conf) openDialog({title:'Mentions légales & confidentialité', message:LEGAL_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]});
+  else openDialog({title:"Conditions d’utilisation", message:TERMS_TEXT, actions:[{label:'Fermer', value:null, cancel:true, default:true}]});
+}, true);
 // couvertures de l’éventail : si une image ne charge pas (hors-ligne, 404), on la retire → la carte
 // dégradée avec le titre reste en repli élégant
 document.addEventListener('error', e=>{

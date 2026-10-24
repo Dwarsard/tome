@@ -1,0 +1,23 @@
+# Dépendances et fichiers produits : regénérés par npm ci, npm run web et npx cap sync ios
+node_modules/
+www/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/DerivedData/
+ios/App/build/
+build/
+fumee/
+*.ipa
+*.dSYM.zip
+
+# Clés, certificats et profils Apple : jamais dans ce dépôt PUBLIC
+*.p8
+*.p12
+*.pem
+*.cer
+*.mobileprovision
+*private_key*
+AuthKey_*
+.env
+.env.*

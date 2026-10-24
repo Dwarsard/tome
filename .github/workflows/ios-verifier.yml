@@ -1,0 +1,211 @@
+# App iPhone : vérification sans aucun secret. Le job « verifier » lance les tests, contrôle la
+# copie embarquée et compile en Release pour le simulateur ; le job « fumee » lance vraiment l'app
+# dans un simulateur iPhone et publie une capture de l'accueil avec le journal.
+# Dépôt PUBLIC : ce workflow ne reçoit ni clé ni certificat et ne publie jamais d'IPA.
+# Guide : appli/APPLI-IOS.md (étape 7). Garde-fous : appli/test/guide-ci.test.mjs.
+name: ios-verifier
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - appli-ios
+      - main
+    paths:
+      - 'appli/**'
+      - 'app.js'
+      - 'app.css'
+      - 'index.html'
+      - 'qr.js'
+      - 'sw.js'
+      - 'fonts/**'
+      - '*.png'
+      - '*.jpg'
+      - 'icon.svg'
+      - 'manifest.webmanifest'
+      - '.github/workflows/ios-*.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-verifier-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: appli
+
+jobs:
+  verifier:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: appli/package-lock.json
+
+      - name: Choisir Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app && xcodebuild -version
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Préparer les fichiers embarqués
+        run: npm run web
+
+      - name: Synchroniser le projet iOS
+        run: npx cap sync ios
+
+      - name: Tests
+        run: npm test
+
+      - name: Vérifier les plist
+        run: plutil -lint ios/App/App/Info.plist ios/App/App/PrivacyInfo.xcprivacy ios/App/App/fr.lproj/Localizable.strings
+
+      - name: Contrôler la copie embarquée et les plugins
+        run: |
+          # Chaque contrôle sort par un exit explicite : sous set -e, une commande niée
+          # ne ferait pas échouer l'étape.
+          PAGE=ios/App/App/public/index.html
+          CONFIG=ios/App/App/capacitor.config.json
+          if grep -qF "connect-src 'self' capacitor://localhost https://openlibrary.org https://montome.fr" "$PAGE"; then
+            echo "connect-src conforme dans $PAGE"
+          else
+            echo "::error::connect-src inattendu dans $PAGE"
+            exit 1
+          fi
+          if grep -q "localhost:8787" "$PAGE"; then
+            echo "::error::localhost:8787 figure encore dans $PAGE"
+            exit 1
+          fi
+          for CLASSE in CapacitorBarcodeScannerPlugin SharePlugin FilesystemPlugin; do
+            if grep -q "\"$CLASSE\"" "$CONFIG"; then
+              echo "$CLASSE présent dans $CONFIG"
+            else
+              echo "::error::$CLASSE absent de $CONFIG (npx cap sync ios a-t-il tourné ?)"
+              exit 1
+            fi
+          done
+
+      - name: Compiler en Release pour le simulateur
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
+
+      - name: Publier Package.resolved
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-resolved
+          path: appli/ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          retention-days: 7
+          if-no-files-found: warn
+
+  fumee:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: appli/package-lock.json
+
+      - name: Choisir Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app && xcodebuild -version
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Préparer les fichiers embarqués
+        run: npm run web
+
+      - name: Synchroniser le projet iOS
+        run: npx cap sync ios
+
+      - name: Compiler en Debug pour le simulateur
+        run: |
+          # Signature ad hoc (identité « - ») : le simulateur s'en contente, sans équipe ni certificat.
+          # Si ce passage échoue sur la signature, remplacer les trois réglages de signature par
+          # CODE_SIGNING_ALLOWED=NO (à ajuster d'après le journal).
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/dd CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build
+
+      - name: Choisir un simulateur iPhone
+        run: |
+          # « iPhone 17 Pro Max » s'il existe (capture à 1320 x 2868), sinon le dernier iPhone du
+          # runtime iOS le plus récent.
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          devices = json.load(sys.stdin)["devices"]
+          def version(cle):
+              m = re.search(r"iOS-(\d+)-(\d+)", cle)
+              return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+          runtimes = sorted((k for k in devices if ".SimRuntime.iOS-" in k), key=version)
+          iphones = [d for k in runtimes for d in devices[k]
+                     if d.get("isAvailable", True) and d["name"].startswith("iPhone")]
+          choix = [d for d in iphones if d["name"] == "iPhone 17 Pro Max"] or iphones
+          if not choix:
+              sys.exit("Aucun simulateur iPhone disponible")
+          print(choix[-1]["udid"])
+          ')
+          echo "Simulateur retenu : $UDID"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Lancer l'app dans le simulateur
+        run: |
+          mkdir -p fumee
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" build/dd/Build/Products/Debug-iphonesimulator/App.app
+          # La sortie standard de l'app (journal de Capacitor) va dans fumee/ pour le diagnostic.
+          # Vers un fichier, elle serait mise en tampon par blocs et resterait vide tant que l'app
+          # tourne : STDBUF1=L (Libc d'Apple) la passe en tampon par ligne, NSUnbufferedIO fait de
+          # même côté Foundation. Le préfixe SIMCTL_CHILD_ transmet chaque variable à l'app.
+          SIMCTL_CHILD_STDBUF1=L SIMCTL_CHILD_NSUnbufferedIO=YES xcrun simctl launch --stdout="$PWD/fumee/sortie.txt" --stderr="$PWD/fumee/erreurs.txt" "$UDID" fr.montome.app
+          sleep 20
+
+      - name: Capture et journal
+        run: |
+          mkdir -p fumee
+          xcrun simctl io "$UDID" screenshot fumee/accueil.png
+          xcrun simctl spawn "$UDID" log show --last 3m --style compact --predicate 'process == "App"' > fumee/journal.txt || true
+
+      - name: Vérifier que l'app tourne encore
+        run: |
+          if xcrun simctl spawn "$UDID" launchctl list | grep -q "fr.montome.app"; then
+            echo "L’app tourne toujours 20 s après son lancement."
+          else
+            echo "::error::L’app ne tourne plus 20 s après son lancement"
+            exit 1
+          fi
+          if grep -qs "capacitor://localhost" fumee/journal.txt fumee/sortie.txt fumee/erreurs.txt; then
+            echo "Le journal mentionne capacitor://localhost."
+          else
+            echo "::warning::Le journal ne mentionne pas capacitor://localhost : regarder la capture."
+          fi
+
+      - name: Publier la capture et le journal
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fumee
+          path: appli/fumee/
+          retention-days: 3
+          if-no-files-found: warn

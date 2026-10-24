@@ -21,3 +21,14 @@ design/*-design.html
 .dev.vars.*
 .wrangler/
 Secrets/
+
+# Clés et certificats Apple : jamais dans ce dépôt PUBLIC (app iPhone, voir appli/APPLI-IOS.md).
+# Ils vivent dans les secrets de l'environnement GitHub « testflight » et dans le gestionnaire
+# de mots de passe ; appli/.gitignore répète la même liste pour le dossier de l'app.
+*.p8
+*.p12
+*.pem
+*.cer
+*.mobileprovision
+*private_key*
+AuthKey_*

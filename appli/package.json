@@ -1,0 +1,24 @@
+{
+  "name": "tome-appli",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "web": "node scripts/preparer-web.mjs",
+    "icones": "node scripts/icones.mjs",
+    "sync": "npm run web && cap sync ios",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "@capacitor/barcode-scanner": "3.1.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/share": "8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

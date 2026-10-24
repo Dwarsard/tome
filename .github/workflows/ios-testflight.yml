@@ -1,0 +1,168 @@
+# App iPhone : compilation signée et envoi sur TestFlight (test interne, sans revue d'Apple).
+# Lancé à la main seulement, depuis appli-ios ou main (bouton « Run workflow », ou
+# gh workflow run ios-testflight.yml --ref main), dans l'environnement GitHub « testflight ».
+# Les secrets ne sont donnés qu'aux étapes qui appellent app-store-connect, après tout le code npm.
+# Ce n'est pas un isolement : dans un même job, une étape npm compromise pourrait agir sur les
+# suivantes ($GITHUB_PATH, $GITHUB_ENV, fichiers du disque, processus resté en arrière-plan).
+# La protection tient au verrou npm (versions et intégrité), à ignore-scripts, et aux outils Python
+# installés par hachage dans un venv neuf. Ni IPA en artefact, ni trace des commandes.
+# Guide : appli/APPLI-IOS.md (étapes 4 à 8). Garde-fous : appli/test/guide-ci.test.mjs.
+name: ios-testflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: appli
+
+jobs:
+  testflight:
+    if: github.ref == 'refs/heads/appli-ios' || github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 60
+    environment: testflight
+    env:
+      BUNDLE_ID: fr.montome.app
+      APP_STORE_APP_ID: ${{ vars.APP_STORE_APP_ID }}
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: appli/package-lock.json
+
+      - name: Choisir Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app && xcodebuild -version
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Préparer les fichiers embarqués
+        run: npm run web
+
+      - name: Synchroniser le projet iOS
+        run: npx cap sync ios
+
+      - name: Tests
+        run: npm test
+
+      # Avant toute étape à secret : rien ne sert si la configuration manque. Les paquets Swift
+      # doivent venir du Package.resolved versionné (étape 7 du guide), pas d'une résolution faite
+      # au moment de signer.
+      - name: Contrôles avant les secrets
+        run: |
+          case "$APP_STORE_APP_ID" in
+            ''|*[!0-9]*)
+              echo "::error::Variable APP_STORE_APP_ID vide ou non numérique (gh variable list --env testflight)"
+              exit 1
+              ;;
+          esac
+          RESOLU=ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          if [ ! -f "$RESOLU" ]; then
+            echo "::error::Package.resolved absent : faire d’abord l’étape 7 d’APPLI-IOS.md"
+            exit 1
+          fi
+          if git ls-files --error-unmatch "$RESOLU" > /dev/null 2>&1 && git diff --quiet -- "$RESOLU"; then
+            echo "Package.resolved versionné et inchangé."
+          else
+            echo "::error::Package.resolved non versionné ou modifié avant la compilation : le versionner (étape 7 d’APPLI-IOS.md)"
+            exit 1
+          fi
+
+      # L'image a un Python plus récent que ceux que déclare codemagic-cli-tools : 3.13 fixé ici.
+      - name: Python 3.13
+        id: py
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+
+      # codemagic-cli-tools 0.70.0 et ses dépendances, figées par version et par hachage dans
+      # ci/codemagic.txt, installées dans un venv neuf : pip refuse tout fichier dont le hachage
+      # diffère et n'installe rien d'autre (--no-deps), pip check vérifie que l'ensemble est complet.
+      # Le bin du venv est ajouté en dernier à GITHUB_PATH : il passe devant ce qu'une étape
+      # précédente aurait pu y mettre.
+      - name: Installer codemagic-cli-tools
+        run: |
+          VENV="$RUNNER_TEMP/codemagic"
+          "${{ steps.py.outputs.python-path }}" -I -m venv --clear "$VENV"
+          "$VENV/bin/python" -I -m pip install --isolated --disable-pip-version-check --require-hashes --no-deps --only-binary=:all: -r ci/codemagic.txt
+          "$VENV/bin/python" -I -m pip check
+          echo "$VENV/bin" >> "$GITHUB_PATH"
+
+      - name: Trousseau temporaire
+        run: keychain initialize
+
+      # Crée au premier passage le certificat de distribution (à partir de CERTIFICATE_PRIVATE_KEY)
+      # et le profil App Store, puis les retrouve aux passages suivants.
+      - name: Certificat et profil
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
+        run: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --platform IOS --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles --project ios/App/App.xcodeproj
+
+      # Étape séparée de la compilation : la compilation ne voit aucun secret.
+      - name: Numéro de build
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          # Aucune version encore sur TestFlight : la commande ne sort rien (code 0), on part de 1.
+          # Toute autre erreur (identifiant faux, droits, réseau) arrête le job, journal visible :
+          # sans pipefail, le statut du tube serait celui de tr, et le numéro repartirait à 1.
+          set -o pipefail
+          DERNIER=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" | tail -1 | tr -cd '0-9')
+          echo "BUILD_NUMBER=$(( ${DERNIER:-0} + 1 ))" >> "$GITHUB_ENV"
+          echo "Numéro de build : $(( ${DERNIER:-0} + 1 ))"
+
+      - name: Compiler l'IPA
+        run: xcode-project build-ipa --project ios/App/App.xcodeproj --scheme App --archive-xcargs "CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
+
+      # xcodebuild réécrit Package.resolved s'il a résolu d'autres versions que celles versionnées :
+      # dans ce cas, rien ne part sur TestFlight.
+      - name: Vérifier les versions des paquets Swift
+        run: |
+          RESOLU=ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          git show "HEAD:./$RESOLU" > "$RUNNER_TEMP/package-resolved-versionne.json"
+          python3 -I -c '
+          import json, sys
+          def pins(chemin):
+              with open(chemin, encoding="utf-8") as f:
+                  return {p["identity"]: p.get("state") for p in json.load(f).get("pins", [])}
+          versionne, obtenu = pins(sys.argv[1]), pins(sys.argv[2])
+          if versionne != obtenu:
+              print("::error::La compilation a résolu d’autres versions de paquets Swift que Package.resolved : le mettre à jour (étape 7 d’APPLI-IOS.md)")
+              sys.exit(1)
+          print(f"{len(obtenu)} paquets Swift aux révisions de Package.resolved.")
+          ' "$RUNNER_TEMP/package-resolved-versionne.json" "$RESOLU"
+
+      # Sans --testflight : la version part en test interne, sans revue d'Apple.
+      - name: Envoyer sur TestFlight
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: app-store-connect publish --path "$(ls build/ios/ipa/*.ipa | head -1)"
+
+      - name: Rendre le trousseau de session
+        if: always()
+        run: keychain use-login

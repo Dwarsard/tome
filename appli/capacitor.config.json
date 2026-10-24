@@ -1,0 +1,16 @@
+{
+  "appId": "fr.montome.app",
+  "appName": "Tome",
+  "webDir": "www",
+  "backgroundColor": "#15120d",
+  "ios": {
+    "contentInset": "never",
+    "allowsLinkPreview": false,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": false
+    }
+  }
+}
